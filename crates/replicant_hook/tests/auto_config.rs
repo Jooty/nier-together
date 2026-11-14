@@ -51,6 +51,16 @@ fn the_companion_is_off_everywhere_unless_switched_back_to_listed_fights() {
 }
 
 #[test]
+fn the_guest_watches_when_the_story_takes_her_unless_switched_off() {
+    let unset = AutoConfig::parse("link = 47200\n").expect("valid");
+    assert!(unset.guest_watches_when_the_story_takes_her_enabled());
+    let off = AutoConfig::parse("guest_watches_when_the_story_takes_her = false\n").expect("valid");
+    assert!(!off.guest_watches_when_the_story_takes_her_enabled());
+    let on = AutoConfig::parse("guest_watches_when_the_story_takes_her = true\n").expect("valid");
+    assert!(on.guest_watches_when_the_story_takes_her_enabled());
+}
+
+#[test]
 fn the_loading_screen_lines_are_on_unless_switched_off() {
     let unset = AutoConfig::parse("link = 47200\n").expect("valid");
     assert!(unset.loading_screen_lines_enabled());

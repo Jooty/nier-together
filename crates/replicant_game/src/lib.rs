@@ -68,6 +68,7 @@ pub mod story_calls;
 pub mod story_jump;
 pub mod story_progress;
 pub mod story_relay;
+pub mod story_watch;
 pub mod story_writes;
 pub mod talk_guard;
 pub mod tutorial_prompt;

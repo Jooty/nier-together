@@ -107,6 +107,8 @@ mod story_progress;
 #[cfg(windows)]
 mod story_relay;
 #[cfg(windows)]
+mod story_watch;
+#[cfg(windows)]
 mod story_writes;
 #[cfg(windows)]
 mod teleport;

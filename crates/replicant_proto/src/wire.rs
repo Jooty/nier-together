@@ -24,6 +24,7 @@ mod fight_camera;
 mod fight_stream;
 mod follow_phase;
 mod gather_for_scene;
+mod guest_watches;
 mod item_counts;
 mod item_pickup;
 mod lift_call;
@@ -114,6 +115,7 @@ pub use fight_stream::{
 };
 pub use follow_phase::FollowPhase;
 pub use gather_for_scene::{GatherAnswer, GatherForScene, GatherReply};
+pub use guest_watches::GuestWatches;
 pub use item_counts::{ItemCountEntry, ItemCounts, ItemTake, MAX_ITEM_COUNT_ENTRIES};
 pub use item_pickup::{ItemPickup, PickupSource};
 pub use lift_call::{LiftCall, LiftCallAnswer, LiftCallOutcome};
@@ -190,7 +192,7 @@ pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 74;
+pub const PROTOCOL_VERSION: u16 = 75;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;

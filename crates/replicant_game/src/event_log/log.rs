@@ -20,21 +20,36 @@ pub struct VisibleEvent {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct EventLog {
     entries: VecDeque<Entry>,
+    persistent: Option<String>,
 }
 
 impl EventLog {
     pub const fn new() -> Self {
         Self {
             entries: VecDeque::new(),
+            persistent: None,
         }
     }
 
+    pub fn set_persistent(&mut self, text: &str) -> bool {
+        let text = cleaned(text);
+        if text.is_empty() || self.persistent.as_deref() == Some(text.as_str()) {
+            return false;
+        }
+        self.persistent = Some(text);
+        true
+    }
+
+    pub fn clear_persistent(&mut self) -> bool {
+        self.persistent.take().is_some()
+    }
+
+    pub fn persistent(&self) -> Option<&str> {
+        self.persistent.as_deref()
+    }
+
     pub fn post(&mut self, text: &str, now_ms: u64) -> bool {
-        let text: String = text
-            .chars()
-            .filter(|character| !character.is_control())
-            .take(EVENT_LOG_MAX_TEXT_CHARS)
-            .collect();
+        let text = cleaned(text);
         if text.is_empty() {
             return false;
         }
@@ -58,18 +73,31 @@ impl EventLog {
     pub fn visible(&mut self, now_ms: u64) -> Vec<VisibleEvent> {
         self.entries
             .retain(|entry| now_ms.saturating_sub(entry.posted_ms) < EVENT_LOG_VISIBLE_MS);
+        let persistent = self.persistent.iter().map(|text| VisibleEvent {
+            text: text.clone(),
+            alpha: 1.0,
+        });
         self.entries
             .iter()
             .map(|entry| VisibleEvent {
                 text: entry.text.clone(),
                 alpha: alpha_at(now_ms.saturating_sub(entry.posted_ms)),
             })
+            .chain(persistent)
             .collect()
     }
 
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.persistent = None;
     }
+}
+
+fn cleaned(text: &str) -> String {
+    text.chars()
+        .filter(|character| !character.is_control())
+        .take(EVENT_LOG_MAX_TEXT_CHARS)
+        .collect()
 }
 
 fn alpha_at(age_ms: u64) -> f32 {
