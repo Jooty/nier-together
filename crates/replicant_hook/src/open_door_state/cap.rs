@@ -25,6 +25,12 @@ static CLOCK: Mutex<OpenDoorStateClock> = Mutex::new(OpenDoorStateClock::new());
 type OpenDoorUpdate = unsafe extern "system" fn(*mut c_void, *mut c_void) -> u64;
 type OpenDoorOpenSlot = unsafe extern "system" fn(*mut c_void, *mut c_void);
 
+pub fn note_door_closed() {
+    if let Ok(mut clock) = CLOCK.try_lock() {
+        clock.note_door_closed(net_clock_ms());
+    }
+}
+
 pub fn install(build: VerifiedBuild) {
     #[expect(
         unsafe_code,

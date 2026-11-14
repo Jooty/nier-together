@@ -5,6 +5,7 @@ mod held_talk_start;
 mod mirror;
 mod on_screen;
 mod own_window;
+mod story_talk_menu_close;
 mod talk_cursor;
 mod talk_origin;
 mod talker_name;
@@ -29,6 +30,10 @@ pub use on_screen::{
     read_talk_window_screen,
 };
 pub use own_window::{OwnTalkWindow, SetTalkCalls};
+pub use story_talk_menu_close::{
+    STORY_TALK_MENU_CLOSE_MOST_ASKS_PER_TALK, STORY_TALK_MENU_CLOSE_RETRY_AFTER_MS,
+    StoryTalkMenuClose, story_talk_menu_close_text,
+};
 pub use talk_cursor::{TalkCursor, find_talk_id, read_talk_cursor};
 pub use talk_origin::{TalkOrigin, TalkOriginTracker};
 pub use talker_name::{replace_player_name_tag, speaker_name_to_show};

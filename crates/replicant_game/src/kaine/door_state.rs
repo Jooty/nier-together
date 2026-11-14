@@ -15,6 +15,7 @@ pub struct OpenDoorStateClock {
     state: u64,
     first_update_ms: u64,
     last_update_ms: u64,
+    door_closed_ms: Option<u64>,
 }
 
 impl OpenDoorStateClock {
@@ -23,7 +24,12 @@ impl OpenDoorStateClock {
             state: 0,
             first_update_ms: 0,
             last_update_ms: 0,
+            door_closed_ms: None,
         }
+    }
+
+    pub fn note_door_closed(&mut self, now_ms: u64) {
+        self.door_closed_ms = Some(now_ms);
     }
 
     pub fn observe(&mut self, state: u64, capped_body: bool, now_ms: u64) -> OpenDoorStateVerdict {
@@ -39,8 +45,11 @@ impl OpenDoorStateClock {
             self.first_update_ms = now_ms;
         }
         self.last_update_ms = now_ms;
+        let door_closed_during_this_state = self
+            .door_closed_ms
+            .is_some_and(|closed_ms| closed_ms >= self.first_update_ms);
         let ran_ms = now_ms.saturating_sub(self.first_update_ms);
-        if ran_ms < SWAPPED_BODY_OPEN_DOOR_STATE_MOST_MS {
+        if ran_ms < SWAPPED_BODY_OPEN_DOOR_STATE_MOST_MS && !door_closed_during_this_state {
             return OpenDoorStateVerdict::Run;
         }
         *self = Self::new();
