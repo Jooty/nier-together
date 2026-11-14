@@ -632,12 +632,12 @@ fn with_the_link_down_everything_held_is_released_and_nothing_is_asked() {
 }
 
 #[test]
-fn with_the_partner_out_of_play_a_swallowed_skip_is_made_here() {
+fn with_the_link_down_a_swallowed_skip_is_made_here() {
     let mut machine = guest();
     guest_plays_with_the_host(&mut machine, event(1), 1_000);
     machine.on_player_skip(2_000);
     let step = machine.step(&EventReadings {
-        partner_in_play: false,
+        partner_present: false,
         ..readings(JumpRole::Guest, 2_100)
     });
     assert!(step.calls.contains(&EventCall::Skip));
@@ -851,4 +851,15 @@ fn the_outlast_cut_names_the_frame_the_event_was_at() {
         &due,
         "is cut by the outlast rule at frame 412 of 600"
     ));
+}
+
+#[test]
+fn a_guest_waits_for_the_host_while_neither_copy_has_been_free_yet() {
+    let mut machine = guest();
+    machine.step(&EventReadings {
+        local_in_play: false,
+        partner_in_play: false,
+        ..readings(JumpRole::Guest, 50)
+    });
+    assert_eq!(machine.on_play_request(event(1), 100), PlayVerdict::Hold);
 }

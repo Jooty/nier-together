@@ -68,8 +68,15 @@ fn an_own_event_pause_is_told_once_when_it_opens_and_once_when_it_closes() {
         local_event_pause_open: true,
         ..readings(0)
     };
+    assert!(
+        pause_sends(&machine.step(&EventReadings {
+            now_ms: 100,
+            ..open()
+        }))
+        .is_empty()
+    );
     let opened = machine.step(&EventReadings {
-        now_ms: 100,
+        now_ms: 250,
         ..open()
     });
     assert_eq!(
@@ -80,11 +87,12 @@ fn an_own_event_pause_is_told_once_when_it_opens_and_once_when_it_closes() {
         }]
     );
     let still = machine.step(&EventReadings {
-        now_ms: 200,
+        now_ms: 300,
         ..open()
     });
     assert!(pause_sends(&still).is_empty());
-    let closed = machine.step(&readings(300));
+    assert!(pause_sends(&machine.step(&readings(400))).is_empty());
+    let closed = machine.step(&readings(550));
     assert_eq!(
         pause_sends(&closed),
         vec![EventSend::Pause {
@@ -92,7 +100,7 @@ fn an_own_event_pause_is_told_once_when_it_opens_and_once_when_it_closes() {
             paused: false
         }]
     );
-    assert!(pause_sends(&machine.step(&readings(400))).is_empty());
+    assert!(pause_sends(&machine.step(&readings(650))).is_empty());
 }
 
 #[test]
@@ -183,15 +191,20 @@ fn an_own_open_pause_takes_no_call_and_the_hold_comes_back_when_it_closes() {
         now_ms: 100,
         ..open.clone()
     });
+    machine.step(&EventReadings {
+        now_ms: 250,
+        ..open.clone()
+    });
     let heard = machine.step(&EventReadings {
-        now_ms: 200,
+        now_ms: 300,
         pauses_heard: vec![(event(1), true)],
         ..open.clone()
     });
     assert!(heard.calls.is_empty());
-    let closed = machine.step(&readings(300));
+    machine.step(&readings(400));
+    let closed = machine.step(&readings(550));
     assert_eq!(closed.calls, vec![EventCall::PauseClock]);
-    assert!(machine.step(&readings(400)).calls.is_empty());
+    assert!(machine.step(&readings(650)).calls.is_empty());
 }
 
 #[test]
@@ -203,13 +216,18 @@ fn the_partner_resuming_while_the_own_pause_is_open_makes_no_call() {
         ..readings(200)
     };
     machine.step(&open);
+    machine.step(&EventReadings {
+        now_ms: 350,
+        ..open.clone()
+    });
     let resumed = machine.step(&EventReadings {
-        now_ms: 300,
+        now_ms: 400,
         pauses_heard: vec![(event(1), false)],
         ..open
     });
     assert!(resumed.calls.is_empty());
-    assert!(machine.step(&readings(400)).calls.is_empty());
+    machine.step(&readings(500));
+    assert!(machine.step(&readings(700)).calls.is_empty());
 }
 
 #[test]
@@ -298,11 +316,16 @@ fn a_hold_ends_on_the_first_tick_a_resume_could_be_dropped() {
 #[test]
 fn a_pause_is_told_while_neither_copy_has_been_free_yet() {
     let mut machine = playing_machine(true);
-    let step = machine.step(&EventReadings {
+    let open = EventReadings {
         local_event_pause_open: true,
         local_in_play: false,
         partner_in_play: false,
         ..readings(100)
+    };
+    machine.step(&open);
+    let step = machine.step(&EventReadings {
+        now_ms: 260,
+        ..open
     });
     assert_eq!(
         pause_sends(&step),
@@ -323,4 +346,46 @@ fn the_partners_pause_stops_the_clock_while_neither_copy_has_been_free_yet() {
         ..readings(100)
     });
     assert_eq!(step.calls, vec![EventCall::PauseClock]);
+}
+
+#[test]
+fn flickers_of_the_pause_state_tell_nothing() {
+    let mut machine = playing_machine(true);
+    let mut told = Vec::new();
+    for (at_ms, open) in [
+        (18_000, false),
+        (18_010, true),
+        (18_043, false),
+        (18_100, false),
+        (24_400, true),
+        (24_433, false),
+        (24_500, false),
+        (30_000, true),
+        (30_033, false),
+        (30_100, false),
+        (30_300, false),
+    ] {
+        told.extend(pause_sends(&machine.step(&EventReadings {
+            local_event_pause_open: open,
+            ..readings(at_ms)
+        })));
+    }
+    assert!(told.is_empty());
+}
+
+#[test]
+fn a_pause_held_past_the_flicker_time_is_told_and_its_resume_waits_as_long() {
+    let mut machine = playing_machine(true);
+    let open_at = |at_ms: u64| EventReadings {
+        local_event_pause_open: true,
+        ..readings(at_ms)
+    };
+    assert!(pause_sends(&machine.step(&open_at(1_000))).is_empty());
+    assert!(pause_sends(&machine.step(&open_at(1_149))).is_empty());
+    assert_eq!(pause_sends(&machine.step(&open_at(1_150))).len(), 1);
+    assert!(pause_sends(&machine.step(&readings(2_000))).is_empty());
+    assert!(pause_sends(&machine.step(&open_at(2_040))).is_empty());
+    assert!(pause_sends(&machine.step(&readings(2_080))).is_empty());
+    assert!(pause_sends(&machine.step(&readings(2_200))).is_empty());
+    assert_eq!(pause_sends(&machine.step(&readings(2_230))).len(), 1);
 }

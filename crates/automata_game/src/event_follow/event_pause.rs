@@ -1,5 +1,5 @@
 use crate::event_follow::{
-    EventCall, EventId, EventSend, EventStep, PauseView, own_pause_told_line,
+    EventCall, EventId, EventSend, EventStep, PauseDebounce, PauseView, own_pause_told_line,
     partner_pause_ended_line, partner_pause_event_ended_here_line, partner_pause_heard_line,
     partner_pause_rule_ended_line, pause_clock_line, resume_clock_line,
 };
@@ -17,11 +17,16 @@ pub struct EventPause {
     partner: Option<PartnerPause>,
     holding: bool,
     was_open: bool,
+    debounce: PauseDebounce,
 }
 
 impl EventPause {
     /// Runs one tick; true while the note "the partner paused it" is due.
     pub fn step(&mut self, view: &PauseView, step: &mut EventStep) -> bool {
+        let view = &PauseView {
+            local_open: self.debounce.observe(view.now_ms, view.local_open),
+            ..*view
+        };
         if !view.rule_active {
             if let Some(pause) = self.partner.take() {
                 step.logs.push(partner_pause_rule_ended_line(pause.id));

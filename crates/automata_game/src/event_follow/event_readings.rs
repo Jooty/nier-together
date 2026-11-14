@@ -40,18 +40,16 @@ impl EventReadings {
     }
 
     pub fn rule_role(&self) -> JumpRole {
-        let both_in_play = self.local_in_play && self.partner_in_play;
-        let story_phase = (0..STORY_EVENTS_BELOW_PHASE_ID).contains(&self.current_phase_id);
-        if both_in_play && story_phase {
+        if (0..STORY_EVENTS_BELOW_PHASE_ID).contains(&self.current_phase_id) {
             self.linked_role()
         } else {
             JumpRole::Solo
         }
     }
 
-    pub fn pause_rule_role(&self) -> JumpRole {
-        if (0..STORY_EVENTS_BELOW_PHASE_ID).contains(&self.current_phase_id) {
-            self.linked_role()
+    pub fn rule_role_with_both_in_play(&self) -> JumpRole {
+        if self.local_in_play && self.partner_in_play {
+            self.rule_role()
         } else {
             JumpRole::Solo
         }
