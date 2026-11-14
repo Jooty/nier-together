@@ -28,6 +28,10 @@ impl RulePop {
                 "rule room: {}: {function} runs here to register the breaks again, room not reset",
                 room_name(room)
             ),
+            Self::DropArmAfterClear { room } => format!(
+                "rule room: {}: {function} not run, the room is cleared and nothing arms its rule again",
+                room_name(room)
+            ),
             Self::BreakerSentBack { room, act, player } => {
                 if act.is_a_players_act() {
                     format!(
@@ -151,6 +155,22 @@ pub fn returned_line(room: &RuleRoom, player: RulePlayer, spot: &ReturnSpot) -> 
         spot.position[0],
         spot.position[1],
         spot.position[2]
+    )
+}
+
+pub fn ignored_break_line(room: &RuleRoom, player: RulePlayer) -> String {
+    format!(
+        "rule room: {}: the {}'s break came while a return, its fade or its input block was still running, no second return",
+        room_name(room),
+        player.label()
+    )
+}
+
+pub fn cleared_during_return_line(room: &RuleRoom, player: RulePlayer) -> String {
+    format!(
+        "rule room: {}: cleared while the {} was on the way back, nobody is moved and nothing is armed",
+        room_name(room),
+        player.label()
     )
 }
 

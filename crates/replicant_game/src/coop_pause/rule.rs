@@ -41,3 +41,17 @@ pub fn mask_without_menu(slots: [u32; 4], view: PauseView) -> u32 {
         menu_slot | others
     }
 }
+
+/// The mask with the player-input bit added while a rule room's return or a watching guest holds
+/// the player's own input back; every other bit is left as it is.
+pub fn mask_with_player_input_held(
+    mask: u32,
+    return_holds_input: bool,
+    guest_is_watching: bool,
+) -> u32 {
+    if return_holds_input || guest_is_watching {
+        mask | MENU_PLAYER_INPUT_BIT
+    } else {
+        mask
+    }
+}

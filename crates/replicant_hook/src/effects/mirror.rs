@@ -232,7 +232,7 @@ pub fn tick(build: &VerifiedBuild) {
         return;
     };
     let active = net.view().partner_in_play();
-    set_sending(active);
+    set_sending(active && !crate::story_watch::this_game_is_watching());
     if active {
         send_ended_effects(build);
     }
