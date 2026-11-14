@@ -24,8 +24,6 @@ Early. If you're looking for a co-op campaign, it doesn't really exist yet. For 
 ### Replicant
 The first half of the story (part 1) is playable in full. 
 
-The guest always plays Kainé, even when it doesn't make sense in the story. If there's a section where Kainé is an AI, the guest replaces her.
-
 * Movement, jumping, attacking, and SFX
 * NPC locations and animations
 * Companions, which follow the host
@@ -44,6 +42,15 @@ The guest always plays Kainé, even when it doesn't make sense in the story. If 
 * Weapons
 * Music
 * Weather and time
+
+#### Guest Caveat
+The guest in Replicant will always play as Kainé, even when it doesn't make sense for the story. Being able to play her outside where she's meant to be is a mod in and of itself. You may notice:
+* Her movement speed being abysmally slow in certain rooms
+* Being overpowered
+* Not being able to use any weapon besides her own (your weapon stats do affect hers, though, just not visually)
+* She has no box pull/push animations (this one cannot be fixed)
+
+In a scene where Kainé is played by AI, the AI is turned off. There are some creative liberties taken for boss fights as well.
 
 ### Automata
 Only the prologue is a co-op campaign so far.
