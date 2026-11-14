@@ -171,8 +171,6 @@ mod kaine_companion_off_everywhere;
 mod kaine_companion_off_fallback;
 #[path = "kaine_door_state.rs"]
 mod kaine_door_state;
-#[path = "story_talk_menu_close.rs"]
-mod story_talk_menu_close;
 #[path = "kaine_hit_power.rs"]
 mod kaine_hit_power;
 #[path = "kaine_level_in_use.rs"]
@@ -353,6 +351,8 @@ mod story_player_local_flags;
 mod story_progress;
 #[path = "story_relay.rs"]
 mod story_relay;
+#[path = "story_talk_menu_close.rs"]
+mod story_talk_menu_close;
 #[path = "story_watch.rs"]
 mod story_watch;
 #[path = "story_writes.rs"]
