@@ -65,6 +65,8 @@ mod npcs;
 #[cfg(windows)]
 mod one_sided;
 #[cfg(windows)]
+mod open_door_state;
+#[cfg(windows)]
 mod overlay;
 #[cfg(windows)]
 mod own_ride;

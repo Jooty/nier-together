@@ -167,6 +167,8 @@ mod kaine_companion_off;
 mod kaine_companion_off_everywhere;
 #[path = "kaine_companion_off_fallback.rs"]
 mod kaine_companion_off_fallback;
+#[path = "kaine_door_state.rs"]
+mod kaine_door_state;
 #[path = "kaine_hit_power.rs"]
 mod kaine_hit_power;
 #[path = "kaine_level_in_use.rs"]
