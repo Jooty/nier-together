@@ -43,8 +43,9 @@ pub use event_lines::{
 pub use event_machine::EventMachine;
 pub use event_pause::EventPause;
 pub use event_pause_lines::{
-    own_pause_told_line, partner_pause_ended_line, partner_pause_event_ended_here_line,
-    partner_pause_heard_line, partner_pause_rule_ended_line, pause_clock_line, resume_clock_line,
+    own_pause_outside_a_cutscene_line, own_pause_outside_the_rule_line, own_pause_told_line,
+    partner_pause_ended_line, partner_pause_event_ended_here_line, partner_pause_heard_line,
+    partner_pause_rule_ended_line, pause_clock_line, resume_clock_line,
 };
 pub use event_progress::EventProgress;
 pub use event_progress_line::{event_progress_line, outlast_cut_line};

@@ -262,6 +262,47 @@ fn has_line(step: &EventStep, text: &str) -> bool {
 }
 
 #[test]
+fn a_pause_opened_while_no_cutscene_plays_says_once_that_it_is_not_shared() {
+    let mut machine = EventMachine::new(true).with_event_pause(true);
+    machine.step(&readings(0));
+    let open = |now_ms| EventReadings {
+        local_event_pause_open: true,
+        ..readings(now_ms)
+    };
+    let first = machine.step(&open(100));
+    assert!(!has_line(&first, "the pause opened here"));
+    let held = machine.step(&open(300));
+    assert!(pause_sends(&held).is_empty());
+    assert!(has_line(
+        &held,
+        "the pause opened here while no cutscene plays, the partner is not told"
+    ));
+    let still = machine.step(&open(400));
+    assert!(!has_line(&still, "the pause opened here"));
+}
+
+#[test]
+fn a_pause_opened_during_a_cutscene_outside_the_rule_says_why_it_is_not_shared() {
+    let mut machine = playing_machine(true);
+    let open = |now_ms| EventReadings {
+        local_event_pause_open: true,
+        partner_present: false,
+        ..readings(now_ms)
+    };
+    machine.step(&open(100));
+    let held = machine.step(&open(300));
+    assert!(pause_sends(&held).is_empty());
+    assert!(has_line(
+        &held,
+        "the pause opened here during event kind 0 id 0x1 sub -1, but the partner is not told: the link is down or a copy is out of play"
+    ));
+    assert!(!has_line(
+        &machine.step(&open(400)),
+        "the pause opened here"
+    ));
+}
+
+#[test]
 fn each_release_of_a_partner_pause_logs_its_reason() {
     let mut ended = playing_machine(true);
     partner_pauses(&mut ended, event(1), true, 100);
