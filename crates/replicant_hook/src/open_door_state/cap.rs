@@ -1,8 +1,8 @@
 use core::ffi::c_void;
 use core::ptr;
 use std::panic;
-use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 use replicant_game::kaine::{
     OpenDoorStateClock, OpenDoorStateVerdict, body_has_a_capped_open_door_state,
