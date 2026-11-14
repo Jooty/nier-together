@@ -24,6 +24,7 @@ mod fight_camera;
 mod fight_stream;
 mod follow_phase;
 mod gather_for_scene;
+mod guest_watches;
 mod item_counts;
 mod item_pickup;
 mod lift_call;
@@ -155,6 +156,7 @@ pub use prologue_level::{
     PrologueLevel,
 };
 pub use ridden_boar::{MAX_RIDDEN_BOAR_OFFSET_ABS, RiddenBoar};
+pub use guest_watches::GuestWatches;
 pub use rule_room_break::RuleRoomBreak;
 pub use scene_follow::{
     MAX_SCENE_CUT_NAME_BYTES, MAX_SCENE_FOLLOW_CALLBACKS, SceneCut, SceneFollow,
@@ -190,7 +192,7 @@ pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 74;
+pub const PROTOCOL_VERSION: u16 = 75;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;
