@@ -26,6 +26,8 @@ mod boss_bar_probe;
 mod boss_hit_log;
 #[path = "boss_messages.rs"]
 mod boss_messages;
+#[path = "breaker_body_hold.rs"]
+mod breaker_body_hold;
 #[path = "bullet_flights.rs"]
 mod bullet_flights;
 #[path = "bullet_hits.rs"]
