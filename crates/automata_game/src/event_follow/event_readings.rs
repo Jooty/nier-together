@@ -49,6 +49,14 @@ impl EventReadings {
         }
     }
 
+    pub fn pause_rule_role(&self) -> JumpRole {
+        if (0..STORY_EVENTS_BELOW_PHASE_ID).contains(&self.current_phase_id) {
+            self.linked_role()
+        } else {
+            JumpRole::Solo
+        }
+    }
+
     pub fn plays_an_event(&self) -> bool {
         self.event_flags_say_playing || self.slots.iter().any(|slot| slot.is_playing())
     }

@@ -231,7 +231,7 @@ fn outside_the_story_rule_a_pause_stays_the_copys_own() {
     let mut machine = playing_machine(true);
     let step = machine.step(&EventReadings {
         local_event_pause_open: true,
-        partner_in_play: false,
+        current_phase_id: 0xF00,
         pauses_heard: vec![(event(1), true)],
         ..readings(100)
     });
@@ -293,4 +293,34 @@ fn a_hold_ends_on_the_first_tick_a_resume_could_be_dropped() {
     let back = machine.step(&readings(300));
     assert!(back.calls.is_empty());
     assert_eq!(back.skip_prompt, None);
+}
+
+#[test]
+fn a_pause_is_told_while_neither_copy_has_been_free_yet() {
+    let mut machine = playing_machine(true);
+    let step = machine.step(&EventReadings {
+        local_event_pause_open: true,
+        local_in_play: false,
+        partner_in_play: false,
+        ..readings(100)
+    });
+    assert_eq!(
+        pause_sends(&step),
+        vec![EventSend::Pause {
+            id: event(1),
+            paused: true
+        }]
+    );
+}
+
+#[test]
+fn the_partners_pause_stops_the_clock_while_neither_copy_has_been_free_yet() {
+    let mut machine = playing_machine(true);
+    let step = machine.step(&EventReadings {
+        local_in_play: false,
+        partner_in_play: false,
+        pauses_heard: vec![(event(1), true)],
+        ..readings(100)
+    });
+    assert_eq!(step.calls, vec![EventCall::PauseClock]);
 }
