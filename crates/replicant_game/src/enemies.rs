@@ -75,7 +75,7 @@ pub use count_log::CountLog;
 pub use creation::{CreationWatch, missing_host_spawns, spec_slot_address, spec_slot_index};
 pub use cube_log::{
     CUBE_EFFECT_NAME_READ_LEN, CUBE_GROUP, CubeStateLog, cube_effect_attached_text,
-    cube_state_changed_text, is_cube_effect,
+    cube_glow_is_relayed, cube_state_changed_text, is_cube_effect,
 };
 pub use difficulty::{
     DamageTakenLedger, EXTRA_PLAYERS_WITH_ONE_GUEST, GuestHitDamage, ScaledEnemyKey,
