@@ -19,6 +19,14 @@ pub enum DownedState {
     Downed,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WatchSide {
+    #[default]
+    Nobody,
+    ThisGame,
+    Partner,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DownedEffect {
     Send(CombatEvent),
@@ -53,6 +61,8 @@ pub struct DownedRules {
     last_health: Option<i32>,
     game_over: bool,
     guest: bool,
+    watch: WatchSide,
+    ended_by_lone_player: bool,
     rewind: RewindRules,
 }
 
@@ -77,12 +87,22 @@ impl DownedRules {
             last_health: None,
             game_over: false,
             guest: false,
+            watch: WatchSide::Nobody,
+            ended_by_lone_player: false,
             rewind: RewindRules::new(),
         }
     }
 
     pub fn set_guest(&mut self, guest: bool) {
         self.guest = guest;
+    }
+
+    pub fn set_watch(&mut self, watch: WatchSide) {
+        self.watch = watch;
+    }
+
+    pub fn ended_by_lone_player(&self) -> bool {
+        self.ended_by_lone_player
     }
 
     pub fn is_rewinding(&self) -> bool {
@@ -131,11 +151,17 @@ impl DownedRules {
             }
             self.reset_keeping_rewind();
         }
-        if self.local == DownedState::Up && self.took_a_lethal_hit(input) {
+        if self.local == DownedState::Up
+            && self.watch != WatchSide::ThisGame
+            && self.took_a_lethal_hit(input)
+        {
             self.go_down(&mut effects);
         }
         self.last_health = Some(input.local_health);
-        if self.local == DownedState::Up && self.partner == DownedState::Downed {
+        if self.local == DownedState::Up
+            && self.partner == DownedState::Downed
+            && self.watch == WatchSide::Nobody
+        {
             self.hold_revive(input, &mut effects);
         } else {
             self.revive_seconds = 0.0;
@@ -169,7 +195,10 @@ impl DownedRules {
             }
             CombatEvent::Revived => {
                 self.partner = DownedState::Up;
-                if self.local == DownedState::Downed && !self.game_over {
+                if self.local == DownedState::Downed
+                    && !self.game_over
+                    && self.watch == WatchSide::Nobody
+                {
                     self.local = DownedState::Up;
                     self.bleed_seconds = 0.0;
                     self.incoming_revive_progress = 0.0;
@@ -225,7 +254,7 @@ impl DownedRules {
 
     pub fn request_go_down(&mut self) -> Vec<DownedEffect> {
         let mut effects = Vec::new();
-        if self.local == DownedState::Up && !self.game_over {
+        if self.local == DownedState::Up && !self.game_over && self.watch != WatchSide::ThisGame {
             self.go_down(&mut effects);
             self.end_the_fight_if_both_down(&mut effects);
         }
@@ -234,7 +263,10 @@ impl DownedRules {
 
     pub fn request_revive_partner(&mut self) -> Vec<DownedEffect> {
         let mut effects = Vec::new();
-        if self.local == DownedState::Up && self.partner == DownedState::Downed {
+        if self.local == DownedState::Up
+            && self.partner == DownedState::Downed
+            && self.watch == WatchSide::Nobody
+        {
             self.finish_revive(&mut effects);
         }
         effects
@@ -323,7 +355,13 @@ impl DownedRules {
 
     fn end_the_fight_if_both_down(&mut self, effects: &mut Vec<DownedEffect>) {
         let both_down = self.local == DownedState::Downed && self.partner == DownedState::Downed;
-        if both_down && !self.game_over {
+        let player_in_play_down = match self.watch {
+            WatchSide::Nobody => false,
+            WatchSide::ThisGame => self.partner == DownedState::Downed,
+            WatchSide::Partner => self.local == DownedState::Downed,
+        };
+        if (both_down || player_in_play_down) && !self.game_over {
+            self.ended_by_lone_player = player_in_play_down && !both_down;
             self.game_over = true;
             effects.push(DownedEffect::Send(CombatEvent::GameOver));
             self.kill_or_wait_for_host(effects);
@@ -340,11 +378,12 @@ impl DownedRules {
 
     fn reset_keeping_rewind(&mut self) {
         let rewind = std::mem::take(&mut self.rewind);
-        let guest = self.guest;
+        let (guest, watch) = (self.guest, self.watch);
         *self = Self::new();
         self.rewind = rewind;
         self.rewind.stop_waiting_for_host();
         self.guest = guest;
+        self.watch = watch;
     }
 
     fn end_session(&mut self) -> Vec<DownedEffect> {

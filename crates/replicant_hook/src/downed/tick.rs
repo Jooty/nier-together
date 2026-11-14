@@ -4,7 +4,7 @@ use std::time::Instant;
 
 use replicant_game::Replicant;
 use replicant_game::downed::{
-    DownedRules, DownedState, KillGuardInputs, PlayerLock, StepInput, kill_is_blocked,
+    DownedRules, DownedState, KillGuardInputs, PlayerLock, StepInput, WatchSide, kill_is_blocked,
 };
 use replicant_game::stay_together::FollowRole;
 use replicant_proto::Message;
@@ -86,6 +86,8 @@ pub fn tick_downed(build: &VerifiedBuild) {
     runtime
         .rules
         .set_guest(FollowRole::from_slot(view.local_slot) == FollowRole::Guest);
+    runtime.rules.set_watch(watch_side());
+    let was_over = runtime.rules.is_game_over();
     if session_active {
         for message in partner_events {
             if let Message::Combat(event) = message {
@@ -109,6 +111,16 @@ pub fn tick_downed(build: &VerifiedBuild) {
         }));
     }
     let runtime = &mut *runtime;
+    if !was_over && runtime.rules.is_game_over() && runtime.rules.ended_by_lone_player() {
+        log_line(&format!(
+            "downed: the player in play went down while the other watches, nobody can revive them, the game ends ({})",
+            if runtime.rules.local() == DownedState::Downed {
+                "this game's player was the one in play"
+            } else {
+                "the partner was the one in play"
+            }
+        ));
+    }
     apply_effects(
         net,
         &mut game,
@@ -216,6 +228,16 @@ fn maintain_endure(
     };
     if let Err(error) = result {
         log_line(&format!("downed: life flags not writable ({error})"));
+    }
+}
+
+fn watch_side() -> WatchSide {
+    if crate::story_watch::this_game_is_watching() {
+        WatchSide::ThisGame
+    } else if crate::story_watch::guest_is_watched() {
+        WatchSide::Partner
+    } else {
+        WatchSide::Nobody
     }
 }
 
