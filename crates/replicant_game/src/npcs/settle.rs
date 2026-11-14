@@ -18,6 +18,10 @@ impl EventSceneClock {
         self.in_scene = in_scene;
     }
 
+    pub fn playing(&self) -> bool {
+        self.in_scene
+    }
+
     pub fn settling(&self, now_ms: u64) -> bool {
         !self.in_scene && npc_sync_settling(now_ms, self.ended_at_ms)
     }

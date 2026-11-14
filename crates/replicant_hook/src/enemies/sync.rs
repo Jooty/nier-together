@@ -75,6 +75,7 @@ struct EnemySync {
     id_list_clock: LineBudget,
     scene_clock: EventSceneClock,
     logged_settling: bool,
+    logged_scene_playing: bool,
     fight_fill_in: FightSpawnFillIn,
     companions: CompanionShare,
 }
@@ -493,6 +494,32 @@ fn guest_step(sync: &mut EnemySync, local: &LocalView<'_>, relayed: Vec<Message>
         .flatten()
         .is_some();
     sync.scene_clock.observe(now_ms, in_scene);
+    if sync.scene_clock.playing() {
+        if !sync.logged_scene_playing {
+            sync.logged_scene_playing = true;
+            let left_to_the_game: Vec<String> = update
+                .seen
+                .iter()
+                .map(|(id, sighting)| {
+                    format!("{} (actor {:#x})", enemy_id_text(*id), sighting.actor)
+                })
+                .collect();
+            sync.note(format!(
+                "event scene playing: your enemies are the game's own for the whole scene, none is held, driven or snapped to the host: {}",
+                left_to_the_game.join(", ")
+            ));
+        }
+        status.idle_reason = Some("an event scene is playing, the game runs its own actors");
+        guest_combat::show_hidden_copies(&mut sync.combat, &mut InProcessMemory::new(local.build));
+        sync.release_combat();
+        publish_status(status);
+        return;
+    }
+    if std::mem::replace(&mut sync.logged_scene_playing, false) {
+        sync.note(
+            "event scene over: your enemies follow the host again after the settle".to_string(),
+        );
+    }
     if sync.scene_clock.settling(now_ms) {
         if !sync.logged_settling {
             sync.logged_settling = true;
