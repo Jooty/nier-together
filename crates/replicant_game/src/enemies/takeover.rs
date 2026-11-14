@@ -55,12 +55,14 @@ pub fn plan_takeovers(
 /// Host enemies inside a fight window that the guest's replay has not spawned: each waits
 /// `FIGHT_SPAWN_FILL_IN_GRACE_MS` from its arrival here for a guest spawn to bind it, then is due
 /// for a copy; a copy the game would not make is tried again `FIGHT_SPAWN_FILL_IN_RETRIES` times,
-/// `FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS` apart.
+/// `FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS` apart. Once a group had a spawn that waited the whole grace,
+/// the guest's replay is not spawning that group, so its later spawns are due at once.
 #[derive(Debug, Clone, Default)]
 pub struct FightSpawnFillIn {
     waiting_since: HashMap<EnemyId, u64>,
     filled_in: HashSet<EnemyId>,
     failed_tries: HashMap<EnemyId, (u32, u64)>,
+    groups_the_replay_never_filled: HashSet<u16>,
     snap_off_logged: bool,
 }
 
@@ -106,7 +108,15 @@ impl FightSpawnFillIn {
                 tries <= FIGHT_SPAWN_FILL_IN_RETRIES
                     && now_ms.saturating_sub(last_ms) >= FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS
             });
-            if waited >= FIGHT_SPAWN_FILL_IN_GRACE_MS && copyable.contains(&id) && retry_ready {
+            let grace_ms = if self.groups_the_replay_never_filled.contains(&id.group) {
+                0
+            } else {
+                FIGHT_SPAWN_FILL_IN_GRACE_MS
+            };
+            if waited >= grace_ms && copyable.contains(&id) && retry_ready {
+                if waited >= FIGHT_SPAWN_FILL_IN_GRACE_MS {
+                    self.groups_the_replay_never_filled.insert(id.group);
+                }
                 step.due.push((id, waited));
             }
         }
@@ -144,6 +154,7 @@ impl FightSpawnFillIn {
         self.waiting_since.clear();
         self.filled_in.clear();
         self.failed_tries.clear();
+        self.groups_the_replay_never_filled.clear();
         self.snap_off_logged = false;
     }
 }

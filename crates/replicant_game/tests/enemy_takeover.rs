@@ -709,3 +709,40 @@ fn a_fill_in_skipped_because_snap_is_off_is_logged_once_per_window() {
         "fight spawn fill-in due for 6:39 but snap is off, so no copy is made (logged once per fight window)"
     );
 }
+
+#[test]
+fn once_a_group_waited_the_whole_grace_its_later_spawns_get_a_copy_at_once() {
+    let first = id(30);
+    let later = id(31);
+    let other_group = EnemyId {
+        group: GROUP + 1,
+        ordinal: 0,
+    };
+    let host_live = vec![first, later, other_group];
+    let copyable: HashSet<EnemyId> = host_live.iter().copied().collect();
+    let mut fill_in = FightSpawnFillIn::default();
+    let none = HashSet::new();
+    fill_in.observe(0, &[first], &none, &none, &copyable);
+    let waited = fill_in.observe(
+        FIGHT_SPAWN_FILL_IN_GRACE_MS,
+        &[first],
+        &none,
+        &none,
+        &copyable,
+    );
+    assert_eq!(waited.due, vec![(first, FIGHT_SPAWN_FILL_IN_GRACE_MS)]);
+    fill_in.mark_filled_in(first);
+    let now = 10_000;
+    let step = fill_in.observe(now, &host_live, &none, &none, &copyable);
+    assert_eq!(
+        step.due,
+        vec![(later, 0)],
+        "same group at once, other group still waits"
+    );
+    fill_in.clear();
+    let after_clear = fill_in.observe(now, &[later], &none, &none, &copyable);
+    assert!(
+        after_clear.due.is_empty(),
+        "a new window starts with the full grace"
+    );
+}
