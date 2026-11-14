@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use replicant_game::Position;
@@ -22,6 +23,11 @@ use crate::story_jump::{NativeArg, call_native_with};
 use crate::teleport::move_player_facing;
 
 static RETURN: Mutex<BreakerReturn> = Mutex::new(BreakerReturn::new());
+static BREAKER_INPUT_BLOCKED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn input_blocked() -> bool {
+    BREAKER_INPUT_BLOCKED.load(Ordering::Relaxed)
+}
 
 pub(super) fn begin(room: &'static RuleRoom, player: RulePlayer) {
     let started =
@@ -30,6 +36,7 @@ pub(super) fn begin(room: &'static RuleRoom, player: RulePlayer) {
             .unwrap_or_else(PoisonError::into_inner)
             .begin(room, player, net_clock_ms());
     if started {
+        BREAKER_INPUT_BLOCKED.store(true, Ordering::Relaxed);
         crate::fade_sync::fade_on_this_game_only(
             true,
             BLACK_FADE_KIND,
@@ -40,10 +47,12 @@ pub(super) fn begin(room: &'static RuleRoom, player: RulePlayer) {
 }
 
 pub(super) fn tick(build: &VerifiedBuild) {
-    let due = RETURN
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .take_if_due(net_clock_ms());
+    let now_ms = net_clock_ms();
+    let (due, input_blocked) = {
+        let mut state = RETURN.lock().unwrap_or_else(PoisonError::into_inner);
+        (state.take_if_due(now_ms), state.input_blocked(now_ms))
+    };
+    BREAKER_INPUT_BLOCKED.store(input_blocked, Ordering::Relaxed);
     let Some((room, player)) = due else {
         return;
     };
