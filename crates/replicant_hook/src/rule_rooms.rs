@@ -8,6 +8,7 @@ mod state;
 mod take_in;
 mod tick;
 
+pub(crate) use breaker_return::input_blocked;
 pub(crate) use mirror::keeps_message_here;
 pub(crate) use pop::{judge_pop, note_registration};
 pub use tick::tick;

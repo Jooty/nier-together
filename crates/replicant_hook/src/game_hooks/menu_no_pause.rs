@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use replicant_game::coop_pause::{
-    MenuTaint, PauseView, effective_control_mask, mask_without_menu, ui_prompt_open,
+    MENU_PLAYER_INPUT_BIT, MenuTaint, PauseView, effective_control_mask, mask_without_menu,
+    ui_prompt_open,
 };
 use replicant_game::marker::{
     CONTROL_MASK_FIRST_RVA, CONTROL_MASK_SLOT_COUNT, EVENT_SCENE_BYTE_RVA, UI_DIALOG_STATE_RVA,
@@ -147,7 +148,12 @@ extern "system" fn get_control_mask_detour(game_state: *mut c_void) -> u32 {
     }
     // SAFETY: the trampoline continues into the original getter, which has this exact signature.
     let mask = unsafe { core::mem::transmute::<*mut c_void, GetControlMask>(original)(game_state) };
-    panic::catch_unwind(|| settle(mask)).unwrap_or(mask)
+    let settled = panic::catch_unwind(|| settle(mask)).unwrap_or(mask);
+    if crate::rule_rooms::input_blocked() {
+        settled | MENU_PLAYER_INPUT_BIT
+    } else {
+        settled
+    }
 }
 
 #[expect(

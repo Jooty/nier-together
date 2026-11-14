@@ -1,8 +1,8 @@
 use replicant_game::rule_rooms::{
-    BreakerReturn, RETURN_FADE_OUT_MS, RETURN_SPOTS, RULE_ROOMS, RearmAfterRestart, RoomClock,
-    RoomResetVerdict, RuleAct, RulePlayer, RulePop, RulePopFacts, RuleRoomCall, RuleRoomWatch,
-    RuleState, TakeIn, armed_line, guest_break_line, kept_message_line, return_spot_of,
-    returned_line, rule_room_call,
+    BreakerReturn, RETURN_FADE_IN_MS, RETURN_FADE_OUT_MS, RETURN_SPOTS, RULE_ROOMS,
+    RearmAfterRestart, RoomClock, RoomResetVerdict, RuleAct, RulePlayer, RulePop, RulePopFacts,
+    RuleRoomCall, RuleRoomWatch, RuleState, TakeIn, armed_line, guest_break_line,
+    kept_message_line, return_spot_of, returned_line, rule_room_call,
 };
 use replicant_game::story_calls::{StoryCallKind, name_hash};
 use replicant_game::story_relay::relay_kind;
@@ -314,6 +314,37 @@ fn one_return_runs_at_a_time_and_waits_for_the_fade_to_cover_the_screen() {
     );
     assert!(!breaker.is_returning());
     assert!(breaker.begin(&RULE_ROOMS[1], RulePlayer::Host, 5_000));
+}
+
+#[test]
+fn the_breakers_movement_input_is_blocked_from_the_break_until_the_fade_in_has_ended() {
+    let room = &RULE_ROOMS[2];
+    let mut breaker = BreakerReturn::new();
+    assert!(!breaker.input_blocked(0));
+    assert!(breaker.begin(room, RulePlayer::Host, 1_000));
+    assert!(breaker.input_blocked(1_000));
+    assert!(breaker.input_blocked(1_000 + RETURN_FADE_OUT_MS));
+    assert!(breaker.input_blocked(1_000 + RETURN_FADE_OUT_MS + RETURN_FADE_IN_MS - 1));
+    assert!(!breaker.input_blocked(1_000 + RETURN_FADE_OUT_MS + RETURN_FADE_IN_MS));
+}
+
+#[test]
+fn room_3s_run_break_and_the_two_breaks_that_followed_the_return_fall_inside_the_blocked_input() {
+    let room = &RULE_ROOMS[2];
+    let broke_at_ms = 26_711;
+    let returned_at_ms = 27_425;
+    let broke_again_at_ms = 27_488;
+    let broke_a_third_time_at_ms = 28_258;
+    let mut breaker = BreakerReturn::new();
+    assert!(breaker.begin(room, RulePlayer::Host, broke_at_ms));
+    assert_eq!(
+        breaker.take_if_due(returned_at_ms),
+        Some((room, RulePlayer::Host))
+    );
+    assert!(breaker.input_blocked(returned_at_ms));
+    assert!(breaker.input_blocked(broke_again_at_ms));
+    assert!(breaker.input_blocked(broke_a_third_time_at_ms));
+    assert!(!breaker.input_blocked(broke_at_ms + RETURN_FADE_OUT_MS + RETURN_FADE_IN_MS));
 }
 
 #[test]
