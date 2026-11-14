@@ -239,6 +239,7 @@ impl EventMachine {
                 .map(|here| here.id)
                 .filter(|_| readings.plays_an_event());
             let view = PauseView {
+                now_ms,
                 rule_active: rule_role != JumpRole::Solo,
                 event,
                 local_open: readings.local_event_pause_open,

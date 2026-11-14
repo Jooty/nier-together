@@ -74,7 +74,7 @@ impl HostSide {
         }
         let refusal = if !starts_by_data_id {
             Some("starts for the partner are turned off here")
-        } else if readings.rule_role() != JumpRole::Host {
+        } else if readings.rule_role_with_both_in_play() != JumpRole::Host {
             Some("the host or the guest is not in play, or this is not a story phase")
         } else if !readings.in_the_partners_place() {
             Some("the host is at another place")

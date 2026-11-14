@@ -392,3 +392,16 @@ fn with_the_vote_off_the_either_player_skip_of_c3_stays() {
     let mut host = host_in_event(false);
     assert_eq!(host.on_player_skip(1_000), SkipVerdict::Pass);
 }
+
+#[test]
+fn a_skip_is_voted_while_neither_copy_has_been_free_yet() {
+    let mut host = host_in_event(true);
+    assert_eq!(host.on_player_skip(1_000), SkipVerdict::Swallow);
+    let step = host.step(&EventReadings {
+        local_in_play: false,
+        partner_in_play: false,
+        ..readings(JumpRole::Host, 1_010)
+    });
+    assert!(asks(&step));
+    assert_eq!(step.skip_prompt, Some(SkipPrompt::WaitingForThePartner));
+}

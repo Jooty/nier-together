@@ -146,7 +146,7 @@ fn the_guests_own_play_that_just_ended_is_never_started_again_for_the_host() {
     // host fell in the same millisecond.
     let mut guest = new_machine(JumpRole::Guest);
     let out_of_rule = EventReadings {
-        partner_in_play: false,
+        current_phase_id: 0xF00,
         ..readings(JumpRole::Guest, 21_878, "A")
     };
     guest.step(&out_of_rule);

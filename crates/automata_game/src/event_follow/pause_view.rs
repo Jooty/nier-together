@@ -2,6 +2,7 @@ use crate::event_follow::EventId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PauseView<'a> {
+    pub now_ms: u64,
     pub rule_active: bool,
     pub event: Option<EventId>,
     pub local_open: bool,
