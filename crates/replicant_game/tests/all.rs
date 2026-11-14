@@ -343,6 +343,8 @@ mod story_player_local_flags;
 mod story_progress;
 #[path = "story_relay.rs"]
 mod story_relay;
+#[path = "story_watch.rs"]
+mod story_watch;
 #[path = "story_writes.rs"]
 mod story_writes;
 #[path = "stuck_menu_mask.rs"]
