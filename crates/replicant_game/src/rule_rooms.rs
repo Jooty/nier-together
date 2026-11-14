@@ -8,6 +8,7 @@ mod room_clock;
 mod table;
 mod take_in;
 mod watch;
+mod watching_guest;
 
 pub use breaker_return::BreakerReturn;
 pub(crate) use log_text::room_name;
@@ -23,6 +24,7 @@ pub use room_clock::RoomClock;
 pub use table::RULE_ROOMS;
 pub use take_in::{TakeIn, take_in_failed_line};
 pub use watch::{RoomResetVerdict, RulePlayer, RulePop, RulePopFacts, RuleRoomWatch, RuleState};
+pub use watching_guest::break_of_a_watching_guest;
 
 pub const GUEST_ALREADY_BESIDE_THE_HOST_UNITS: f32 = 3.0;
 pub const PLAYER_DASHED_MESSAGE: u32 = 216;

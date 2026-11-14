@@ -19,6 +19,7 @@ use replicant_game::{GameMemory, Replicant};
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::game_hooks::menu_free_calls::menu_free_call_active;
+use crate::game_hooks::menu_open_test;
 use crate::game_hooks::radio_sites;
 use crate::game_hooks::stuck_menu_mask;
 use crate::memory::InProcessMemory;
@@ -149,10 +150,15 @@ extern "system" fn get_control_mask_detour(game_state: *mut c_void) -> u32 {
     // SAFETY: the trampoline continues into the original getter, which has this exact signature.
     let mask = unsafe { core::mem::transmute::<*mut c_void, GetControlMask>(original)(game_state) };
     let settled = panic::catch_unwind(|| settle(mask)).unwrap_or(mask);
+    let watching = crate::story_watch::this_game_is_watching();
+    let watching_and_held = watching && !menu_open_test::inside_free_to_act_test();
+    if watching && !watching_and_held {
+        menu_open_test::note_held_bit_left_out();
+    }
     mask_with_player_input_held(
         settled,
         crate::rule_rooms::input_blocked(),
-        crate::story_watch::this_game_is_watching(),
+        watching_and_held,
     )
 }
 

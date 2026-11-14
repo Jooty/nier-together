@@ -57,6 +57,11 @@ impl RulePop {
                 act.label(),
                 player.label()
             ),
+            Self::DropWhileWatching { room, act } => format!(
+                "rule room: {}: the guest's {function} ({}) not run, this game watches the host and no rule binds it",
+                room_name(room),
+                act.label()
+            ),
             Self::DropPartnersBreak { room, act, player } => format!(
                 "rule room: {}: the partner's {function} ({}) not run on the {}'s game, a break sends back only the one who broke it",
                 room_name(room),

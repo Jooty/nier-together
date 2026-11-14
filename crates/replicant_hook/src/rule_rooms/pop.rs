@@ -1,7 +1,9 @@
 use std::sync::PoisonError;
 
 use replicant_game::fight_sync::{PopSource, pop_source};
-use replicant_game::rule_rooms::{RulePlayer, RulePop, RulePopFacts, armed_line};
+use replicant_game::rule_rooms::{
+    RulePlayer, RulePop, RulePopFacts, armed_line, break_of_a_watching_guest,
+};
 use replicant_game::stay_together::FollowRole;
 use replicant_game::{PhaseEntry, Replicant};
 use replicant_proto::{Message, RuleRoomBreak};
@@ -35,6 +37,17 @@ pub(crate) fn judge_pop(
     let Ok(pack) = game.current_phase() else {
         return RulePop::NotARuleRoomCall;
     };
+    if let Some(pop) = break_of_a_watching_guest(
+        &pack,
+        name,
+        player,
+        crate::story_watch::this_game_is_watching(),
+    ) {
+        if let Some(line) = pop.log_line(name) {
+            log_line(&line);
+        }
+        return pop;
+    }
     let local_phase = PhaseEntry::index_of(&pack).and_then(|index| u16::try_from(index).ok());
     let shared = view.state == NetState::Connected
         && shared_story_events()

@@ -3,8 +3,9 @@ use std::time::Instant;
 use replicant_game::downed::{
     PLAYER_CONTROL_DISABLE_NATIVE_RVAS, PLAYER_CONTROL_ENABLE_NATIVE_RVAS,
 };
+use replicant_game::move_log::read_move_sample;
 use replicant_game::offsets::{ACTOR_DRAWN_FLAG_OFFSET, LIFE_FLAG_INVULNERABLE_BIT};
-use replicant_game::story_watch::{PlaceStep, place_step};
+use replicant_game::story_watch::{PlaceStep, place_step, watched_body_moves_on_keys};
 use replicant_game::{GameMemory, Position, Replicant};
 
 use crate::build_gate::VerifiedBuild;
@@ -53,6 +54,18 @@ impl WatchedBody {
         for rva in PLAYER_CONTROL_DISABLE_NATIVE_RVAS {
             call_native_with(build, rva, &[]);
         }
+    }
+
+    pub(super) fn moves_on_keys(&self, build: &VerifiedBuild) -> Option<(f32, [bool; 4])> {
+        let game = Replicant::new(InProcessMemory::new(build));
+        let actor = game.playable_actor().ok()?;
+        let sample = read_move_sample(&InProcessMemory::new(build), actor);
+        watched_body_moves_on_keys(sample.speed, sample.move_keys).then(|| {
+            (
+                sample.speed.unwrap_or_default(),
+                sample.move_keys.unwrap_or_default(),
+            )
+        })
     }
 
     pub(super) fn give_back(&mut self, build: &VerifiedBuild, host: Option<[f32; 3]>) {
