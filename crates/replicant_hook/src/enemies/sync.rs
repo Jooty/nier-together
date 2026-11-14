@@ -4,13 +4,14 @@ use std::time::Instant;
 
 use nt_hook::line_budget::LineBudget;
 use replicant_game::enemies::{
-    CountLog, ENEMY_ID_LIST_INTERVAL_MS, ENEMY_MIRROR_DELAY_MS, ENEMY_ROUND_CAPACITY, EnemyLog,
-    EnemyMirror, EnemyRoster, EnemySighting, FIGHT_SPAWN_FILL_IN_GRACE_MS, FightSpawnFillIn,
-    HostFightEnemy, ListDiffWatch, MirroredEnemy, RemovalCause, RosterUpdate, WaitingFightSpawn,
-    enemy_state, fight_spawn_fill_in_gave_up_text, fight_spawn_fill_in_snap_off_text,
-    fight_spawn_filled_in_text, match_enemies, missing_host_spawns, partner_actors,
-    plan_fight_bindings, plan_takeovers, relayed_spawn_text, scaled_matrix, scan_enemies,
-    shadow_matrix, split_id_list, split_snapshot, stalled_copy_time_scale_fix,
+    CountLog, CubeStateLog, ENEMY_ID_LIST_INTERVAL_MS, ENEMY_MIRROR_DELAY_MS, ENEMY_ROUND_CAPACITY,
+    EnemyLog, EnemyMirror, EnemyRoster, EnemySighting, FIGHT_SPAWN_FILL_IN_GRACE_MS,
+    FightSpawnFillIn, HostFightEnemy, ListDiffWatch, MirroredEnemy, RemovalCause, RosterUpdate,
+    WaitingFightSpawn, enemy_state, fight_spawn_fill_in_gave_up_text,
+    fight_spawn_fill_in_snap_off_text, fight_spawn_filled_in_text, match_enemies,
+    missing_host_spawns, partner_actors, plan_fight_bindings, plan_takeovers, relayed_spawn_text,
+    scaled_matrix, scan_enemies, shadow_matrix, split_id_list, split_snapshot,
+    stalled_copy_time_scale_fix,
 };
 use replicant_game::npcs::{
     EventSceneClock, NPC_EVENT_SCENE_SETTLE_MS, npc_motion_records_readable, read_enemy_body_layer,
@@ -75,6 +76,8 @@ struct EnemySync {
     id_list_clock: LineBudget,
     scene_clock: EventSceneClock,
     logged_settling: bool,
+    logged_scene_playing: bool,
+    cube_log: CubeStateLog,
     fight_fill_in: FightSpawnFillIn,
     companions: CompanionShare,
 }
@@ -493,6 +496,32 @@ fn guest_step(sync: &mut EnemySync, local: &LocalView<'_>, relayed: Vec<Message>
         .flatten()
         .is_some();
     sync.scene_clock.observe(now_ms, in_scene);
+    if sync.scene_clock.playing() {
+        if !sync.logged_scene_playing {
+            sync.logged_scene_playing = true;
+            let left_to_the_game: Vec<String> = update
+                .seen
+                .iter()
+                .map(|(id, sighting)| {
+                    format!("{} (actor {:#x})", enemy_id_text(*id), sighting.actor)
+                })
+                .collect();
+            sync.note(format!(
+                "event scene playing: your enemies are the game's own for the whole scene, none is held, driven or snapped to the host: {}",
+                left_to_the_game.join(", ")
+            ));
+        }
+        status.idle_reason = Some("an event scene is playing, the game runs its own actors");
+        guest_combat::show_hidden_copies(&mut sync.combat, &mut InProcessMemory::new(local.build));
+        sync.release_combat();
+        publish_status(status);
+        return;
+    }
+    if std::mem::replace(&mut sync.logged_scene_playing, false) {
+        sync.note(
+            "event scene over: your enemies follow the host again after the settle".to_string(),
+        );
+    }
     if sync.scene_clock.settling(now_ms) {
         if !sync.logged_settling {
             sync.logged_settling = true;
@@ -835,6 +864,17 @@ fn log_host_changes(sync: &mut EnemySync, update: &RosterUpdate, guest_killed: &
     for line in lines {
         sync.note(line);
     }
+    note_cube_states(sync, "host", update);
+}
+
+fn note_cube_states(sync: &mut EnemySync, side: &str, update: &RosterUpdate) {
+    let cubes = update
+        .seen
+        .iter()
+        .map(|(id, sighting)| (*id, sighting.actor, sighting.motion.map(|m| m.index)));
+    for line in sync.cube_log.observe(side, cubes) {
+        sync.note(line);
+    }
 }
 
 fn take_over_copies(
@@ -1098,6 +1138,7 @@ fn log_guest_changes(
     for line in lines {
         sync.note(line);
     }
+    note_cube_states(sync, "guest", update);
 }
 
 fn gone_text(reason: EnemyGoneReason) -> &'static str {

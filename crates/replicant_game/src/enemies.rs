@@ -10,6 +10,7 @@ mod copy_hold;
 mod copy_stance;
 mod count_log;
 mod creation;
+mod cube_log;
 mod difficulty;
 mod dying_bodies;
 mod enemy_log;
@@ -43,6 +44,10 @@ mod snapshot;
 mod takeover;
 mod time_scale;
 
+pub use cube_log::{
+    CUBE_EFFECT_NAME_READ_LEN, CUBE_GROUP, CubeStateLog, cube_effect_attached_text,
+    cube_state_changed_text, is_cube_effect,
+};
 pub use aggro::{AggroPlanner, AggroPlayers, AggroTarget, choose_target};
 pub use attack_record::{ActorHandle, AttackRecord};
 pub use boss_bar_probe::{

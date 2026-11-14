@@ -2,8 +2,8 @@ use replicant_proto::{DialogueLine, DialogueUpdate};
 
 use crate::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, FOLLOW_HOST_TALK_WAIT_MS,
-    MIRROR_OPEN_RETRY_MS, OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS,
-    TALK_LEAVE_EXTRA_UNITS,
+    MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
+    OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS, TALK_LEAVE_EXTRA_UNITS,
 };
 
 /// What the partner's talk window must do this tick to follow the talker's line.
@@ -226,6 +226,14 @@ pub struct PartnerTalkMirror {
     following: Option<FollowedTalk>,
     last_own_talk: Option<u32>,
     own_ended: Option<EndedTalk>,
+    mirrored: Vec<MirroredTalk>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MirroredTalk {
+    talk_id: u32,
+    at_ms: u64,
+    own_copy_finished: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -254,6 +262,7 @@ impl PartnerTalkMirror {
             following: None,
             last_own_talk: None,
             own_ended: None,
+            mirrored: Vec::new(),
         }
     }
 
@@ -271,6 +280,11 @@ impl PartnerTalkMirror {
             self.shown = None;
             self.last_own_talk = Some(own.talk_id);
             self.own_ended = None;
+            if input.leader == TalkLeader::Partner
+                && let Some(talk_id) = self.finish_mirrored_own_copy(own.talk_id, input.now_ms)
+            {
+                return Some(MirrorAction::FinishOwnTalk(talk_id));
+            }
             return match input.leader {
                 TalkLeader::Partner => self.follow_host(
                     own,
@@ -292,6 +306,7 @@ impl PartnerTalkMirror {
         self.joined_own_talk = None;
         self.following = None;
         if let Some(talk_id) = self.last_own_talk.take() {
+            self.mirrored.retain(|talk| talk.talk_id != talk_id);
             self.own_ended = Some(EndedTalk {
                 talk_id,
                 at_ms: input.now_ms,
@@ -312,6 +327,7 @@ impl PartnerTalkMirror {
                     return None;
                 }
                 self.shown = Some(line);
+                self.remember_mirrored(line.talk_id, input.now_ms);
                 self.retry_open_at_ms = input.now_ms + MIRROR_OPEN_RETRY_MS;
                 Some(MirrorAction::Open(line))
             }
@@ -327,6 +343,36 @@ impl PartnerTalkMirror {
                 Some(MirrorAction::Close)
             }
         }
+    }
+
+    fn remember_mirrored(&mut self, talk_id: u32, now_ms: u64) {
+        self.mirrored.retain(|talk| {
+            now_ms.saturating_sub(talk.at_ms) < MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS
+        });
+        match self
+            .mirrored
+            .iter_mut()
+            .find(|talk| talk.talk_id == talk_id)
+        {
+            Some(talk) => talk.at_ms = now_ms,
+            None => self.mirrored.push(MirroredTalk {
+                talk_id,
+                at_ms: now_ms,
+                own_copy_finished: false,
+            }),
+        }
+    }
+
+    fn finish_mirrored_own_copy(&mut self, talk_id: u32, now_ms: u64) -> Option<u32> {
+        let talk = self
+            .mirrored
+            .iter_mut()
+            .find(|talk| talk.talk_id == talk_id && !talk.own_copy_finished)?;
+        if now_ms.saturating_sub(talk.at_ms) >= MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS {
+            return None;
+        }
+        talk.own_copy_finished = true;
+        Some(talk_id)
     }
 
     fn skip_ended_talk(

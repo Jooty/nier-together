@@ -946,3 +946,59 @@ fn releasing_the_followed_talk_gives_the_buttons_back() {
     mirror.release_followed_talk();
     assert!(!mirror.holds_own_talk());
 }
+
+#[test]
+fn a_talk_shown_as_a_mirror_is_finished_when_the_guests_own_copy_of_it_opens_later() {
+    let mut mirror = PartnerTalkMirror::new();
+    assert_eq!(
+        mirror.step(mirror_input(Some(line(1290, 0)), 0)),
+        Some(MirrorAction::Open(line(1290, 0)))
+    );
+    assert_eq!(mirror.step(mirror_input(None, 100)), None);
+    let own = |talk_id, leader, now_ms| MirrorInput {
+        own_talk: Some(line(talk_id, 0)),
+        window_open: true,
+        leader,
+        ..mirror_input(None, now_ms)
+    };
+    assert_eq!(
+        mirror.step(own(1290, TalkLeader::Partner, 17_000)),
+        Some(MirrorAction::FinishOwnTalk(1290))
+    );
+    assert_ne!(
+        mirror.step(own(1290, TalkLeader::Partner, 17_050)),
+        Some(MirrorAction::FinishOwnTalk(1290))
+    );
+}
+
+#[test]
+fn an_own_talk_that_was_never_a_mirror_or_is_led_by_the_player_is_left_alone() {
+    let mut mirror = PartnerTalkMirror::new();
+    mirror.step(mirror_input(Some(line(1290, 0)), 0));
+    mirror.step(mirror_input(None, 100));
+    let own = |talk_id, leader| MirrorInput {
+        own_talk: Some(line(talk_id, 0)),
+        window_open: true,
+        leader,
+        ..mirror_input(None, 5000)
+    };
+    assert_eq!(
+        mirror.step(own(1300, TalkLeader::Partner)),
+        Some(MirrorAction::FollowStarted(1300))
+    );
+    assert_eq!(mirror.step(own(1290, TalkLeader::Local)), None);
+}
+
+#[test]
+fn a_mirrored_talk_is_forgotten_after_the_expiry() {
+    let mut mirror = PartnerTalkMirror::new();
+    mirror.step(mirror_input(Some(line(1290, 0)), 0));
+    mirror.step(mirror_input(None, 100));
+    let late = MirrorInput {
+        own_talk: Some(line(1290, 0)),
+        window_open: true,
+        leader: TalkLeader::Partner,
+        ..mirror_input(None, 700_000)
+    };
+    assert_eq!(mirror.step(late), Some(MirrorAction::FollowStarted(1290)));
+}

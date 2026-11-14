@@ -18,12 +18,15 @@ use replicant_game::effects::{
     read_request_transform, read_sound, read_world_effect, spawn_is_drawn_by_shot_sync,
     spawn_is_sent, within_after_hit_window, within_hit_radius,
 };
+use replicant_game::enemies::{
+    CUBE_EFFECT_NAME_READ_LEN, cube_effect_attached_text, is_cube_effect,
+};
 use replicant_game::kaine::SpellLook;
 use replicant_game::marker::read_world_flags;
 use replicant_game::offsets::{
-    ACTOR_PLAY_EFFECT_FUNCTION_RVA, ACTOR_PLAY_SOUND_FUNCTION_RVA,
-    EFFECT_CREATE_BY_ID_FUNCTION_RVA, EFFECT_INVALID_HANDLE, EFFECT_PUSH_FUNCTION_RVA,
-    EFFECT_SPAWN_BY_NAME_FUNCTION_RVA,
+    ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_PLAY_EFFECT_FUNCTION_RVA,
+    ACTOR_PLAY_SOUND_FUNCTION_RVA, EFFECT_CREATE_BY_ID_FUNCTION_RVA, EFFECT_INVALID_HANDLE,
+    EFFECT_PUSH_FUNCTION_RVA, EFFECT_SPAWN_BY_NAME_FUNCTION_RVA,
 };
 use replicant_game::puppet::actor_is_live;
 use replicant_game::{GameMemory, Replicant};
@@ -52,6 +55,9 @@ static ORIGINAL_PLAY_EFFECT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut())
 static ORIGINAL_PLAY_SOUND: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_SPAWN_BY_NAME: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_CREATE_BY_ID: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static ORIGINAL_ATTACH_BY_ID: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static CUBE_EFFECT_LINES: AtomicU64 = AtomicU64::new(0);
+const CUBE_EFFECT_LINES_MAX: u64 = 600;
 static WORLD_TRAIL: LazyLock<Mutex<WorldEffectTrail>> = LazyLock::new(Mutex::default);
 static ORIGINAL_EFFECT_PUSH: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static LAST_OWN_HIT_CLOCK_PLUS_ONE: AtomicU64 = AtomicU64::new(0);
@@ -91,6 +97,7 @@ struct PendingWorldEffect {
 
 thread_local! {
     static CREATE_BY_ID_CALLER_RVA: Cell<u32> = const { Cell::new(0) };
+    static ATTACHING_ACTOR: Cell<u64> = const { Cell::new(0) };
     static NESTED_EFFECT_CALLS: Cell<u32> = const { Cell::new(0) };
     static OWN_HIT_IN_FLIGHT: Cell<bool> = const { Cell::new(false) };
     static HIT_SPARK_VIA: Cell<&'static str> = const { Cell::new(SPAWN_BY_NAME_CALL_NAME) };
@@ -101,6 +108,17 @@ type PlayEffect =
 type PlaySound = unsafe extern "system" fn(*mut c_void, *const c_char, *mut c_void) -> *mut c_void;
 type SpawnByName =
     unsafe extern "system" fn(*mut u32, *const u8, *const f32, f32, u32, u32, u32, i32) -> *mut u32;
+type AttachEffectById = unsafe extern "system" fn(
+    *mut c_void,
+    u32,
+    i32,
+    u8,
+    *const f32,
+    *const f32,
+    u32,
+    u8,
+    u32,
+) -> u64;
 type EffectPush = unsafe extern "system" fn(*mut c_void, *mut u32, *const u8) -> *mut u32;
 type CreateById =
     unsafe extern "system" fn(*mut u32, u32, *const f32, u32, u32, u32, u32) -> *mut u32;
@@ -161,6 +179,20 @@ pub fn install(build: VerifiedBuild) {
             (base + u64::from(EFFECT_CREATE_BY_ID_FUNCTION_RVA)) as usize,
             create_by_id_detour as *const () as *mut c_void,
             &ORIGINAL_CREATE_BY_ID,
+        )
+    };
+    #[expect(
+        unsafe_code,
+        reason = "hooks the attach-effect-by-id function by address, only to log which actor it serves"
+    )]
+    // SAFETY: the RVA starts the function (actor, effect id, bone, unique, colour, scale, three
+    // words -> handle) in the verified build, and the replacement matches it.
+    unsafe {
+        hook_address(
+            "Actor::AttachEffectById",
+            (base + u64::from(ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA)) as usize,
+            attach_effect_by_id_detour as *const () as *mut c_void,
+            &ORIGINAL_ATTACH_BY_ID,
         )
     };
     #[expect(
@@ -442,6 +474,7 @@ extern "system" fn spawn_by_name_detour(
             after_spawn(build, look, made, outermost, size, spawned_scale);
         });
     }
+    let _ = panic::catch_unwind(|| note_cube_effect(name));
     let due = spawn_is_sent(outermost, hit_related_spawn()) && SENDING.load(Ordering::Relaxed);
     if due && spawn_is_drawn_by_shot_sync(CREATE_BY_ID_CALLER_RVA.with(Cell::get)) {
         let _ = panic::catch_unwind(note_shot_slot_not_resent);
@@ -459,6 +492,63 @@ extern "system" fn spawn_by_name_detour(
         });
     }
     result
+}
+
+#[expect(
+    unsafe_code,
+    reason = "calls the original attach-effect-by-id function through the trampoline MinHook built"
+)]
+extern "system" fn attach_effect_by_id_detour(
+    actor: *mut c_void,
+    id: u32,
+    bone: i32,
+    unique: u8,
+    colour: *const f32,
+    scale: *const f32,
+    a: u32,
+    b: u8,
+    c: u32,
+) -> u64 {
+    let original = ORIGINAL_ATTACH_BY_ID.load(Ordering::Acquire);
+    if original.is_null() {
+        return 0;
+    }
+    let was_attaching = ATTACHING_ACTOR.with(|cell| cell.replace(actor as usize as u64));
+    // SAFETY: the trampoline continues into the original function, which has this signature.
+    let result = unsafe {
+        core::mem::transmute::<*mut c_void, AttachEffectById>(original)(
+            actor, id, bone, unique, colour, scale, a, b, c,
+        )
+    };
+    ATTACHING_ACTOR.with(|cell| cell.set(was_attaching));
+    result
+}
+
+fn note_cube_effect(name: *const u8) {
+    let actor = ATTACHING_ACTOR.with(Cell::get);
+    let Some(build) = HOOKED_BUILD.get() else {
+        return;
+    };
+    if actor == 0
+        || name.is_null()
+        || CUBE_EFFECT_LINES.load(Ordering::Relaxed) >= CUBE_EFFECT_LINES_MAX
+    {
+        return;
+    }
+    let Ok(bytes) =
+        InProcessMemory::new(build).read_array::<CUBE_EFFECT_NAME_READ_LEN>(name as usize as u64)
+    else {
+        return;
+    };
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    if is_cube_effect(&text) {
+        CUBE_EFFECT_LINES.fetch_add(1, Ordering::Relaxed);
+        log_line(&cube_effect_attached_text(&text, actor));
+    }
 }
 
 #[expect(
