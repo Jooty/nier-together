@@ -46,9 +46,12 @@ const STORY_JUMPS: [(StoryJumpPoint, &str); 15] = [
     ),
     (
         StoryJumpPoint::TempleBeforeBoss,
-        "Barren Temple: before the boss",
+        "Barren Temple: before boss fight 7",
     ),
-    (StoryJumpPoint::TempleComplete, "Barren Temple: complete"),
+    (
+        StoryJumpPoint::VillageBackFromTemple,
+        "The village: back from the temple",
+    ),
 ];
 
 impl GameMenu for ReplicantOverlay {

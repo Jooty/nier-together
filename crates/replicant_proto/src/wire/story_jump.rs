@@ -16,7 +16,7 @@ pub enum StoryJumpPoint {
     AfterFacade,
     TempleEntrance,
     TempleBeforeBoss,
-    TempleComplete,
+    VillageBackFromTemple,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

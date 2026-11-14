@@ -511,7 +511,7 @@ const TEMPLE_ENTRANCE_TO_BEFORE_BOSS_EXTRA_STEPS: [JumpStep; 14] = [
     JumpStep::SetFlag { id: 454 },
 ];
 
-const TEMPLE_BEFORE_BOSS_TO_COMPLETE_EXTRA_STEPS: [JumpStep; 11] = [
+const TEMPLE_BEFORE_BOSS_TO_VILLAGE_EXTRA_STEPS: [JumpStep; 15] = [
     JumpStep::SetFlag { id: 440 },
     JumpStep::SetFlag { id: 441 },
     JumpStep::SetFlag { id: 442 },
@@ -523,6 +523,10 @@ const TEMPLE_BEFORE_BOSS_TO_COMPLETE_EXTRA_STEPS: [JumpStep; 11] = [
     JumpStep::LearnMagic { id: 9 },
     JumpStep::SetTutorial { id: 2008 },
     JumpStep::SetFlag { id: 445 },
+    JumpStep::SetSnowFlag { id: 1041 },
+    JumpStep::SetFlag { id: 446 },
+    JumpStep::SetGameCounter { id: 100, value: 3 },
+    JumpStep::SetGameCounter { id: 101, value: 3 },
 ];
 
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
@@ -554,8 +558,8 @@ const TEMPLE_ENTRANCE_PHASE: &str = "A_DESERT_TEMPLE_01";
 const TEMPLE_ENTRANCE_POINT: i32 = 1;
 const TEMPLE_BEFORE_BOSS_PHASE: &str = "A_DESERT_TEMPLE_02";
 const TEMPLE_BEFORE_BOSS_POINT: i32 = 1;
-const TEMPLE_COMPLETE_PHASE: &str = "A_DESERT_TOWN_01";
-const TEMPLE_COMPLETE_POINT: i32 = 1;
+const VILLAGE_BACK_FROM_TEMPLE_PHASE: &str = "A_CENTER_VILLAGE_01";
+const VILLAGE_BACK_FROM_TEMPLE_POINT: i32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpStep {
@@ -676,10 +680,10 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::TempleComplete => {
+        StoryJumpPoint::VillageBackFromTemple => {
             let mut steps = loadout_steps(StoryJumpPoint::TempleBeforeBoss);
             steps.pop();
-            steps.extend_from_slice(&TEMPLE_BEFORE_BOSS_TO_COMPLETE_EXTRA_STEPS);
+            steps.extend_from_slice(&TEMPLE_BEFORE_BOSS_TO_VILLAGE_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
@@ -704,6 +708,9 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
         StoryJumpPoint::AfterFacade => (AFTER_FACADE_PHASE, AFTER_FACADE_POINT),
         StoryJumpPoint::TempleEntrance => (TEMPLE_ENTRANCE_PHASE, TEMPLE_ENTRANCE_POINT),
         StoryJumpPoint::TempleBeforeBoss => (TEMPLE_BEFORE_BOSS_PHASE, TEMPLE_BEFORE_BOSS_POINT),
-        StoryJumpPoint::TempleComplete => (TEMPLE_COMPLETE_PHASE, TEMPLE_COMPLETE_POINT),
+        StoryJumpPoint::VillageBackFromTemple => (
+            VILLAGE_BACK_FROM_TEMPLE_PHASE,
+            VILLAGE_BACK_FROM_TEMPLE_POINT,
+        ),
     }
 }

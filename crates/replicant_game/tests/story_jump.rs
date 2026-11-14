@@ -322,7 +322,7 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::AfterFacade,
         StoryJumpPoint::TempleEntrance,
         StoryJumpPoint::TempleBeforeBoss,
-        StoryJumpPoint::TempleComplete,
+        StoryJumpPoint::VillageBackFromTemple,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -905,15 +905,18 @@ fn the_temple_before_boss_jump_enters_the_second_temple_area_at_point_one() {
 }
 
 #[test]
-fn the_temple_complete_jump_adds_the_fight_flags_and_the_last_talk_but_not_the_next_chapter() {
-    let steps = loadout_steps(StoryJumpPoint::TempleComplete);
-    let (flags, _, _) = final_story_state(steps.clone());
-    for id in [440, 441, 442, 443, 444, 445, 455, 133, 448, 454] {
+fn the_village_jump_adds_the_fight_flags_the_last_talk_and_the_walk_home() {
+    let steps = loadout_steps(StoryJumpPoint::VillageBackFromTemple);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [440, 441, 442, 443, 444, 445, 446, 455, 133, 448, 454] {
         assert_eq!(flags.get(&id), Some(&true), "{id}");
     }
-    for id in [446, 1326] {
+    for id in [1326, 1365, 470, 471] {
         assert_ne!(flags.get(&id), Some(&true), "{id}");
     }
+    assert_eq!(counters.get(&100), Some(&3));
+    assert_eq!(counters.get(&101), Some(&3));
+    assert!(snow.contains(&1041));
     assert!(steps.contains(&JumpStep::SetItem { id: 1006, count: 1 }));
     assert!(steps.contains(&JumpStep::LearnMagic { id: 9 }));
     assert!(steps.contains(&JumpStep::SetTutorial { id: 2008 }));
@@ -921,11 +924,11 @@ fn the_temple_complete_jump_adds_the_fight_flags_and_the_last_talk_but_not_the_n
 }
 
 #[test]
-fn the_temple_complete_jump_enters_the_town_at_point_one_and_places_nobody() {
-    let (name, point) = destination(StoryJumpPoint::TempleComplete);
-    assert_eq!(name, "A_DESERT_TOWN_01");
-    assert_eq!(point, 1);
+fn the_village_jump_enters_the_village_at_point_two_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::VillageBackFromTemple);
+    assert_eq!(name, "A_CENTER_VILLAGE_01");
+    assert_eq!(point, 2);
     assert!(PhaseEntry::find(name).is_some());
-    assert!(arrival_spot(StoryJumpPoint::TempleComplete, true).is_none());
-    assert!(arrival_spot(StoryJumpPoint::TempleComplete, false).is_none());
+    assert!(arrival_spot(StoryJumpPoint::VillageBackFromTemple, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::VillageBackFromTemple, false).is_none());
 }
