@@ -1,7 +1,7 @@
 use replicant_game::dialogue::{
     CHAINED_TALK_KEEPS_THE_STORY_STEP_WITHIN_MS, MirrorAction, MirrorInput, OwnTalkWindow,
-    PartnerTalkMemory, PartnerTalkMirror, SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS, TalkLeader,
-    TalkOrigin, TalkOriginTracker,
+    PartnerTalkMemory, PartnerTalkMirror, SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS,
+    SetTalkCalls, TalkLeader, TalkOrigin, TalkOriginTracker,
 };
 use replicant_proto::{DialogueLine, DialogueUpdate};
 
@@ -29,6 +29,11 @@ const LATER_STEP: &str = "EID_1450_a0010g_020_01";
 const LATER_STEP_TALK: u32 = 1273;
 const TALK_COMMAND_TALK: u32 = 1260;
 const RIDERS_OWN_STEP: &str = "EID_1410_a0100g_21_04";
+const TEXT_SCENE_START: &str = "EID_1500_a0005_010_01_Start";
+const TEXT_SCENE_POPPED_MS: u64 = 4_000_000;
+const TEXT_SCENE_SET_TALK_MS: u64 = 4_006_350;
+const TEXT_SCENE_FIRST_TALK: u32 = 1422;
+const TEXT_SCENE_SECOND_TALK: u32 = 1423;
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
     DialogueLine { talk_id, line }
@@ -374,5 +379,99 @@ fn the_guests_chained_copy_follows_the_hosts_lines() {
     assert_eq!(
         follow(&mut mirror, &host, 3_500),
         Some(MirrorAction::FollowLine(3))
+    );
+}
+
+#[test]
+fn a_text_window_a_script_opens_with_set_talk_is_the_games_own_copy() {
+    let mut calls = SetTalkCalls::new();
+    assert!(!calls.opens_the_window_now(TEXT_SCENE_SET_TALK_MS));
+    calls.note_call(TEXT_SCENE_SET_TALK_MS);
+    let mut window = OwnTalkWindow::new();
+    let marked_in_slot_one = false;
+    let opened_by_set_talk = |now_ms| calls.opens_the_window_now(now_ms);
+    assert!(window.observe(
+        true,
+        marked_in_slot_one || opened_by_set_talk(TEXT_SCENE_SET_TALK_MS + 15)
+    ));
+    assert!(window.observe(
+        true,
+        marked_in_slot_one || opened_by_set_talk(TEXT_SCENE_SET_TALK_MS + 9_000)
+    ));
+    assert!(!window.observe(false, false));
+    assert!(!calls.opens_the_window_now(
+        TEXT_SCENE_SET_TALK_MS + SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS + 1
+    ));
+}
+
+#[test]
+fn a_text_scene_whose_window_opens_long_after_its_pop_is_a_story_step() {
+    // Run 1114q, host: the scene's start step popped at 08.282, waited out a 5 s fade, ran
+    // _SetTalk 1422 at 14.632 with no talk start native, and 1423 chained in the window.
+    let mut by_pop_alone = TalkOriginTracker::new();
+    by_pop_alone.note_popped_call(TEXT_SCENE_START, TEXT_SCENE_POPPED_MS);
+    assert_eq!(
+        by_pop_alone.observe(
+            Some(TEXT_SCENE_FIRST_TALK),
+            false,
+            TEXT_SCENE_SET_TALK_MS + 15
+        ),
+        Some((TEXT_SCENE_FIRST_TALK, TalkOrigin::NotClassed(None)))
+    );
+    let mut origin = TalkOriginTracker::new();
+    origin.note_popped_call(TEXT_SCENE_START, TEXT_SCENE_POPPED_MS);
+    origin.note_script_talk_start(TEXT_SCENE_START, TEXT_SCENE_SET_TALK_MS);
+    for (talk_id, at_ms) in [
+        (TEXT_SCENE_FIRST_TALK, TEXT_SCENE_SET_TALK_MS + 15),
+        (TEXT_SCENE_SECOND_TALK, TEXT_SCENE_SET_TALK_MS + 7_000),
+    ] {
+        assert_eq!(
+            origin.observe(Some(talk_id), false, at_ms),
+            Some((talk_id, TalkOrigin::StoryStep(TEXT_SCENE_START.to_owned())))
+        );
+    }
+    assert_eq!(
+        origin.class_update(DialogueUpdate::Line(line(TEXT_SCENE_FIRST_TALK, 0))),
+        DialogueUpdate::StoryLine(line(TEXT_SCENE_FIRST_TALK, 0))
+    );
+}
+
+#[test]
+fn the_guest_follows_the_hosts_text_scene_to_its_end() {
+    let mut host = PartnerTalkMemory::new();
+    let mut mirror = PartnerTalkMirror::new();
+    let mut guest_tick = |host: &PartnerTalkMemory, own: u32, now_ms| {
+        let own = Some(line(own, 0));
+        mirror.step(MirrorInput {
+            partner_line: host.for_mirror(own, TalkLeader::Partner, true),
+            partner_ended_talk: None,
+            can_show: true,
+            window_open: true,
+            own_talk: own,
+            leader: TalkLeader::Partner,
+            answer_open: false,
+            now_ms,
+        })
+    };
+    host.receive(DialogueUpdate::StoryLine(line(TEXT_SCENE_FIRST_TALK, 0)), 0);
+    assert_eq!(
+        guest_tick(&host, TEXT_SCENE_FIRST_TALK, 10),
+        Some(MirrorAction::FollowStarted(TEXT_SCENE_FIRST_TALK))
+    );
+    host.receive(
+        DialogueUpdate::StoryLine(line(TEXT_SCENE_FIRST_TALK, 1)),
+        3_600,
+    );
+    assert_eq!(
+        guest_tick(&host, TEXT_SCENE_FIRST_TALK, 3_610),
+        Some(MirrorAction::FollowLine(1))
+    );
+    host.receive(
+        DialogueUpdate::StoryLine(line(TEXT_SCENE_SECOND_TALK, 0)),
+        6_900,
+    );
+    assert_eq!(
+        guest_tick(&host, TEXT_SCENE_FIRST_TALK, 6_910),
+        Some(MirrorAction::ChainOwnTalk(line(TEXT_SCENE_SECOND_TALK, 0)))
     );
 }

@@ -87,7 +87,8 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
         slot_one_written_by_mirror(),
         holding,
         taken_over,
-    );
+    ) || (!holding
+        && crate::dialogue::set_talk::set_talk_opens_the_window_now());
     let own_window_open = window_open && (started_own_talk || !MIRRORING.load(Ordering::Acquire));
     if OWN_TALK_WINDOW_WAS_OPEN.swap(own_window_open, Ordering::Relaxed) != own_window_open {
         let by_player_command = own_window_open && crate::cutscene_skip::take_player_talk_command();

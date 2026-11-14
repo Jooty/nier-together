@@ -28,7 +28,7 @@ pub use on_screen::{
     ScreenReport, TalkScreenVerdict, TalkWindowScreen, put_may_show_flag_back,
     read_talk_window_screen,
 };
-pub use own_window::OwnTalkWindow;
+pub use own_window::{OwnTalkWindow, SetTalkCalls};
 pub use talk_cursor::{TalkCursor, find_talk_id, read_talk_cursor};
 pub use talk_origin::{TalkOrigin, TalkOriginTracker};
 pub use talker_name::{replace_player_name_tag, speaker_name_to_show};
