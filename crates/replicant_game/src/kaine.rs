@@ -4,6 +4,7 @@ mod companion_off;
 mod companion_off_fallback;
 mod companion_off_fights;
 mod companion_off_fights_from_scripts;
+mod door_state;
 mod functions_that_drive_her_from_scripts;
 mod hit_power;
 mod level_in_use;
@@ -40,6 +41,11 @@ pub use companion_off_fights::{
     fight_from_scripts_opened_by, rows_no_hand_made_fight_covers,
 };
 pub use companion_off_fights_from_scripts::COMPANION_OFF_FIGHTS_FROM_SCRIPTS;
+pub use door_state::{
+    BODIES_WITH_A_CAPPED_OPEN_DOOR_STATE, OPEN_DOOR_STATE_UPDATE_GAP_THAT_STARTS_A_NEW_STATE_MS,
+    OpenDoorStateClock, OpenDoorStateVerdict, SWAPPED_BODY_OPEN_DOOR_STATE_MOST_MS,
+    body_has_a_capped_open_door_state, open_door_state_ended_text,
+};
 pub use functions_that_drive_her_from_scripts::FUNCTIONS_THAT_DRIVE_HER_FROM_SCRIPTS;
 
 pub use hit_power::{
