@@ -1,6 +1,8 @@
 use replicant_game::kaine::{
+    DOOR_CARRY_FARTHEST_ALLOWED_METRES, OPEN_DOOR_STATE_STEP_WAITING_FOR_THE_DOOR_MOTION,
     OpenDoorStateClock, OpenDoorStateVerdict, SWAPPED_BODY_OPEN_DOOR_STATE_MOST_MS,
-    body_has_a_capped_open_door_state, open_door_state_ended_text,
+    body_has_a_capped_open_door_state, door_carry_is_sane, door_carry_text,
+    open_door_state_ended_text, other_side_of_a_door,
 };
 use replicant_proto::PartnerBody;
 
@@ -135,4 +137,65 @@ fn a_door_close_from_before_the_state_began_does_not_end_the_next_state() {
         clock.observe(STATE, true, 201_000),
         OpenDoorStateVerdict::Run
     );
+}
+
+const WAITING: i32 = OPEN_DOOR_STATE_STEP_WAITING_FOR_THE_DOOR_MOTION;
+
+#[test]
+fn she_is_carried_once_per_door_state_when_it_waits_for_the_door_motion() {
+    let mut clock = OpenDoorStateClock::new();
+    clock.observe(STATE, true, 1_000);
+    assert!(!clock.carry_is_due(true, 0x24C));
+    assert!(clock.carry_is_due(true, WAITING));
+    clock.observe(STATE, true, 1_016);
+    assert!(!clock.carry_is_due(true, WAITING));
+    clock.observe(NEXT_STATE, true, 1_032);
+    assert!(clock.carry_is_due(true, WAITING));
+}
+
+#[test]
+fn the_first_body_is_never_carried() {
+    let mut clock = OpenDoorStateClock::new();
+    clock.observe(STATE, false, 1_000);
+    assert!(!clock.carry_is_due(false, WAITING));
+}
+
+#[test]
+fn a_new_state_after_a_gap_is_carried_again() {
+    let mut clock = OpenDoorStateClock::new();
+    clock.observe(STATE, true, 1_000);
+    assert!(clock.carry_is_due(true, WAITING));
+    clock.observe(STATE, true, 9_000);
+    assert!(clock.carry_is_due(true, WAITING));
+}
+
+#[test]
+fn the_other_side_of_a_door_is_the_other_of_zero_and_one() {
+    assert_eq!(other_side_of_a_door(0), Some(1));
+    assert_eq!(other_side_of_a_door(1), Some(0));
+    assert_eq!(other_side_of_a_door(2), None);
+    assert_eq!(other_side_of_a_door(-1), None);
+}
+
+#[test]
+fn the_carry_is_for_a_door_width_and_not_for_a_far_spot() {
+    // Run 1114q host: stand point z 9.5, standing z 11.1 after the door.
+    let stand = [30.9, 14.0, 9.5];
+    assert!(door_carry_is_sane(Some(stand), [31.0, 14.0, 11.1]));
+    assert!(!door_carry_is_sane(
+        Some(stand),
+        [31.0, 14.0, 9.5 + DOOR_CARRY_FARTHEST_ALLOWED_METRES + 1.0]
+    ));
+    assert!(!door_carry_is_sane(None, [31.0, 14.0, 11.1]));
+}
+
+#[test]
+fn the_carry_line_names_the_spots_and_whether_she_was_moved() {
+    let moved = door_carry_text(0, Some([30.9, 14.0, 9.5]), [31.0, 14.0, 11.1], 90.0, true);
+    assert!(moved.contains("(30.90, 14.00, 9.50)"));
+    assert!(moved.contains("(31.00, 14.00, 11.10)"));
+    assert!(moved.contains("carried her through"));
+    let kept = door_carry_text(1, None, [31.0, 14.0, 11.1], 0.0, false);
+    assert!(kept.contains("did not carry her through"));
+    assert!(kept.contains("unreadable"));
 }
