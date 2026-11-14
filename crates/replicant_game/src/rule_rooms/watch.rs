@@ -41,6 +41,9 @@ pub enum RulePop {
     ArmRunsHere {
         room: &'static RuleRoom,
     },
+    DropArmAfterClear {
+        room: &'static RuleRoom,
+    },
     BrokenAlone {
         room: &'static RuleRoom,
         act: RuleAct,
@@ -128,6 +131,7 @@ impl RulePop {
                 | Self::GuestAsksTheHost { .. }
                 | Self::DropGuestTimeUp { .. }
                 | Self::DropGuestClear { .. }
+                | Self::DropArmAfterClear { .. }
         )
     }
 
@@ -156,7 +160,10 @@ impl RuleRoomWatch {
         let room = RULE_ROOMS
             .iter()
             .find(|room| room.pack == pack && room.act_of(handler).is_some())?;
-        if self.state_of(room) == Some(RuleState::Armed) {
+        if matches!(
+            self.state_of(room),
+            Some(RuleState::Armed | RuleState::Cleared)
+        ) {
             return None;
         }
         self.current = Some((room, RuleState::Armed));
@@ -169,12 +176,19 @@ impl RuleRoomWatch {
         };
         let shared_guest = facts.shared && facts.player == RulePlayer::Guest;
         let guest_own = shared_guest && facts.own_fire;
+        let cleared = self.state_of(room) == Some(RuleState::Cleared);
+        if call == RuleRoomCall::Start && cleared {
+            self.current = None;
+        }
         match call {
             RuleRoomCall::Start if guest_own => RulePop::GuestStartRunsHereOnly { room },
             RuleRoomCall::Start if shared_guest && facts.queued_by_the_mod => {
                 RulePop::GuestTakenIn { room }
             }
             RuleRoomCall::Start => RulePop::PassesOn,
+            RuleRoomCall::Arm if facts.queued_by_the_mod && cleared => {
+                RulePop::DropArmAfterClear { room }
+            }
             RuleRoomCall::Arm if facts.queued_by_the_mod => RulePop::ArmRunsHere { room },
             RuleRoomCall::Arm => RulePop::PassesOn,
             RuleRoomCall::Restart if guest_own && room.resets_the_room => {

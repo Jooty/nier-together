@@ -1,3 +1,4 @@
+use replicant_game::coop_pause::{MENU_PLAYER_INPUT_BIT, mask_with_player_input_held};
 use replicant_game::rule_rooms::{
     BreakerReturn, RETURN_FADE_IN_MS, RETURN_FADE_OUT_MS, RETURN_SPOTS, RULE_ROOMS,
     RearmAfterRestart, RoomClock, RoomResetVerdict, RuleAct, RulePlayer, RulePop, RulePopFacts,
@@ -594,4 +595,139 @@ fn a_returned_player_gets_the_two_second_grace_again_before_the_check_arms() {
         let pop = guest.pop(&facts(arm, RulePlayer::Guest, false));
         assert!(matches!(pop, RulePop::ArmRunsHere { room } if room.room == 2));
     }
+}
+
+fn cleared_room_2_on_the_guest() -> RuleRoomWatch {
+    let mut guest = RuleRoomWatch::new();
+    armed(&mut guest, "Jump_has_Done02");
+    let cleared = guest.pop(&facts("Clear_Law_Game_02", RulePlayer::Guest, false));
+    assert!(matches!(cleared, RulePop::Cleared { .. }));
+    guest
+}
+
+#[test]
+fn the_guests_return_arms_held_through_room_2s_clear_are_dropped_not_run() {
+    let mut guest = cleared_room_2_on_the_guest();
+    for held in ["Set_Law_Game_02", "Set_Law_Game_02_02"] {
+        let pop = guest.pop(&facts(held, RulePlayer::Guest, false));
+        assert!(matches!(pop, RulePop::DropArmAfterClear { .. }));
+        assert!(pop.drops());
+        assert!(
+            pop.log_line(held)
+                .unwrap()
+                .contains("the room is cleared and nothing arms its rule again")
+        );
+    }
+    assert_eq!(guest.state_of(&RULE_ROOMS[1]), Some(RuleState::Cleared));
+}
+
+#[test]
+fn a_move_break_after_room_2s_clear_is_dropped_and_never_sends_the_guest_back() {
+    let mut guest = cleared_room_2_on_the_guest();
+    let pop = guest.pop(&facts("Move_has_Done", RulePlayer::Guest, true));
+    assert!(matches!(pop, RulePop::DropAlreadyBroken { .. }));
+}
+
+#[test]
+fn a_registration_after_the_clear_does_not_arm_the_room_again() {
+    let mut guest = cleared_room_2_on_the_guest();
+    assert_eq!(guest.registered(TEMPLE, "Move_has_Done"), None);
+    assert_eq!(guest.state_of(&RULE_ROOMS[1]), Some(RuleState::Cleared));
+}
+
+#[test]
+fn no_rule_room_arms_again_after_its_clear_and_entering_it_again_forgets_the_clear() {
+    for room in &RULE_ROOMS {
+        let mut watch = RuleRoomWatch::new();
+        let first_break = room.breaks[0].handler;
+        armed(&mut watch, first_break);
+        let clear = RulePopFacts {
+            function: room.clear,
+            ..facts(room.clear, RulePlayer::Host, true)
+        };
+        assert!(matches!(watch.pop(&clear), RulePop::Cleared { .. }));
+        for arm in room.arms {
+            let pop = watch.pop(&facts(arm, RulePlayer::Host, false));
+            assert!(
+                matches!(pop, RulePop::DropArmAfterClear { .. }),
+                "room {} {arm}",
+                room.room
+            );
+        }
+        assert_eq!(watch.registered(TEMPLE, first_break), None);
+        watch.pop(&facts(room.starts[0], RulePlayer::Host, true));
+        assert_eq!(watch.state_of(room), None);
+        assert!(watch.registered(TEMPLE, first_break).is_some());
+    }
+}
+
+#[test]
+fn an_arm_before_the_clear_still_runs() {
+    let mut guest = RuleRoomWatch::new();
+    armed(&mut guest, "Jump_has_Done02");
+    let pop = guest.pop(&facts("Set_Law_Game_02", RulePlayer::Guest, false));
+    assert!(matches!(pop, RulePop::ArmRunsHere { .. }));
+}
+
+#[test]
+fn the_breaks_come_back_only_when_the_fade_in_and_the_input_block_are_over() {
+    let room = &RULE_ROOMS[2];
+    let mut breaker = BreakerReturn::new();
+    let broke_ms = 12_343;
+    assert!(breaker.begin(room, RulePlayer::Host, broke_ms));
+    assert_eq!(breaker.take_arm_if_due(broke_ms + RETURN_FADE_OUT_MS), None);
+    assert!(breaker.take_if_due(broke_ms + RETURN_FADE_OUT_MS).is_some());
+    let input_free_ms = broke_ms + RETURN_FADE_OUT_MS + RETURN_FADE_IN_MS;
+    assert_eq!(breaker.take_arm_if_due(input_free_ms - 1), None);
+    assert_eq!(breaker.take_arm_if_due(input_free_ms), Some(room));
+    assert_eq!(breaker.take_arm_if_due(input_free_ms + 1_000), None);
+}
+
+#[test]
+fn room_3s_loop_of_breaks_less_than_a_second_apart_makes_one_return_per_block() {
+    let room = &RULE_ROOMS[2];
+    let break_times_ms = [
+        20_527, 21_300, 22_070, 22_838, 23_608, 24_918, 25_848, 26_621, 27_389, 28_159, 28_932,
+    ];
+    let mut breaker = BreakerReturn::new();
+    let mut returns = 0;
+    let mut fade_in_ends_ms = 0;
+    for at in break_times_ms {
+        breaker.take_if_due(at);
+        if breaker.begin(room, RulePlayer::Host, at) {
+            returns += 1;
+            assert!(at >= fade_in_ends_ms, "a fade in was still running");
+            fade_in_ends_ms = at + RETURN_FADE_OUT_MS + RETURN_FADE_IN_MS;
+        }
+    }
+    assert_eq!(returns, 4);
+}
+
+#[test]
+fn a_break_during_the_fade_out_the_fade_in_or_the_block_starts_no_return() {
+    let room = &RULE_ROOMS[2];
+    let mut breaker = BreakerReturn::new();
+    assert!(breaker.begin(room, RulePlayer::Host, 13_000));
+    assert!(!breaker.begin(room, RulePlayer::Host, 13_049));
+    breaker.take_if_due(13_700);
+    assert!(!breaker.begin(room, RulePlayer::Host, 13_750));
+    assert!(!breaker.begin(room, RulePlayer::Host, 15_199));
+    assert!(breaker.begin(room, RulePlayer::Host, 15_200));
+}
+
+#[test]
+fn the_player_input_bit_is_added_for_a_return_or_a_watch_and_nothing_else_changes() {
+    assert_eq!(mask_with_player_input_held(0x40, false, false), 0x40);
+    assert_eq!(
+        mask_with_player_input_held(0x40, true, false),
+        0x40 | MENU_PLAYER_INPUT_BIT
+    );
+    assert_eq!(
+        mask_with_player_input_held(0, false, true),
+        MENU_PLAYER_INPUT_BIT
+    );
+    assert_eq!(
+        mask_with_player_input_held(MENU_PLAYER_INPUT_BIT, true, true),
+        MENU_PLAYER_INPUT_BIT
+    );
 }

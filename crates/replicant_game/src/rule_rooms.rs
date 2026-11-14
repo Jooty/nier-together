@@ -12,7 +12,8 @@ mod watch;
 pub use breaker_return::BreakerReturn;
 pub(crate) use log_text::room_name;
 pub use log_text::{
-    armed_line, guest_break_line, kept_message_line, returned_line, returned_without_a_spot_line,
+    armed_line, cleared_during_return_line, guest_break_line, ignored_break_line,
+    kept_message_line, returned_line, returned_without_a_spot_line,
 };
 pub use lookup::{RuleRoomCall, is_host_run_rule_room_call, rule_room_call};
 pub use rearm_after_restart::RearmAfterRestart;

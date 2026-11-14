@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -22,6 +23,7 @@ use crate::story_watch::setting::guest_watches_setting;
 const HOST_POSITION_FRESH_FOR: Duration = Duration::from_millis(1_500);
 
 static GUEST: Mutex<GuestState> = Mutex::new(GuestState::new());
+static THIS_GAME_IS_WATCHING: AtomicBool = AtomicBool::new(false);
 
 struct GuestState {
     watch: GuestWatch,
@@ -51,6 +53,10 @@ impl GuestState {
             last_own: [0.0; 3],
         }
     }
+}
+
+pub(crate) fn this_game_is_watching() -> bool {
+    THIS_GAME_IS_WATCHING.load(Ordering::Relaxed)
 }
 
 pub(crate) fn tick_story_watch(build: &VerifiedBuild) {
@@ -128,6 +134,7 @@ fn tick_guest(
         WatchStep::Ended(end) => end_watch(build, &mut guest, end),
         WatchStep::Idle | WatchStep::Continues => {}
     }
+    THIS_GAME_IS_WATCHING.store(guest.watch.watching(), Ordering::Relaxed);
     if guest.watch.watching() {
         keep_watching(build, &mut guest, phase.as_deref(), host);
     }
@@ -185,6 +192,7 @@ fn end_without_session(build: &VerifiedBuild) {
     if let WatchStep::Ended(end) = guest.watch.step(&facts) {
         end_watch(build, &mut guest, end);
     }
+    THIS_GAME_IS_WATCHING.store(guest.watch.watching(), Ordering::Relaxed);
 }
 
 fn tell_the_host(net: &net::NetThread, guest: &mut GuestState) {
