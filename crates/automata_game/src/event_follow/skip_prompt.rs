@@ -4,6 +4,7 @@ pub enum SkipPrompt {
     PartnerWantsToSkip,
     WaitingForThePartner,
     PartnerPausedTheCutscene,
+    PartnerPausedTheGame,
 }
 
 impl SkipPrompt {
@@ -12,6 +13,7 @@ impl SkipPrompt {
             Self::PartnerWantsToSkip => format!("{partner_name} wants to skip this cutscene"),
             Self::WaitingForThePartner => format!("You want to skip; waiting for {partner_name}"),
             Self::PartnerPausedTheCutscene => format!("{partner_name} paused the cutscene"),
+            Self::PartnerPausedTheGame => format!("{partner_name} paused the game"),
         }
     }
 }
