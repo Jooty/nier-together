@@ -18,7 +18,7 @@ use crate::overlay::status_lines::game_status_lines;
 use crate::story_jump::{host_can_offer_jump, jump_is_waiting_for_menu, last_refusal};
 use crate::teleport::last_outcome as last_teleport_outcome;
 
-const STORY_JUMPS: [(StoryJumpPoint, &str); 13] = [
+const STORY_JUMPS: [(StoryJumpPoint, &str); 15] = [
     (StoryJumpPoint::AfterPrologue, "Skip the prologue"),
     (StoryJumpPoint::AtPopolaTalk, "Library: talk to Popola"),
     (
@@ -43,6 +43,14 @@ const STORY_JUMPS: [(StoryJumpPoint, &str); 13] = [
     (
         StoryJumpPoint::TempleEntrance,
         "Barren Temple: the entrance",
+    ),
+    (
+        StoryJumpPoint::TempleBeforeBoss,
+        "Barren Temple: before boss fight 7",
+    ),
+    (
+        StoryJumpPoint::VillageBackFromTemple,
+        "The village: back from the temple",
     ),
 ];
 
