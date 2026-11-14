@@ -1,3 +1,4 @@
+mod breaker_body_hold;
 mod breaker_return;
 mod log_text;
 mod lookup;
@@ -9,6 +10,7 @@ mod table;
 mod take_in;
 mod watch;
 
+pub use breaker_body_hold::{BreakerBodyHold, body_held_line, body_let_go_line};
 pub use breaker_return::BreakerReturn;
 pub(crate) use log_text::room_name;
 pub use log_text::{
