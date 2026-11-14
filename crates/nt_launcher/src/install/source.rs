@@ -5,7 +5,7 @@ use nt_launcher_core::GameProfile;
 
 use crate::steam::hide_console_window;
 
-const REPO: &str = "Jooty/nier-coop";
+const REPO: &str = "Jooty/nier-together";
 const WORKFLOW_FILE: &str = "ci.yml";
 const ARTIFACT_NAME_SUFFIX: &str = "-hook-dll";
 const BRANCH: &str = "main";
