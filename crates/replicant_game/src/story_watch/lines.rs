@@ -33,3 +33,15 @@ pub fn watching_host_text(host_name: &str) -> String {
 pub fn guest_is_watching_text(guest_name: &str) -> String {
     format!("{guest_name} is watching")
 }
+
+pub fn watch_hold_line(slot_zero: u32, held: u32) -> String {
+    format!(
+        "watching: this game's body is held still for the whole watch through control mask slot 0 ({slot_zero:#x} -> {held:#x})"
+    )
+}
+
+pub fn watch_let_go_line(slot_zero: u32, released: u32) -> String {
+    format!(
+        "watching: the watch has ended, the body is let go (control mask slot 0 {slot_zero:#x} -> {released:#x})"
+    )
+}

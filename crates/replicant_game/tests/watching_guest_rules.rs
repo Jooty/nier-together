@@ -53,3 +53,43 @@ fn a_watched_body_moved_by_the_placement_alone_is_no_leak() {
     assert!(!watched_body_moves_on_keys(Some(0.0), Some([true; 4])));
     assert!(!watched_body_moves_on_keys(None, None));
 }
+
+#[test]
+fn the_free_to_act_test_runs_without_the_watching_hold_bit() {
+    use replicant_game::coop_pause::{MENU_PLAYER_INPUT_BIT, mask_for_the_free_to_act_test};
+    let mask = MENU_PLAYER_INPUT_BIT | 0x1;
+    assert_eq!(mask_for_the_free_to_act_test(mask, true, true), 0x1);
+    assert_eq!(mask_for_the_free_to_act_test(mask, true, false), mask);
+    assert_eq!(mask_for_the_free_to_act_test(mask, false, true), mask);
+}
+
+#[test]
+fn the_watch_hold_writes_the_bit_once_and_takes_back_only_what_it_wrote() {
+    use replicant_game::coop_pause::MENU_PLAYER_INPUT_BIT;
+    use replicant_game::rule_rooms::BreakerBodyHold;
+    let mut hold = BreakerBodyHold::new();
+    assert_eq!(
+        hold.slot_zero_to_write(0, true),
+        Some(MENU_PLAYER_INPUT_BIT)
+    );
+    assert_eq!(hold.slot_zero_to_write(MENU_PLAYER_INPUT_BIT, true), None);
+    assert_eq!(
+        hold.slot_zero_to_write(MENU_PLAYER_INPUT_BIT, false),
+        Some(0)
+    );
+    let mut hold = BreakerBodyHold::new();
+    hold.slot_zero_to_write(0, true);
+    assert_eq!(hold.slot_zero_to_write(0x481, false), None);
+}
+
+#[test]
+fn the_watch_hold_puts_the_bit_back_when_the_game_clears_it() {
+    use replicant_game::coop_pause::MENU_PLAYER_INPUT_BIT;
+    use replicant_game::rule_rooms::BreakerBodyHold;
+    let mut hold = BreakerBodyHold::new();
+    hold.slot_zero_to_write(0, true);
+    assert_eq!(
+        hold.slot_zero_to_write(0, true),
+        Some(MENU_PLAYER_INPUT_BIT)
+    );
+}

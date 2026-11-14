@@ -14,8 +14,8 @@ pub use radio_sites::{
     radio_clock_scene_query_hidden, radio_slot_zero, talk_window_restored_slot_zero,
 };
 pub use rule::{
-    PauseView, effective_control_mask, mask_with_player_input_held, mask_without_menu,
-    ui_prompt_open,
+    PauseView, effective_control_mask, mask_for_the_free_to_act_test, mask_with_player_input_held,
+    mask_without_menu, ui_prompt_open,
 };
 pub use stuck_menu_mask::{MaskView, StuckMenuMask, StuckOtherSlot};
 

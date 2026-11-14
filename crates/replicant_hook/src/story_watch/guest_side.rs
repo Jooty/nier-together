@@ -3,11 +3,12 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use replicant_game::Replicant;
+use replicant_game::rule_rooms::BreakerBodyHold;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_watch::{
-    GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_CONTROLS_REAPPLIED_EVERY_MS,
-    WATCH_LINE_EVERY_MS, WatchEnd, WatchFacts, WatchStep, camera_line, ended_line, started_line,
-    watching_host_text,
+    GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_LINE_EVERY_MS, WatchEnd,
+    WatchFacts, WatchStep, camera_line, ended_line, started_line, watch_hold_line,
+    watch_let_go_line, watching_host_text,
 };
 use replicant_proto::{GuestWatches, Message};
 
@@ -16,6 +17,7 @@ use crate::diagnostics::log_line;
 use crate::event_log::{clear_persistent_event, set_persistent_event};
 use crate::memory::InProcessMemory;
 use crate::net::{self, NetState, net_clock_ms};
+use crate::slot_zero::{read_slot_zero, write_slot_zero};
 use crate::story_watch::body::{Placed, WatchedBody};
 use crate::story_watch::host_side::{forget_guest, tick_host};
 use crate::story_watch::removal_natives::{forget_removal, step_removal, story_has_taken_her};
@@ -25,13 +27,14 @@ const HOST_POSITION_FRESH_FOR: Duration = Duration::from_millis(1_500);
 
 static GUEST: Mutex<GuestState> = Mutex::new(GuestState::new());
 static THIS_GAME_IS_WATCHING: AtomicBool = AtomicBool::new(false);
+static WATCH_HOLD: Mutex<BreakerBodyHold> = Mutex::new(BreakerBodyHold::new());
 
 struct GuestState {
     watch: GuestWatch,
     body: WatchedBody,
     last_word: Option<(bool, u64)>,
     last_line_ms: u64,
-    last_relock_ms: u64,
+    last_move_line_ms: u64,
     last_pack: String,
     controls_locked_in: Option<String>,
     host_position: Option<([f32; 3], Instant)>,
@@ -47,7 +50,7 @@ impl GuestState {
             body: WatchedBody::new(),
             last_word: None,
             last_line_ms: 0,
-            last_relock_ms: 0,
+            last_move_line_ms: 0,
             last_pack: String::new(),
             controls_locked_in: None,
             host_position: None,
@@ -138,6 +141,7 @@ fn tick_guest(
         WatchStep::Idle | WatchStep::Continues => {}
     }
     THIS_GAME_IS_WATCHING.store(guest.watch.watching(), Ordering::Relaxed);
+    hold_the_body_still(build, guest.watch.watching());
     if guest.watch.watching() {
         keep_watching(build, &mut guest, phase.as_deref(), host);
     }
@@ -156,14 +160,13 @@ fn keep_watching(build: &VerifiedBuild, guest: &mut GuestState, phase: Option<&s
         guest.controls_locked_in = Some(phase.to_owned());
     }
     let now = net_clock_ms();
-    if now.saturating_sub(guest.last_relock_ms) >= WATCH_CONTROLS_REAPPLIED_EVERY_MS
+    if now.saturating_sub(guest.last_move_line_ms) >= WATCH_LINE_EVERY_MS
         && let Some((speed, keys)) = guest.body.moves_on_keys(build)
     {
-        guest.last_relock_ms = now;
+        guest.last_move_line_ms = now;
         log_line(&format!(
-            "watching: this game's hidden body moves on held keys {keys:?} at speed {speed:.2}, the controls are locked again"
+            "watching: this game's hidden body moves on held keys {keys:?} at speed {speed:.2}, the player-input hold is not enough"
         ));
-        guest.body.lock_controls(build);
     }
     if now.saturating_sub(guest.last_line_ms) >= WATCH_LINE_EVERY_MS {
         guest.last_line_ms = now;
@@ -205,6 +208,25 @@ fn end_without_session(build: &VerifiedBuild) {
         end_watch(build, &mut guest, end);
     }
     THIS_GAME_IS_WATCHING.store(guest.watch.watching(), Ordering::Relaxed);
+    hold_the_body_still(build, guest.watch.watching());
+}
+
+fn hold_the_body_still(build: &VerifiedBuild, watching: bool) {
+    let Some(slot_zero) = read_slot_zero(build) else {
+        return;
+    };
+    let mut hold = WATCH_HOLD.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(written) = hold.slot_zero_to_write(slot_zero, watching) else {
+        return;
+    };
+    let holding = hold.is_holding();
+    drop(hold);
+    write_slot_zero(build, written);
+    log_line(&if holding {
+        watch_hold_line(slot_zero, written)
+    } else {
+        watch_let_go_line(slot_zero, written)
+    });
 }
 
 fn tell_the_host(net: &net::NetThread, guest: &mut GuestState) {

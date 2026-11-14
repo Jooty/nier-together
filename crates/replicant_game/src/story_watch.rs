@@ -9,7 +9,8 @@ pub use guest_watch::{GuestWatch, WatchEnd, WatchFacts, WatchStep};
 pub use host_word::GuestWord;
 pub use input_leak::{WATCHED_BODY_MOVES_ON_KEYS_ABOVE_SPEED, watched_body_moves_on_keys};
 pub use lines::{
-    camera_line, ended_line, guest_is_watching_text, started_line, watching_host_text,
+    camera_line, ended_line, guest_is_watching_text, started_line, watch_hold_line,
+    watch_let_go_line, watching_host_text,
 };
 pub use place::{PlaceStep, place_step};
 pub use removal::{RemovalChange, StoryRemoval};
@@ -24,5 +25,4 @@ pub const WATCH_BODY_LEFT_ALONE_BELOW: f32 = 0.05;
 pub const WATCH_BODY_TELEPORTED_ABOVE: f32 = 1.5;
 pub const WATCH_BODY_TELEPORT_EVERY_MS: u64 = 500;
 pub const WATCH_LINE_EVERY_MS: u64 = 1_000;
-pub const WATCH_CONTROLS_REAPPLIED_EVERY_MS: u64 = 1_000;
 pub const PACKS_WHERE_THE_GUEST_PLAYS_THOUGH_THE_STORY_TAKES_HER: [&str; 1] = ["B_STONE_FIELD_02"];

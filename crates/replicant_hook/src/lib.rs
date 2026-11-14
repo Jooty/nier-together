@@ -99,6 +99,8 @@ mod script_rolls;
 #[cfg(windows)]
 mod sky;
 #[cfg(windows)]
+mod slot_zero;
+#[cfg(windows)]
 mod stay_together;
 #[cfg(windows)]
 mod story_jump;
