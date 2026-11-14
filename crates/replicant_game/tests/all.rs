@@ -57,6 +57,8 @@ mod copy_hold;
 #[path = "counted_talks.rs"]
 mod counted_talks;
 #[cfg(feature = "probes")]
+#[path = "cube_log.rs"]
+mod cube_log;
 #[path = "cube_probe.rs"]
 mod cube_probe;
 #[path = "cutscene_skip.rs"]

@@ -4,13 +4,14 @@ use std::time::Instant;
 
 use nt_hook::line_budget::LineBudget;
 use replicant_game::enemies::{
-    CountLog, ENEMY_ID_LIST_INTERVAL_MS, ENEMY_MIRROR_DELAY_MS, ENEMY_ROUND_CAPACITY, EnemyLog,
-    EnemyMirror, EnemyRoster, EnemySighting, FIGHT_SPAWN_FILL_IN_GRACE_MS, FightSpawnFillIn,
-    HostFightEnemy, ListDiffWatch, MirroredEnemy, RemovalCause, RosterUpdate, WaitingFightSpawn,
-    enemy_state, fight_spawn_fill_in_gave_up_text, fight_spawn_fill_in_snap_off_text,
-    fight_spawn_filled_in_text, match_enemies, missing_host_spawns, partner_actors,
-    plan_fight_bindings, plan_takeovers, relayed_spawn_text, scaled_matrix, scan_enemies,
-    shadow_matrix, split_id_list, split_snapshot, stalled_copy_time_scale_fix,
+    CountLog, CubeStateLog, ENEMY_ID_LIST_INTERVAL_MS, ENEMY_MIRROR_DELAY_MS, ENEMY_ROUND_CAPACITY,
+    EnemyLog, EnemyMirror, EnemyRoster, EnemySighting, FIGHT_SPAWN_FILL_IN_GRACE_MS,
+    FightSpawnFillIn, HostFightEnemy, ListDiffWatch, MirroredEnemy, RemovalCause, RosterUpdate,
+    WaitingFightSpawn, enemy_state, fight_spawn_fill_in_gave_up_text,
+    fight_spawn_fill_in_snap_off_text, fight_spawn_filled_in_text, match_enemies,
+    missing_host_spawns, partner_actors, plan_fight_bindings, plan_takeovers, relayed_spawn_text,
+    scaled_matrix, scan_enemies, shadow_matrix, split_id_list, split_snapshot,
+    stalled_copy_time_scale_fix,
 };
 use replicant_game::npcs::{
     EventSceneClock, NPC_EVENT_SCENE_SETTLE_MS, npc_motion_records_readable, read_enemy_body_layer,
@@ -76,6 +77,7 @@ struct EnemySync {
     scene_clock: EventSceneClock,
     logged_settling: bool,
     logged_scene_playing: bool,
+    cube_log: CubeStateLog,
     fight_fill_in: FightSpawnFillIn,
     companions: CompanionShare,
 }
@@ -862,6 +864,17 @@ fn log_host_changes(sync: &mut EnemySync, update: &RosterUpdate, guest_killed: &
     for line in lines {
         sync.note(line);
     }
+    note_cube_states(sync, "host", update);
+}
+
+fn note_cube_states(sync: &mut EnemySync, side: &str, update: &RosterUpdate) {
+    let cubes = update
+        .seen
+        .iter()
+        .map(|(id, sighting)| (*id, sighting.actor, sighting.motion.map(|m| m.index)));
+    for line in sync.cube_log.observe(side, cubes) {
+        sync.note(line);
+    }
 }
 
 fn take_over_copies(
@@ -1125,6 +1138,7 @@ fn log_guest_changes(
     for line in lines {
         sync.note(line);
     }
+    note_cube_states(sync, "guest", update);
 }
 
 fn gone_text(reason: EnemyGoneReason) -> &'static str {
