@@ -54,6 +54,7 @@ pub struct AutoConfig {
     pub coop_save_file: Option<String>,
     pub companion_rows_from_scripts: Option<bool>,
     pub companion_off_everywhere: Option<bool>,
+    pub guest_watches_when_the_story_takes_her: Option<bool>,
     pub loading_screen_lines: Option<bool>,
 }
 
@@ -104,6 +105,12 @@ impl AutoConfig {
     /// (then only in the listed fights).
     pub fn companion_off_everywhere_enabled(&self) -> bool {
         self.companion_off_everywhere.unwrap_or(true)
+    }
+
+    /// The guest watches the host while the story keeps the companion out of play, unless this is
+    /// set false.
+    pub fn guest_watches_when_the_story_takes_her_enabled(&self) -> bool {
+        self.guest_watches_when_the_story_takes_her.unwrap_or(true)
     }
 
     /// The mod's own loading-screen lines are mixed in unless this is set false.
