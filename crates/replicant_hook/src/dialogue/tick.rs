@@ -4,11 +4,12 @@ use std::sync::{Mutex, PoisonError};
 use replicant_game::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, ChoiceFollowInput, ChoiceFollower,
     ChoiceStep, DialogueTracker, FollowClock, HostLedScriptTalk, MirrorAction, MirrorInput,
-    OwnTalkWindow, PartnerTalkMemory, PartnerTalkMirror, ScreenReport,
+    OwnTalkWindow, PartnerTalkMemory, PartnerTalkMirror, ScreenReport, StoryTalkMenuClose,
     TALK_SCREEN_REPORT_AFTER_OPEN_MS, TALK_WINDOW_RVA, TalkLeader, TalkOriginTracker,
     WATCHER_HOLD_MASK, WatcherHold, WatcherHoldAction, WatcherHoldInput, find_talk_id,
     host_answer_fits, leader_for_own_talk, own_talk_started, put_may_show_flag_back,
-    read_choice_prompt, read_talk_cursor, read_talk_window_screen, within_talk_range,
+    read_choice_prompt, read_talk_cursor, read_talk_window_screen, story_talk_menu_close_text,
+    within_talk_range,
 };
 use replicant_game::marker::{WorldFlags, read_world_flags};
 use replicant_game::readiness::{classify, read_play_checks};
@@ -30,7 +31,7 @@ use crate::dialogue::window_calls::{close_mirror, open_mirror, show_line, step_p
 use crate::memory::InProcessMemory;
 use crate::net::NetSharedExt;
 use crate::net::{self, NetShared, NetThread, net_clock_ms};
-use crate::stay_together::pause_menu_open;
+use crate::stay_together::{close_pause_menu, pause_menu_open};
 
 static TRACKER: Mutex<DialogueTracker> = Mutex::new(DialogueTracker::new());
 static MIRROR: Mutex<PartnerTalkMirror> = Mutex::new(PartnerTalkMirror::new());
@@ -43,6 +44,7 @@ static FOLLOW_CLOCK: Mutex<FollowClock> = Mutex::new(FollowClock::new());
 static HOST_LED_SCRIPT_TALK: Mutex<HostLedScriptTalk> = Mutex::new(HostLedScriptTalk::new());
 static TALK_ORIGIN: Mutex<TalkOriginTracker> = Mutex::new(TalkOriginTracker::new());
 static PARTNER_STORY_TALK_NOTED: Mutex<Option<u32>> = Mutex::new(None);
+static STORY_TALK_MENU_CLOSE: Mutex<StoryTalkMenuClose> = Mutex::new(StoryTalkMenuClose::new());
 static SCREEN_REPORT: Mutex<ScreenReport> = Mutex::new(ScreenReport::new());
 static OWN_TALK_WINDOW: Mutex<OwnTalkWindow> = Mutex::new(OwnTalkWindow::new());
 
@@ -170,6 +172,19 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
     });
     if choice_gave_up {
         mirror.release_followed_talk();
+    }
+    let close_menu_for_story_talk = same_phase
+        && STORY_TALK_MENU_CLOSE
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .should_close_the_pause_menu(
+                partner_story_line.as_ref().map(|story| story.talk_id),
+                pause_menu_open(build),
+                window_open,
+                now_ms,
+            );
+    if close_menu_for_story_talk && let Some(story) = &partner_story_line {
+        close_pause_menu(build, &story_talk_menu_close_text(story.talk_id));
     }
     note_partner_story_talk(
         partner_story_line,

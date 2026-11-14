@@ -105,3 +105,34 @@ fn the_log_line_names_how_long_the_state_ran() {
         "doors: the swapped body's door state ran 3008 ms with no door motion of hers to end it, ended it now; the door's own scripts carry on"
     );
 }
+
+#[test]
+fn run_1114s_the_door_closing_ends_the_state_as_it_did_for_the_first_body() {
+    let mut clock = OpenDoorStateClock::new();
+    let start = 500_000;
+    for frame in 0..125 {
+        assert_eq!(
+            clock.observe(STATE, true, start + frame * 16),
+            OpenDoorStateVerdict::Run
+        );
+    }
+    clock.note_door_closed(start + 2_288);
+    assert_eq!(
+        clock.observe(STATE, true, start + 2_300),
+        OpenDoorStateVerdict::EndNow { ran_ms: 2_300 }
+    );
+}
+
+#[test]
+fn a_door_close_from_before_the_state_began_does_not_end_the_next_state() {
+    let mut clock = OpenDoorStateClock::new();
+    clock.note_door_closed(100_000);
+    assert_eq!(
+        clock.observe(STATE, true, 200_000),
+        OpenDoorStateVerdict::Run
+    );
+    assert_eq!(
+        clock.observe(STATE, true, 201_000),
+        OpenDoorStateVerdict::Run
+    );
+}

@@ -41,6 +41,8 @@ use crate::story_relay::{
 };
 use crate::story_writes::begin_end_watch;
 
+const DOOR_CLOSED_CALLBACK_NAME: &str = "PlayerCloseDoor";
+
 static LOAD_WATCH: Mutex<PhaseLoadWatch> = Mutex::new(PhaseLoadWatch::new());
 static GATE: Mutex<CallbackGate> = Mutex::new(CallbackGate::new());
 pub(super) static WAITING_ENDS: Mutex<EndQueue> = Mutex::new(EndQueue::new());
@@ -161,6 +163,9 @@ pub(crate) fn forget_gate_copies(name: &str) {
 }
 
 pub fn hold_fired_callback(name: &str) -> bool {
+    if name == DOOR_CLOSED_CALLBACK_NAME {
+        crate::open_door_state::note_door_closed();
+    }
     crate::cutscene_skip::shared_functions::note_popped_callback(name);
     match judge_popped(name) {
         HandlerFire::HostRunsAndSends | HandlerFire::GuestRunsTheHostsCall => return false,
@@ -876,8 +881,12 @@ pub(super) fn tick(build: &VerifiedBuild, net: &NetThread, view: &NetShared) {
                 }
                 if late_copy_verdict_here(phase, &name) == LateCopy::RanHereTraced {
                     log_line(&format!(
-                        "callback follow: your game never fired {name} ({waited_ms} ms), but it ran here already (traced), not started again"
+                        "callback follow: your game never fired {name} ({waited_ms} ms), but it ran here already (traced), not started again; the guest's held copy is released"
                     ));
+                    net.send_relayed(Message::CallbackFired(CallbackFired {
+                        phase,
+                        name: name.clone(),
+                    }));
                     continue;
                 }
                 log_line(&format!(
