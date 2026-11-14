@@ -1,5 +1,6 @@
 use crate::event_follow::{
-    EventCall, EventId, EventSend, EventStep, PauseDebounce, PauseView, own_pause_told_line,
+    EventCall, EventId, EventSend, EventStep, PauseDebounce, PauseView,
+    own_pause_outside_a_cutscene_line, own_pause_outside_the_rule_line, own_pause_told_line,
     partner_pause_ended_line, partner_pause_event_ended_here_line, partner_pause_heard_line,
     partner_pause_rule_ended_line, pause_clock_line, resume_clock_line,
 };
@@ -31,6 +32,11 @@ impl EventPause {
             if let Some(pause) = self.partner.take() {
                 step.logs.push(partner_pause_rule_ended_line(pause.id));
             }
+            if let Some(id) = view.event
+                && self.opened_just_now(view)
+            {
+                step.logs.push(own_pause_outside_the_rule_line(id));
+            }
             self.told_paused = None;
             self.settle(false, view, step);
             self.was_open = view.local_open;
@@ -50,6 +56,9 @@ impl EventPause {
                 self.told_paused = Some(id);
                 step.sends.push(EventSend::Pause { id, paused: true });
                 step.logs.push(own_pause_told_line(id, true));
+            }
+            (true, None, None) if self.opened_just_now(view) => {
+                step.logs.push(own_pause_outside_a_cutscene_line());
             }
             (false, _, Some(id)) => {
                 self.told_paused = None;
@@ -85,6 +94,10 @@ impl EventPause {
                 .push(partner_pause_event_ended_here_line(pause.id));
             self.partner = None;
         }
+    }
+
+    fn opened_just_now(&self, view: &PauseView) -> bool {
+        view.local_open && !self.was_open
     }
 
     fn partner_pause_applies(&self, view: &PauseView) -> bool {
