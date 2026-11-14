@@ -15,14 +15,18 @@ use automata_game::load_gate::StoryPlace;
 use automata_game::partner::BODY_MODEL_ID_OFFSET;
 use automata_game::save_redirect::SaveRole;
 use automata_game::travel::JumpRole;
+use automata_game::watch_pause::{WatchPause, WatchPauseReadings};
 use automata_proto::PlayerState;
 use nt_hook::build_gate::VerifiedBuild;
 use nt_hook::diagnostics::log_line;
 use nt_hook::net::net_clock_ms;
 
+use crate::event_follow_driver::set_host_pause_note_due;
 use crate::game_calls::GameCalls;
+use crate::game_hooks::set_paused_with_the_host;
 use crate::net::{
-    SessionModeExt, current_session_mode, handle, local_story_place, set_local_watching,
+    SessionModeExt, current_session_mode, handle, local_playing_event, local_story_place,
+    set_local_watching,
 };
 use crate::start_driver::link_reading;
 use crate::start_setting::GameSettings;
@@ -41,6 +45,7 @@ struct WatchContext {
     host_setting: Character,
     is_the_guest_in_a_session: bool,
     machine: GuestWatch,
+    pause: WatchPause,
     host_watched_logged: Option<bool>,
     host_defeat_flow_seen: bool,
     host_defeat_seen_by_the_guest: bool,
@@ -49,6 +54,142 @@ struct WatchContext {
 struct HostView {
     character: Option<Character>,
     newest: Option<PlayerState>,
+    paused: Option<(bool, u64)>,
+}
+
+impl WatchContext {
+    fn step(&mut self) {
+        let link = link_reading();
+        let host = self.host_view();
+        let now_ms = net_clock_ms();
+        let readings = WatchReadings {
+            now_ms,
+            applies: guest_watch_applies(true, link.role, link.partner_present),
+            place: local_story_place(),
+            in_play: self.calls.read_free().in_play,
+            hero: self.hero_character(),
+            host: host.character,
+        };
+        let step = self.machine.step(&readings);
+        for line in &step.logs {
+            log_line(line);
+        }
+        set_local_watching(step.watching);
+        let host_watched = host_is_watched(
+            true,
+            link.role,
+            host.newest.is_some_and(|state| state.watching),
+        );
+        let role = if step.watching {
+            WatchRole::Watches
+        } else if host_watched {
+            WatchRole::IsWatched
+        } else {
+            WatchRole::Neither
+        };
+        WATCH_ROLE_NOW.store(role.as_number(), Ordering::Relaxed);
+        self.note_the_host_side(link.role, host_watched);
+        self.note_a_host_defeat(role, host.newest);
+        self.pause_with_the_host(now_ms, role, host.paused);
+    }
+
+    fn pause_with_the_host(
+        &mut self,
+        now_ms: u64,
+        role: WatchRole,
+        host_paused: Option<(bool, u64)>,
+    ) {
+        let step = self.pause.step(&WatchPauseReadings {
+            now_ms,
+            watches: role == WatchRole::Watches,
+            host_paused,
+            a_cutscene_plays_here: local_playing_event().is_some(),
+            own_menu_open: self.calls.read_game_is_paused(),
+        });
+        for line in &step.logs {
+            log_line(line);
+        }
+        set_paused_with_the_host(step.hold);
+        set_host_pause_note_due(step.note);
+    }
+
+    fn host_view(&self) -> HostView {
+        handle()
+            .map(|net| {
+                net.update(|shared| {
+                    let partner = shared.campaign_partner();
+                    HostView {
+                        character: partner.and_then(|player| player.watch.character),
+                        newest: partner
+                            .and_then(|player| player.latest.as_ref())
+                            .map(|latest| latest.state),
+                        paused: shared.partner_state().map(|latest| {
+                            (
+                                latest.state.paused,
+                                u64::try_from(latest.received_at.elapsed().as_millis())
+                                    .unwrap_or(u64::MAX),
+                            )
+                        }),
+                    }
+                })
+            })
+            .unwrap_or(HostView {
+                character: None,
+                newest: None,
+                paused: None,
+            })
+    }
+
+    fn hero_character(&self) -> Option<Character> {
+        let calls = &self.calls;
+        let body = calls.current_hero();
+        (body != 0)
+            .then(|| {
+                calls
+                    .read_u32_at(calls.body_field(body, BODY_MODEL_ID_OFFSET))
+                    .ok()
+            })
+            .flatten()
+            .and_then(Character::from_model_id)
+    }
+
+    fn note_the_host_side(&mut self, role: JumpRole, host_watched: bool) {
+        if role != JumpRole::Host {
+            return;
+        }
+        if self.host_watched_logged != Some(host_watched)
+            && (host_watched || self.host_watched_logged.is_some())
+        {
+            log_line(&host_watched_line(host_watched));
+        }
+        self.host_watched_logged = Some(host_watched);
+    }
+
+    fn note_a_host_defeat(&mut self, role: WatchRole, host: Option<PlayerState>) {
+        let flow_runs = role == WatchRole::IsWatched
+            && self
+                .calls
+                .read_defeat_flow()
+                .is_some_and(DefeatFlow::is_active);
+        if flow_runs && !self.host_defeat_flow_seen {
+            log_line(&host_defeated_while_watched_line());
+        }
+        self.host_defeat_flow_seen = flow_runs;
+        let host_defeated = role == WatchRole::Watches
+            && host.is_some_and(|state| {
+                state.health <= 0 || is_hero_defeat_state(i32::from(state.state))
+            });
+        if host_defeated
+            && !self.host_defeat_seen_by_the_guest
+            && let Some(state) = host
+        {
+            log_line(&host_defeat_seen_while_watching_line(
+                state.state,
+                state.health,
+            ));
+        }
+        self.host_defeat_seen_by_the_guest = host_defeated;
+    }
 }
 
 pub fn install(build: VerifiedBuild, settings: &GameSettings) {
@@ -71,6 +212,7 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings) {
             is_the_guest_in_a_session: settings.role == SaveRole::Guest
                 && settings.link_port.is_some(),
             machine: GuestWatch::new(stretch),
+            pause: WatchPause::default(),
             host_watched_logged: None,
             host_defeat_flow_seen: false,
             host_defeat_seen_by_the_guest: false,
@@ -170,110 +312,4 @@ fn keep_back(
         log_line(&line(total));
     }
     true
-}
-
-impl WatchContext {
-    fn step(&mut self) {
-        let link = link_reading();
-        let host = self.host_view();
-        let now_ms = net_clock_ms();
-        let readings = WatchReadings {
-            now_ms,
-            applies: guest_watch_applies(true, link.role, link.partner_present),
-            place: local_story_place(),
-            in_play: self.calls.read_free().in_play,
-            hero: self.hero_character(),
-            host: host.character,
-        };
-        let step = self.machine.step(&readings);
-        for line in &step.logs {
-            log_line(line);
-        }
-        set_local_watching(step.watching);
-        let host_watched = host_is_watched(
-            true,
-            link.role,
-            host.newest.is_some_and(|state| state.watching),
-        );
-        let role = if step.watching {
-            WatchRole::Watches
-        } else if host_watched {
-            WatchRole::IsWatched
-        } else {
-            WatchRole::Neither
-        };
-        WATCH_ROLE_NOW.store(role.as_number(), Ordering::Relaxed);
-        self.note_the_host_side(link.role, host_watched);
-        self.note_a_host_defeat(role, host.newest);
-    }
-
-    fn host_view(&self) -> HostView {
-        handle()
-            .map(|net| {
-                net.update(|shared| {
-                    let partner = shared.campaign_partner();
-                    HostView {
-                        character: partner.and_then(|player| player.watch.character),
-                        newest: partner
-                            .and_then(|player| player.latest.as_ref())
-                            .map(|latest| latest.state),
-                    }
-                })
-            })
-            .unwrap_or(HostView {
-                character: None,
-                newest: None,
-            })
-    }
-
-    fn hero_character(&self) -> Option<Character> {
-        let calls = &self.calls;
-        let body = calls.current_hero();
-        (body != 0)
-            .then(|| {
-                calls
-                    .read_u32_at(calls.body_field(body, BODY_MODEL_ID_OFFSET))
-                    .ok()
-            })
-            .flatten()
-            .and_then(Character::from_model_id)
-    }
-
-    fn note_the_host_side(&mut self, role: JumpRole, host_watched: bool) {
-        if role != JumpRole::Host {
-            return;
-        }
-        if self.host_watched_logged != Some(host_watched)
-            && (host_watched || self.host_watched_logged.is_some())
-        {
-            log_line(&host_watched_line(host_watched));
-        }
-        self.host_watched_logged = Some(host_watched);
-    }
-
-    fn note_a_host_defeat(&mut self, role: WatchRole, host: Option<PlayerState>) {
-        let flow_runs = role == WatchRole::IsWatched
-            && self
-                .calls
-                .read_defeat_flow()
-                .is_some_and(DefeatFlow::is_active);
-        if flow_runs && !self.host_defeat_flow_seen {
-            log_line(&host_defeated_while_watched_line());
-        }
-        self.host_defeat_flow_seen = flow_runs;
-        let host_defeated = role == WatchRole::Watches
-            && host.is_some_and(|state| {
-                state.health <= 0 || is_hero_defeat_state(i32::from(state.state))
-            });
-        if host_defeated
-            && !self.host_defeat_seen_by_the_guest
-            && let Some(state) = host
-        {
-            log_line(&host_defeat_seen_while_watching_line(
-                state.state,
-                state.health,
-            ));
-        }
-        self.host_defeat_seen_by_the_guest = host_defeated;
-    }
 }

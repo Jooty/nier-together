@@ -5,7 +5,7 @@ use automata_game::focus::{FocusAnswer, GAME_FOCUS_LOST_TEST_FUNCTION_START, foc
 #[test]
 fn a_linked_game_is_told_it_has_focus_and_the_pass_is_noted() {
     assert_eq!(
-        focus_test_answer(true, true),
+        focus_test_answer(true, true, false),
         FocusAnswer {
             focus_lost: false,
             passed_over: true
@@ -16,7 +16,7 @@ fn a_linked_game_is_told_it_has_focus_and_the_pass_is_noted() {
 #[test]
 fn a_game_that_is_not_linked_keeps_its_own_answer() {
     assert_eq!(
-        focus_test_answer(true, false),
+        focus_test_answer(true, false, false),
         FocusAnswer {
             focus_lost: true,
             passed_over: false
@@ -28,9 +28,22 @@ fn a_game_that_is_not_linked_keeps_its_own_answer() {
 fn a_game_with_focus_is_never_passed_over() {
     for linked in [false, true] {
         assert_eq!(
-            focus_test_answer(false, linked),
+            focus_test_answer(false, linked, false),
             FocusAnswer {
                 focus_lost: false,
+                passed_over: false
+            }
+        );
+    }
+}
+
+#[test]
+fn a_copy_paused_with_the_host_is_told_it_lost_focus_whatever_the_game_says() {
+    for (game_says, linked) in [(false, true), (true, true), (false, false)] {
+        assert_eq!(
+            focus_test_answer(game_says, linked, true),
+            FocusAnswer {
+                focus_lost: true,
                 passed_over: false
             }
         );

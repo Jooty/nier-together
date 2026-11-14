@@ -41,7 +41,10 @@ pub use engine_partner_choice::{
     install_engine_partner_choice, set_partner_the_engine_should_make,
 };
 pub use event_mirror::{install_event_mirror, run_event_call_as_ours};
-pub use focus_pass::{game_says_its_window_lost_focus, install_focus_pass, set_session_linked};
+pub use focus_pass::{
+    game_says_its_window_lost_focus, install_focus_pass, set_paused_with_the_host,
+    set_session_linked,
+};
 pub use generator_leave_test::{install_generator_leave_test, set_leave_test_rule};
 pub use generator_spawns::set_counts_follow_the_host;
 pub use generator_spawns::{

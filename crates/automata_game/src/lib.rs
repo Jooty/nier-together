@@ -29,3 +29,4 @@ pub mod story_follow;
 pub mod story_gate;
 pub mod story_steps;
 pub mod travel;
+pub mod watch_pause;

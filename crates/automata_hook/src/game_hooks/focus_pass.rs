@@ -13,12 +13,18 @@ static ORIGINAL_FOCUS_LOST_TEST: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mu
 static SESSION_LINKED: AtomicBool = AtomicBool::new(false);
 static FIRST_PASS_OVER_LOGGED: AtomicBool = AtomicBool::new(false);
 static GAME_SAYS_FOCUS_LOST: AtomicBool = AtomicBool::new(false);
+static PAUSED_WITH_THE_HOST: AtomicBool = AtomicBool::new(false);
 
 type FocusLostTest = unsafe extern "system" fn() -> usize;
 
 /// Game thread: whether a co-op session is linked now, for the focus test's detour.
 pub fn set_session_linked(linked: bool) {
     SESSION_LINKED.store(linked, Ordering::Relaxed);
+}
+
+/// Game thread: while true the focus test answers "lost", so the game's own pause opens and holds.
+pub fn set_paused_with_the_host(paused: bool) {
+    PAUSED_WITH_THE_HOST.store(paused, Ordering::Relaxed);
 }
 
 /// The game's own answer the last time it asked whether its window lost focus.
@@ -71,7 +77,11 @@ extern "system" fn focus_lost_test_detour() -> usize {
     // SAFETY: the trampoline continues into the original function, which takes no arguments.
     let game_says = unsafe { core::mem::transmute::<*mut c_void, FocusLostTest>(original)() };
     GAME_SAYS_FOCUS_LOST.store(game_says != 0, Ordering::Relaxed);
-    let answer = focus_test_answer(game_says != 0, SESSION_LINKED.load(Ordering::Relaxed));
+    let answer = focus_test_answer(
+        game_says != 0,
+        SESSION_LINKED.load(Ordering::Relaxed),
+        PAUSED_WITH_THE_HOST.load(Ordering::Relaxed),
+    );
     if answer.passed_over && !FIRST_PASS_OVER_LOGGED.swap(true, Ordering::Relaxed) {
         log_line(
             "focus: the window lost focus or was minimised while a session is linked; the game is told it has focus, so its pause does not open (input stays zeroed by the game's own inactive path)",
