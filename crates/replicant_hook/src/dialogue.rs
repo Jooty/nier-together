@@ -1,6 +1,7 @@
 mod choice_hover;
 mod choices;
 mod hooks;
+mod set_talk;
 mod tags;
 mod talker_name;
 mod tick;

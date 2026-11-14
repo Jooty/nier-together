@@ -81,6 +81,7 @@ pub fn install(build: VerifiedBuild) {
         );
     }
     crate::dialogue::tags::install(build);
+    crate::dialogue::set_talk::install(build);
     crate::dialogue::choices::install(build);
     crate::dialogue::talker_name::install(build);
     crate::dialogue::watcher_hold::install(build);
