@@ -38,6 +38,9 @@ pub(super) fn draw_party_frame(ui: &Ui) {
     let Some(remote) = view.partner_state() else {
         return;
     };
+    if crate::story_watch::guest_is_watched() {
+        return;
+    }
     let status = status_of(&view);
     let activity = remote.state.activity;
     let [width, height] = ui.io().display_size;

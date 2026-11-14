@@ -102,6 +102,9 @@ pub fn tick_ghost(build: &VerifiedBuild) {
     in_game_thread_step("ghost tick: companion off", || {
         crate::kaine::keep_companion_off(build, wish != GhostWish::NotConnected);
     });
+    in_game_thread_step("ghost tick: story watch", || {
+        crate::story_watch::tick_story_watch(build);
+    });
     in_game_thread_step("ghost tick: stand-in", || {
         crate::kaine::tick_stand_in(build)
     });
@@ -111,7 +114,9 @@ pub fn tick_ghost(build: &VerifiedBuild) {
     in_game_thread_step("ghost tick: companion stats", || {
         crate::kaine::match_kaine_stats_to_her_level(build);
     });
-    let Some((received_at, state)) = remote.filter(|_| wish == GhostWish::Wanted) else {
+    let Some((received_at, state)) =
+        remote.filter(|_| wish == GhostWish::Wanted && !crate::story_watch::guest_is_watched())
+    else {
         retire(build, &mut ghost);
         publish_status(wish, &ghost);
         return;
@@ -124,6 +129,7 @@ pub fn tick_ghost(build: &VerifiedBuild) {
     let Some(sample) = track.sample(now_ms, GHOST_DELAY_MS) else {
         return;
     };
+    crate::story_watch::follow_the_host(build, sample.position);
     if let Some(id) = ghost.book.puppet_id
         && !ghost_exists(id)
     {

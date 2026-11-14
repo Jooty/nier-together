@@ -115,6 +115,7 @@ pub use fight_stream::{
 };
 pub use follow_phase::FollowPhase;
 pub use gather_for_scene::{GatherAnswer, GatherForScene, GatherReply};
+pub use guest_watches::GuestWatches;
 pub use item_counts::{ItemCountEntry, ItemCounts, ItemTake, MAX_ITEM_COUNT_ENTRIES};
 pub use item_pickup::{ItemPickup, PickupSource};
 pub use lift_call::{LiftCall, LiftCallAnswer, LiftCallOutcome};
@@ -156,7 +157,6 @@ pub use prologue_level::{
     PrologueLevel,
 };
 pub use ridden_boar::{MAX_RIDDEN_BOAR_OFFSET_ABS, RiddenBoar};
-pub use guest_watches::GuestWatches;
 pub use rule_room_break::RuleRoomBreak;
 pub use scene_follow::{
     MAX_SCENE_CUT_NAME_BYTES, MAX_SCENE_FOLLOW_CALLBACKS, SceneCut, SceneFollow,

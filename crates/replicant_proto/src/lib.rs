@@ -92,6 +92,7 @@ pub use wire::{
     MAX_FIGHT_CAMERA_BLEND_KIND, MAX_FIGHT_CAMERA_BLEND_SECONDS, MAX_FIGHT_CAMERA_INDEX,
 };
 pub use wire::{GatherAnswer, GatherForScene, GatherReply, NO_SIDE_VIEW_DOOR};
+pub use wire::{GuestWatches, WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 pub use wire::{ItemCountEntry, ItemCounts, ItemTake, MAX_ITEM_COUNT_ENTRIES};
 pub use wire::{ItemPickup, MAX_ITEM_COUNT, MAX_ITEM_ID, MAX_WORD_ID, PickupSource};
 pub use wire::{
@@ -125,4 +126,3 @@ pub use wire::{
 };
 pub use wire::{MAX_VOICE_CHARACTER_BYTES, VoiceCharacter};
 pub use wire::{StoryJump, StoryJumpPoint};
-pub use wire::{GuestWatches, WorldObjectBroken, WorldObjectKey, WorldObjectMoved};

@@ -136,6 +136,9 @@ pub(super) fn shown_partner(
     view: &NetShared,
     game: &Replicant<InProcessMemory>,
 ) -> Option<ShownPartner> {
+    if crate::story_watch::guest_is_watched() {
+        return None;
+    }
     let remote = view.partner_state();
     let presented = frame_for_marker();
     let camera = presented
