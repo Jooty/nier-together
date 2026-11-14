@@ -321,6 +321,8 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::BossFight6,
         StoryJumpPoint::AfterFacade,
         StoryJumpPoint::TempleEntrance,
+        StoryJumpPoint::TempleBeforeBoss,
+        StoryJumpPoint::TempleComplete,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -861,4 +863,69 @@ fn the_temple_entrance_jump_enters_the_temple_at_point_one_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::TempleEntrance, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::TempleEntrance, false).is_none());
+}
+
+#[test]
+fn the_temple_before_boss_jump_is_the_entrance_loadout_plus_the_trial_rooms() {
+    let before = loadout_steps(StoryJumpPoint::TempleEntrance);
+    let boss = loadout_steps(StoryJumpPoint::TempleBeforeBoss);
+    assert_eq!(&boss[..before.len() - 1], &before[..before.len() - 1]);
+    assert_eq!(boss.len(), before.len() + 14);
+    assert_eq!(boss.last(), Some(&JumpStep::MpFullMode { on: false }));
+    assert_eq!(
+        boss.iter()
+            .filter(|step| matches!(step, JumpStep::MpFullMode { .. }))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn the_temple_before_boss_jump_sets_the_room_flags_and_not_the_fight_flags() {
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::TempleBeforeBoss));
+    for id in [89, 435, 436, 437, 439, 448, 449, 450, 451, 452, 453, 454] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [1325, 1436] {
+        assert_eq!(flags.get(&id), Some(&false), "{id}");
+    }
+    for id in [440, 441, 442, 443, 444, 445, 455] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+}
+
+#[test]
+fn the_temple_before_boss_jump_enters_the_second_temple_area_at_point_one() {
+    let (name, point) = destination(StoryJumpPoint::TempleBeforeBoss);
+    assert_eq!(name, "A_DESERT_TEMPLE_02");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::TempleBeforeBoss, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::TempleBeforeBoss, false).is_none());
+}
+
+#[test]
+fn the_temple_complete_jump_adds_the_fight_flags_and_the_last_talk_but_not_the_next_chapter() {
+    let steps = loadout_steps(StoryJumpPoint::TempleComplete);
+    let (flags, _, _) = final_story_state(steps.clone());
+    for id in [440, 441, 442, 443, 444, 445, 455, 133, 448, 454] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [446, 1326] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert!(steps.contains(&JumpStep::SetItem { id: 1006, count: 1 }));
+    assert!(steps.contains(&JumpStep::LearnMagic { id: 9 }));
+    assert!(steps.contains(&JumpStep::SetTutorial { id: 2008 }));
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_temple_complete_jump_enters_the_town_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::TempleComplete);
+    assert_eq!(name, "A_DESERT_TOWN_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::TempleComplete, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::TempleComplete, false).is_none());
 }
