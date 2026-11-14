@@ -7,6 +7,7 @@ mod install_all;
 mod invincibility;
 mod menu_free_calls;
 mod menu_no_pause;
+mod menu_open_test;
 mod mouse_block;
 mod mouse_buttons;
 mod noclip;

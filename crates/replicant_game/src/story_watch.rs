@@ -1,11 +1,13 @@
 mod guest_watch;
 mod host_word;
+mod input_leak;
 mod lines;
 mod place;
 mod removal;
 
 pub use guest_watch::{GuestWatch, WatchEnd, WatchFacts, WatchStep};
 pub use host_word::GuestWord;
+pub use input_leak::{WATCHED_BODY_MOVES_ON_KEYS_ABOVE_SPEED, watched_body_moves_on_keys};
 pub use lines::{
     camera_line, ended_line, guest_is_watching_text, started_line, watching_host_text,
 };

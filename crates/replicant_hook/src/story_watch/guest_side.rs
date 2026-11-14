@@ -5,8 +5,9 @@ use std::time::{Duration, Instant};
 use replicant_game::Replicant;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_watch::{
-    GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_LINE_EVERY_MS, WatchEnd,
-    WatchFacts, WatchStep, camera_line, ended_line, started_line, watching_host_text,
+    GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_CONTROLS_REAPPLIED_EVERY_MS,
+    WATCH_LINE_EVERY_MS, WatchEnd, WatchFacts, WatchStep, camera_line, ended_line, started_line,
+    watching_host_text,
 };
 use replicant_proto::{GuestWatches, Message};
 
@@ -30,6 +31,7 @@ struct GuestState {
     body: WatchedBody,
     last_word: Option<(bool, u64)>,
     last_line_ms: u64,
+    last_relock_ms: u64,
     last_pack: String,
     controls_locked_in: Option<String>,
     host_position: Option<([f32; 3], Instant)>,
@@ -45,6 +47,7 @@ impl GuestState {
             body: WatchedBody::new(),
             last_word: None,
             last_line_ms: 0,
+            last_relock_ms: 0,
             last_pack: String::new(),
             controls_locked_in: None,
             host_position: None,
@@ -153,6 +156,15 @@ fn keep_watching(build: &VerifiedBuild, guest: &mut GuestState, phase: Option<&s
         guest.controls_locked_in = Some(phase.to_owned());
     }
     let now = net_clock_ms();
+    if now.saturating_sub(guest.last_relock_ms) >= WATCH_CONTROLS_REAPPLIED_EVERY_MS
+        && let Some((speed, keys)) = guest.body.moves_on_keys(build)
+    {
+        guest.last_relock_ms = now;
+        log_line(&format!(
+            "watching: this game's hidden body moves on held keys {keys:?} at speed {speed:.2}, the controls are locked again"
+        ));
+        guest.body.lock_controls(build);
+    }
     if now.saturating_sub(guest.last_line_ms) >= WATCH_LINE_EVERY_MS {
         guest.last_line_ms = now;
         let host_at = guest.host_position.map_or([0.0; 3], |(at, _)| at);

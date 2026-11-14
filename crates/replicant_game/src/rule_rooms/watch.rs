@@ -94,6 +94,10 @@ pub enum RulePop {
     DropGuestClear {
         room: &'static RuleRoom,
     },
+    DropWhileWatching {
+        room: &'static RuleRoom,
+        act: RuleAct,
+    },
     Cleared {
         room: &'static RuleRoom,
         player: RulePlayer,
@@ -132,6 +136,7 @@ impl RulePop {
                 | Self::DropGuestTimeUp { .. }
                 | Self::DropGuestClear { .. }
                 | Self::DropArmAfterClear { .. }
+                | Self::DropWhileWatching { .. }
         )
     }
 
