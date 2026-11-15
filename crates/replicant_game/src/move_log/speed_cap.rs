@@ -1,15 +1,13 @@
 use crate::memory::GameMemory;
 use crate::move_log::{
-    RATE_TABLE_CHANNEL_STRIDE, RATE_TABLE_ID_STRIDE, RATE_TABLE_OFFSET,
-    SPEED_CAP_GIVE_UP_AFTER_RESETS, SPEED_CAP_HELD_LOW_BEFORE_LIFT_MS, SPEED_CAP_LIFTED_VALUE,
-    SPEED_CAP_RATE_CHANNEL, SPEED_CAP_RATE_ID, SPEED_CAP_THRESHOLD, STATE_ACTION_MOVE_RVA,
+    RATE_TABLE_CHANNEL_STRIDE, RATE_TABLE_ID_STRIDE, RATE_TABLE_OFFSET, SPEED_CAP_HOUSE_VALUE_MIN,
+    SPEED_CAP_LIFTED_VALUE, SPEED_CAP_RATE_CHANNEL, SPEED_CAP_RATE_ID, SPEED_CAP_THRESHOLD,
+    STATE_ACTION_MOVE_RVA,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SpeedCapLog {
     Lifted { from: f32 },
-    GameReset { to: f32 },
-    GaveUp,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -31,15 +29,12 @@ pub struct SpeedCapReading {
     pub state_rva: Option<u32>,
 }
 
-/// Lifts rate 5:2 only when it has stayed low in the plain move state for a while (the house's
-/// cap); the game's own short drops for dashes, attacks and stops are left alone.
+/// Lifts rate 5:2 on every tick the game holds it at the house value in the plain move state; the
+/// game writes the house value again each tick, so a lift that waited would leave her slow.
 #[derive(Debug, Default)]
 pub struct SpeedCapLift {
     phase: u32,
-    low_since_ms: Option<u64>,
     lifts: u32,
-    reset_reported: bool,
-    gave_up: bool,
 }
 
 impl SpeedCapLift {
@@ -47,35 +42,15 @@ impl SpeedCapLift {
         if reading.phase != self.phase {
             *self = Self {
                 phase: reading.phase,
-                ..Self::default()
+                lifts: 0,
             };
         }
-        if self.gave_up || !should_lift_speed_cap(&reading) {
-            self.low_since_ms = None;
+        if !should_lift_speed_cap(&reading) {
             return SpeedCapStep::default();
         }
-        let low_since = *self.low_since_ms.get_or_insert(reading.now_ms);
-        if reading.now_ms.saturating_sub(low_since) < SPEED_CAP_HELD_LOW_BEFORE_LIFT_MS {
-            return SpeedCapStep::default();
-        }
-        self.low_since_ms = None;
-        if self.lifts > SPEED_CAP_GIVE_UP_AFTER_RESETS {
-            self.gave_up = true;
-            return SpeedCapStep {
-                write: false,
-                log: Some(SpeedCapLog::GaveUp),
-            };
-        }
-        let log = if self.lifts == 0 {
-            Some(SpeedCapLog::Lifted {
-                from: reading.value,
-            })
-        } else if self.reset_reported {
-            None
-        } else {
-            self.reset_reported = true;
-            Some(SpeedCapLog::GameReset { to: reading.value })
-        };
+        let log = (self.lifts == 0).then_some(SpeedCapLog::Lifted {
+            from: reading.value,
+        });
         self.lifts += 1;
         SpeedCapStep { write: true, log }
     }
@@ -85,13 +60,17 @@ impl SpeedCapLift {
     }
 }
 
+pub fn is_house_speed_cap_value(value: f32) -> bool {
+    (SPEED_CAP_HOUSE_VALUE_MIN..SPEED_CAP_THRESHOLD).contains(&value)
+}
+
 pub fn should_lift_speed_cap(reading: &SpeedCapReading) -> bool {
     reading.kaine_swapped
         && !reading.event_scene
         && !reading.talk
         && !reading.control_masked
         && reading.state_rva == Some(STATE_ACTION_MOVE_RVA)
-        && reading.value < SPEED_CAP_THRESHOLD
+        && is_house_speed_cap_value(reading.value)
 }
 
 pub fn speed_cap_address(actor: u64) -> u64 {
@@ -112,14 +91,9 @@ pub fn write_lifted_speed_cap<M: GameMemory>(memory: &mut M, actor: u64) -> bool
 }
 
 pub fn format_speed_cap_log(log: SpeedCapLog, phase: u32) -> String {
-    let held_s = SPEED_CAP_HELD_LOW_BEFORE_LIFT_MS as f32 / 1000.0;
     match log {
         SpeedCapLog::Lifted { from } => format!(
-            "kaine walk: lifted the house speed cap {SPEED_CAP_RATE_ID}:{SPEED_CAP_RATE_CHANNEL} from {from:.2} to {SPEED_CAP_LIFTED_VALUE:.1} after {held_s:.1} s held low in the move state (phase {phase})"
+            "kaine walk: lifting the house speed cap {SPEED_CAP_RATE_ID}:{SPEED_CAP_RATE_CHANNEL} from {from:.2} to {SPEED_CAP_LIFTED_VALUE:.2} on every tick the game holds it there in the move state (phase {phase})"
         ),
-        SpeedCapLog::GameReset { to } => format!(
-            "kaine walk: the game held {SPEED_CAP_RATE_ID}:{SPEED_CAP_RATE_CHANNEL} at {to:.2} again for {held_s:.1} s, lifted again"
-        ),
-        SpeedCapLog::GaveUp => format!("kaine walk: gave up for phase {phase}"),
     }
 }

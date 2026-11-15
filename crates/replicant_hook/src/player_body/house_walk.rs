@@ -1,9 +1,9 @@
 use std::sync::{LazyLock, Mutex, PoisonError};
 
 use replicant_game::move_log::{
-    SpeedCapLift, SpeedCapReading, SpeedCapSecond, SpeedCapWatch, format_speed_cap_log,
-    format_speed_cap_second, read_move_sample, read_speed_cap, read_state_rva,
-    write_lifted_speed_cap,
+    SPEED_CAP_LIFTED_VALUE, SpeedCapLift, SpeedCapReading, SpeedCapSecond, SpeedCapWatch,
+    format_speed_cap_log, format_speed_cap_second, is_house_speed_cap_value, read_move_sample,
+    read_speed_cap, read_state_rva, write_lifted_speed_cap,
 };
 use replicant_proto::PartnerBody;
 
@@ -52,16 +52,15 @@ pub fn lift_house_speed_cap(
     if let Some(log) = step.log {
         log_line(&format_speed_cap_log(log, phase));
     }
-    if !kaine_swapped {
+    let house_cap_seen =
+        is_house_speed_cap_value(value) || (value - SPEED_CAP_LIFTED_VALUE).abs() < f32::EPSILON;
+    if !watch.due(now_ms, house_cap_seen) {
         return;
     }
-    let Some(seconds_after_load) = watch.due(phase, now_ms) else {
-        return;
-    };
     let sample = read_move_sample(&memory, actor);
     log_line(&format_speed_cap_second(&SpeedCapSecond {
         phase,
-        seconds_after_load,
+        swapped_body: kaine_swapped,
         cap: read_speed_cap(&memory, actor),
         lifts_this_phase: lift.lifts_this_phase(),
         step_per_second: sample.applied_step_per_second,

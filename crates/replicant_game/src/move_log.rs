@@ -19,8 +19,9 @@ pub use spec_dump::{
     read_spec_table, role_label,
 };
 pub use speed_cap::{
-    SpeedCapLift, SpeedCapLog, SpeedCapReading, SpeedCapStep, format_speed_cap_log, read_speed_cap,
-    should_lift_speed_cap, speed_cap_address, write_lifted_speed_cap,
+    SpeedCapLift, SpeedCapLog, SpeedCapReading, SpeedCapStep, format_speed_cap_log,
+    is_house_speed_cap_value, read_speed_cap, should_lift_speed_cap, speed_cap_address,
+    write_lifted_speed_cap,
 };
 pub use speed_cap_report::{SpeedCapSecond, SpeedCapWatch, format_speed_cap_second};
 pub use trigger::{MoveLogReason, MoveLogTrigger};
@@ -42,10 +43,9 @@ pub const SPEC_TABLE_WORDS_PER_LINE: usize = 8;
 pub const SPEED_CAP_RATE_ID: usize = 5;
 pub const SPEED_CAP_RATE_CHANNEL: usize = 2;
 pub const SPEED_CAP_THRESHOLD: f32 = 0.05;
-pub const SPEED_CAP_LIFTED_VALUE: f32 = 1.0;
-pub const SPEED_CAP_GIVE_UP_AFTER_RESETS: u32 = 20;
-pub const SPEED_CAP_HELD_LOW_BEFORE_LIFT_MS: u64 = 3_000;
-pub const SPEED_CAP_REPORT_SECONDS_AFTER_LOAD: u64 = 30;
+pub const SPEED_CAP_HOUSE_VALUE_MIN: f32 = 0.005;
+pub const SPEED_CAP_LIFTED_VALUE: f32 = 0.5;
+pub const SPEED_CAP_REPORT_WINDOW_AFTER_LOW_MS: u64 = 1_000;
 pub const STATE_ACTION_MOVE_RVA: u32 = 0xC9_3E98;
 pub const STATE_161F0_OFFSET: u64 = 0x1_61F0;
 pub const APPLIED_STEP_OFFSET: u64 = 0x1A0;
