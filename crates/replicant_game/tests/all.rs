@@ -179,6 +179,8 @@ mod kaine_door_state;
 mod kaine_hit_power;
 #[path = "kaine_level_in_use.rs"]
 mod kaine_level_in_use;
+#[path = "kaine_missing_motion.rs"]
+mod kaine_missing_motion;
 #[path = "kaine_partner.rs"]
 mod kaine_partner;
 #[path = "kaine_rows_from_scripts.rs"]
