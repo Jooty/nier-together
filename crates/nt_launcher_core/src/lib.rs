@@ -68,17 +68,18 @@ pub use event::{
 pub use launcher_game::{
     GameSaves, LauncherGame, SeatError, changed_slot, check_seat, coop_file_name,
     fix_header_checksum, is_coop_session_file_name, save_game, seat_bytes_of, seat_slot_bytes,
-    session_file_with_seat, vanilla_file_name,
+    seat_with_name, session_file_with_seat, vanilla_file_name,
 };
 pub use launcher_net::LauncherNet;
 pub use launcher_scale::LauncherScale;
 pub use lobby_rules::{
     AfterSessionEnd, LobbyOption, LobbyPermissions, PlayerStatus, ROSTER_COLUMN_SEATS, ReadyInputs,
-    Roster, RosterSeat, SeatNameChoice, SeatNameInputs, SessionEndCause, SessionEndSide,
-    StartInputs, after_session_end, campaign_character, characters_shareable, current_map,
-    current_mode, followed_lobby_kind, hosting_kind, lobby_permissions, lobby_ready,
-    map_banner_path, map_pick_offered, option_available, own_seat_name, player_status,
-    remove_offered, roster, rules_for_mode, rules_with_map, session_end_log_line, start_allowed,
+    Roster, RosterSeat, ScaleUpInputs, SeatNameChoice, SeatNameInputs, SessionEndCause,
+    SessionEndSide, StartButton, StartInputs, after_session_end, campaign_character,
+    characters_shareable, current_map, current_mode, declined_scale_up_kept, followed_lobby_kind,
+    hosting_kind, lobby_permissions, lobby_ready, map_banner_path, map_pick_offered,
+    option_available, own_seat_name, player_status, remove_offered, roster, rules_for_mode,
+    rules_with_map, scale_up_offered, session_end_log_line, start_allowed, start_button,
     ticket_check,
 };
 pub use log_upload::{

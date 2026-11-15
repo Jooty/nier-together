@@ -32,6 +32,7 @@ mod roster_grid;
 mod roster_row;
 mod row_art;
 mod save_menu;
+mod scale_up_dialog;
 mod seat;
 mod seat_art;
 mod seat_ledger;

@@ -1,7 +1,7 @@
 use eframe::egui::{
     Align, Align2, Layout, Rect, Response, Ui, UiBuilder, pos2, text::LayoutJob, vec2,
 };
-use nt_launcher_core::{StartInputs, start_allowed};
+use nt_launcher_core::{StartButton, StartInputs, start_allowed, start_button};
 
 use crate::app::palette::{BAND, INK_MUTED, NOT_READY};
 use crate::app::parts::{
@@ -23,21 +23,19 @@ const ACTIONS_TOP_PX: f32 = 18.0;
 const ACTIONS_HEIGHT_PX: f32 = 52.0;
 const ACTIONS_GAP_PX: f32 = 22.0;
 const COMMAND_SIZE_PX: (f32, f32) = (196.0, 52.0);
+const WAITING_COMMAND_SIZE_PX: (f32, f32) = (268.0, 52.0);
 const REASON_GAP_PX: f32 = 24.0;
 const REASON_MIN_WIDTH_PX: f32 = 160.0;
 const REASON_ABOVE_BAR_PX: f32 = 22.0;
 const REASON_MAX_ROWS: usize = 2;
 const TICKET_KEY: &str = "Ticket";
-const START_LABEL: &str = "Start";
 const CLOSE_LOBBY_LABEL: &str = "Close lobby";
 const LEAVE_LABEL: &str = "Leave";
-const RELAUNCH_LABEL: &str = "Relaunch and rejoin";
 const HOME_LABEL: &str = "Home";
 const TICKET_COPY_SALT: &str = "lobby-ticket";
 
 enum TicketShown {
     Copy(String),
-    Plain(String),
     Nothing,
 }
 
@@ -78,15 +76,6 @@ pub(super) fn draw_lobby_bar(ui: &mut Ui, launcher: &mut Launcher, forms: &mut N
                     body_font(),
                 );
             });
-        }
-        TicketShown::Plain(text) => {
-            ui.painter().text(
-                pos2(line_rect.left(), line_rect.center().y),
-                Align2::LEFT_CENTER,
-                text,
-                body_font(),
-                INK_MUTED,
-            );
         }
         TicketShown::Nothing => {}
     }
@@ -157,8 +146,9 @@ fn reason_slot(bar: Rect, actions_left: f32) -> Rect {
 fn ticket_shown(launcher: &Launcher, forms: &NetForms, state: &NetState) -> TicketShown {
     match state {
         NetState::Idle | NetState::Failed(_) => TicketShown::Nothing,
-        NetState::Joining => TicketShown::Plain(forms.join_ticket.trim().to_owned()),
+        NetState::Joining => TicketShown::Nothing,
         NetState::Hosting { ticket } => TicketShown::Copy(ticket.clone()),
+        NetState::Connected { .. } if launcher.link.guest => TicketShown::Nothing,
         NetState::Connected { .. } => match &launcher.link.ticket {
             Some(ticket) => TicketShown::Copy(ticket.clone()),
             None if !forms.join_ticket.trim().is_empty() => {
@@ -178,7 +168,9 @@ fn draw_actions(
     let last = match state {
         NetState::Idle | NetState::Failed(_) => return ui.max_rect().right(),
         NetState::Joining | NetState::Hosting { .. } => {
-            command_button(ui, START_LABEL, COMMAND_SIZE_PX, true, false);
+            let joining = matches!(state, NetState::Joining);
+            let start = start_button(joining, false);
+            command_button(ui, start.label(), command_size(start), true, false);
             let label = if matches!(state, NetState::Joining) {
                 LEAVE_LABEL
             } else {
@@ -216,10 +208,29 @@ fn draw_connected_actions(ui: &mut Ui, launcher: &mut Launcher, forms: &mut NetF
             others_ready: &others,
             rules: launcher.link.rules,
         });
-    let start = command_button(ui, START_LABEL, COMMAND_SIZE_PX, true, enabled);
+    let can_rejoin = launcher.can_relaunch_and_rejoin();
+    let start_kind = start_button(guest, can_rejoin);
+    let enabled = match start_kind {
+        StartButton::Start => enabled,
+        StartButton::WaitingForHost => false,
+        StartButton::Rejoin => true,
+    };
+    let start = command_button(
+        ui,
+        start_kind.label(),
+        command_size(start_kind),
+        true,
+        enabled,
+    );
     if start.clicked() {
-        let now = ui.input(|input| input.time);
-        launcher.press_start(&*forms.net, own.mode, now);
+        match start_kind {
+            StartButton::Start => {
+                let now = ui.input(|input| input.time);
+                launcher.press_start(&*forms.net, own.mode, now);
+            }
+            StartButton::Rejoin => launcher.relaunch_and_rejoin(),
+            StartButton::WaitingForHost => {}
+        }
     }
     let label = if guest {
         LEAVE_LABEL
@@ -233,14 +244,14 @@ fn draw_connected_actions(ui: &mut Ui, launcher: &mut Launcher, forms: &mut NetF
         launcher.lobby_started = false;
         launcher.screen = Screen::Home;
     }
-    if launcher.follow_notice.is_some() && launcher.can_relaunch_and_rejoin() {
-        let relaunch = plain_button(ui, RELAUNCH_LABEL, true);
-        if relaunch.clicked() {
-            launcher.relaunch_and_rejoin();
-        }
-        return relaunch;
-    }
     leave
+}
+
+fn command_size(kind: StartButton) -> (f32, f32) {
+    match kind {
+        StartButton::WaitingForHost => WAITING_COMMAND_SIZE_PX,
+        StartButton::Start | StartButton::Rejoin => COMMAND_SIZE_PX,
+    }
 }
 
 fn plain_button(ui: &mut Ui, label: &str, enabled: bool) -> Response {

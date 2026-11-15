@@ -10,7 +10,9 @@ mod option_availability;
 mod own_seat_name;
 mod player_status;
 mod roster;
+mod scale_up_offer;
 mod session_end;
+mod start_button;
 mod start_rule;
 mod ticket_check;
 
@@ -26,8 +28,10 @@ pub use option_availability::{LobbyOption, option_available};
 pub use own_seat_name::{SeatNameChoice, SeatNameInputs, own_seat_name};
 pub use player_status::{PlayerStatus, player_status};
 pub use roster::{ROSTER_COLUMN_SEATS, Roster, RosterSeat, roster};
+pub use scale_up_offer::{ScaleUpInputs, declined_scale_up_kept, scale_up_offered};
 pub use session_end::{
     AfterSessionEnd, SessionEndCause, SessionEndSide, after_session_end, session_end_log_line,
 };
+pub use start_button::{StartButton, start_button};
 pub use start_rule::{StartInputs, start_allowed};
 pub use ticket_check::ticket_check;

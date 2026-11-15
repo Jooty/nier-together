@@ -12,6 +12,7 @@ use crate::app::pages::lobby::session_open;
 use crate::app::pages::logs::draw_logs;
 use crate::app::pages::map_dialog::draw_map_dialog;
 use crate::app::pages::new_game::draw_new_game;
+use crate::app::pages::scale_up_dialog::draw_scale_up_dialog;
 use crate::app::pages::settings::draw_settings;
 use crate::app::pages::ticket_dialog::draw_ticket_dialog;
 use crate::app::pages::top_bar::{TOP_BAR_HEIGHT_PX, draw_home_bar, draw_logs_bar, draw_top_bar};
@@ -147,6 +148,13 @@ pub fn draw(ui: &mut Ui, tab: &mut Tab, launcher: &mut Launcher, forms: &mut Net
         } else {
             forms.map_dialog_open = false;
         }
+    }
+    if launcher.screen == Screen::Game
+        && *tab == Tab::Continue
+        && !ended
+        && launcher.scale_up_offered()
+    {
+        draw_scale_up_dialog(ui, launcher, forms);
     }
     if launcher.screen == Screen::Home {
         draw_delete_saves_menu(ui, launcher, forms);

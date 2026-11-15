@@ -50,6 +50,10 @@ pub fn fixture_campaign_card(launcher: &mut Launcher, card: CampaignCard) {
     launcher.hold_campaign_card(card);
 }
 
+pub fn fixture_card_without_seat(launcher: &mut Launcher) {
+    launcher.hold_card_without_seat();
+}
+
 /// Every shared part of the launcher's look on one page, for the snapshot harness.
 pub fn draw_parts_sheet(ui: &mut Ui) {
     let whole = ui.max_rect();
