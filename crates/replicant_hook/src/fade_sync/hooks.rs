@@ -37,6 +37,13 @@ pub fn arm_host_zone_change() {
         .arm(now_ms());
 }
 
+pub fn arm_host_scene_start() {
+    HOST_SYNC
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .arm_for_scene_start(now_ms());
+}
+
 pub(super) fn call_fade(fading_out: bool, kind: i32, seconds: f32, depth: u32) -> bool {
     let original = if fading_out {
         ORIGINAL_FADE_OUT.load(Ordering::Acquire)
@@ -149,6 +156,11 @@ fn fade_runs_here(layer: *mut c_void, fading_out: bool) -> bool {
     let Some(build) = BUILD.get() else {
         return true;
     };
+    let repeats_the_hosts = !fading_out
+        && panic::catch_unwind(super::tick::guest_own_fade_in_repeats_the_hosts).unwrap_or(false);
+    if repeats_the_hosts {
+        return false;
+    }
     panic::catch_unwind(|| crate::host_view::fade_call_runs(build, fading_out)).unwrap_or(true)
 }
 

@@ -4,8 +4,8 @@ use replicant_game::Replicant;
 use replicant_game::readiness::{classify, read_play_checks};
 use replicant_game::side_view::{
     ArrivalViewFix, DoorMoveAction, DoorMoveFacts, IndoorArrivalReading, IndoorArrivalWatch,
-    OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION, SideViewDoor, ViewOffArg, door_action_for_a_move,
-    view_off_calls,
+    OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION, SCENE_ARRIVALS, SceneArrivalReading, SceneArrivalWatch,
+    SideViewDoor, ViewOffArg, door_action_for_a_move, view_off_calls,
 };
 use replicant_game::stay_together::local_phase_index;
 use replicant_proto::StoryCall;
@@ -15,13 +15,14 @@ use crate::diagnostics::log_line;
 use crate::game_hooks::own_side_view_door;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
-use crate::stay_together::{game_says_free_to_act, side_view_now};
+use crate::stay_together::{announced_host_side_view_door, game_says_free_to_act, side_view_now};
 use crate::story_jump::{NativeArg, call_native_with};
 use crate::story_relay::{
     RelayPath, relay_calls_are_clear, relay_queue_has_room, submit_relay_call,
 };
 
 static INDOOR_ARRIVAL: Mutex<IndoorArrivalWatch> = Mutex::new(IndoorArrivalWatch::new());
+static SCENE_ARRIVAL: Mutex<SceneArrivalWatch> = Mutex::new(SceneArrivalWatch::new());
 
 pub(crate) fn door_action_for_a_move_here(
     build: &VerifiedBuild,
@@ -132,5 +133,51 @@ pub(super) fn tick_indoor_arrival(build: &VerifiedBuild) {
             None,
             "the mod's area change carried a door place's view into this area",
         ),
+    }
+}
+
+pub(crate) fn note_scene_callback(build: &VerifiedBuild, name: &str) {
+    if !SCENE_ARRIVALS
+        .iter()
+        .any(|arrival| arrival.callback == name)
+    {
+        return;
+    }
+    let Ok(area) = Replicant::new(InProcessMemory::new(build)).current_phase() else {
+        return;
+    };
+    SCENE_ARRIVAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .note_callback(&area, name, net_clock_ms());
+}
+
+pub(super) fn tick_scene_arrival(build: &VerifiedBuild) {
+    let game = Replicant::new(InProcessMemory::new(build));
+    let host_side_view_door = local_phase_index(&game).map_or(0, announced_host_side_view_door);
+    let reading = SceneArrivalReading {
+        now_ms: net_clock_ms(),
+        in_play_and_free: classify(read_play_checks(&game)).is_in_play()
+            && game_says_free_to_act(build).unwrap_or(false),
+        in_side_view: side_view_now(build),
+        host_side_view_door,
+    };
+    let door = SCENE_ARRIVAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .observe(&reading);
+    let Some(door) = door else {
+        return;
+    };
+    if door_steps_can_run() {
+        run_door_steps(
+            build,
+            door.entry_steps,
+            "a scene of the host's step left you inside a door's place without its view",
+        );
+    } else {
+        log_line(
+            "side view: a scene left you inside a door's place without its view, and the call queue is full",
+        );
     }
 }

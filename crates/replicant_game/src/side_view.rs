@@ -3,6 +3,7 @@ mod door_table;
 mod flip_watch;
 mod indoor_arrival;
 mod own_door;
+mod scene_arrival;
 mod view_off;
 
 pub use door_rules::{
@@ -13,6 +14,10 @@ pub use door_table::{SIDE_VIEW_DOORS, SideViewDoor};
 pub use flip_watch::SideViewWatch;
 pub use indoor_arrival::{ArrivalViewFix, IndoorArrivalReading, IndoorArrivalWatch};
 pub use own_door::OwnSideViewDoor;
+pub use scene_arrival::{
+    SCENE_ARRIVAL_WAITS_FOR_THE_HOST_MS, SCENE_ARRIVALS, SceneArrival, SceneArrivalReading,
+    SceneArrivalWatch,
+};
 pub use view_off::{ViewOffArg, ViewOffCall, view_off_calls};
 
 pub const INDOOR_ARRIVAL_SETTLE_MS: u64 = 1_000;
