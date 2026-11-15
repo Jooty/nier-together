@@ -1,3 +1,4 @@
+mod feet;
 mod input;
 mod line;
 mod names;
@@ -9,6 +10,7 @@ mod speed_cap_report;
 mod trigger;
 mod window;
 
+pub use feet::{FeetReading, format_feet_second, read_feet};
 pub use input::{input_block_getter, read_move_axis, read_move_keys};
 pub use line::{MoveLineContext, format_move_line};
 pub use names::{action_set_for_seed, state_name_for_rva};

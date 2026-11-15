@@ -7,12 +7,10 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::kaine::{MissedMotionNames, swapped_body_motion_twin};
 use replicant_game::offsets::MOTION_WORK_INDEX_BY_NAME_FUNCTION_RVA;
-use replicant_proto::PartnerBody;
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::game_hooks::hook_address;
-use crate::player_body::real_body;
 
 static ORIGINAL_LOOKUP: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static HOOKED: OnceLock<VerifiedBuild> = OnceLock::new();
@@ -69,23 +67,21 @@ extern "system" fn motion_index_detour(this: *mut c_void, name: *const u8) -> i6
     reason = "reads the game's NUL-terminated motion name and calls the lookup again with the twin"
 )]
 fn twin_index(lookup: MotionIndexByName, this: *mut c_void, name: *const u8) -> Option<i64> {
-    let swapped_kaine =
-        real_body().is_some_and(|real| real.by_swap && real.body == PartnerBody::SeedKaineE);
-    if !swapped_kaine {
-        return None;
-    }
     // SAFETY: the game passes a NUL-terminated name that outlives this call.
     let asked = unsafe { CStr::from_ptr(name.cast()) }.to_str().ok()?;
     let twin = swapped_body_motion_twin(asked);
+    let found = twin.as_deref().and_then(|twin| {
+        let twin = CString::new(twin).ok()?;
+        // SAFETY: the twin is NUL-terminated and lives past the call.
+        let index = unsafe { lookup(this, twin.as_ptr().cast()) };
+        (index as i32 >= 0).then_some(index)
+    });
     let line = MISSED_NAMES
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .observe(asked, twin.as_deref());
+        .observe(asked, twin.as_deref().filter(|_| found.is_some()));
     if let Some(line) = line {
         log_line(&line);
     }
-    let twin = CString::new(twin?).ok()?;
-    // SAFETY: the twin is NUL-terminated and lives past the call.
-    let index = unsafe { lookup(this, twin.as_ptr().cast()) };
-    (index as i32 >= 0).then_some(index)
+    found
 }
