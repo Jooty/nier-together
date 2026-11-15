@@ -570,6 +570,26 @@ const SEAFRONT_WITH_RED_BAG_TO_MANOR_FRONT_EXTRA_STEPS: [JumpStep; 11] = [
     JumpStep::SetFlag { id: 348 },
 ];
 
+const VILLAGE_TO_FOREST_INSIDE_EXTRA_STEPS: [JumpStep; 11] = [
+    JumpStep::SetFlag { id: 1365 },
+    JumpStep::SetFlag { id: 470 },
+    JumpStep::SetFlag { id: 1355 },
+    JumpStep::SetFlag { id: 1356 },
+    JumpStep::SetFlag { id: 471 },
+    JumpStep::SetFlag { id: 472 },
+    JumpStep::SetFlag { id: 473 },
+    JumpStep::SetGameCounter { id: 200, value: 1 },
+    JumpStep::SetFlag { id: 254 },
+    JumpStep::SetGameCounter {
+        id: 100,
+        value: 255,
+    },
+    JumpStep::SetGameCounter {
+        id: 101,
+        value: 255,
+    },
+];
+
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
 const AFTER_PROLOGUE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const AFTER_PROLOGUE_POINT: i32 = 8;
@@ -605,6 +625,8 @@ const SEAFRONT_WITH_RED_BAG_PHASE: &str = "A_SOUTH_FIELD_01";
 const SEAFRONT_WITH_RED_BAG_POINT: i32 = 3;
 const MANOR_FRONT_PHASE: &str = "A_SOUTH_FIELD_01";
 const MANOR_FRONT_POINT: i32 = 2;
+const FOREST_INSIDE_PHASE: &str = "C_FOREST_FIELD_01";
+const FOREST_INSIDE_POINT: i32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpStep {
@@ -746,6 +768,13 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::ForestInside => {
+            let mut steps = loadout_steps(StoryJumpPoint::VillageBackFromTemple);
+            steps.pop();
+            steps.extend_from_slice(&VILLAGE_TO_FOREST_INSIDE_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -775,5 +804,6 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
             (SEAFRONT_WITH_RED_BAG_PHASE, SEAFRONT_WITH_RED_BAG_POINT)
         }
         StoryJumpPoint::ManorFront => (MANOR_FRONT_PHASE, MANOR_FRONT_POINT),
+        StoryJumpPoint::ForestInside => (FOREST_INSIDE_PHASE, FOREST_INSIDE_POINT),
     }
 }

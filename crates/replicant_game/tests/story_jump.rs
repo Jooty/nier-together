@@ -325,6 +325,7 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::VillageBackFromTemple,
         StoryJumpPoint::SeafrontWithRedBag,
         StoryJumpPoint::ManorFront,
+        StoryJumpPoint::ForestInside,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -443,6 +444,7 @@ fn the_boss_fight_3_jump_leaves_the_flags_that_start_the_fight_on_arrival() {
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(snow.contains(&1085));
 }
 
@@ -544,6 +546,7 @@ fn the_junk_heap_jump_leaves_the_story_flags_a_played_run_has_on_floor_b2() {
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(snow.contains(&1085));
     assert!(snow.contains(&1051));
     assert!(snow.contains(&5));
@@ -677,6 +680,7 @@ fn the_after_boss_fight_6_jump_leaves_the_flags_a_played_run_has_after_the_endin
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(snow.contains(&1056));
     assert!(!snow.contains(&1061));
     assert!(!counters.contains_key(&200));
@@ -752,6 +756,7 @@ fn the_boss_fight_6_jump_leaves_the_flags_that_make_the_area_start_run_the_appro
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(snow.contains(&1056));
     assert!(!counters.contains_key(&200));
 }
@@ -808,6 +813,7 @@ fn the_after_the_facade_jump_leaves_the_flags_the_run_had_when_it_left_the_town(
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(!counters.contains_key(&200));
     assert!(snow.contains(&1056));
     assert!(snow.contains(&1084));
@@ -854,6 +860,7 @@ fn the_temple_entrance_jump_adds_the_flags_the_run_set_before_the_entrance_scene
     }
     assert_eq!(counters.get(&100), Some(&255));
     assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
     assert!(snow.contains(&1084));
 }
 
@@ -1004,4 +1011,32 @@ fn the_manor_jump_enters_the_southern_plains_at_point_two_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::ManorFront, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::ManorFront, false).is_none());
+}
+
+#[test]
+fn the_forest_jump_is_the_village_loadout_plus_the_flags_set_before_entering() {
+    let steps = loadout_steps(StoryJumpPoint::ForestInside);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [1365, 470, 471, 472, 473, 254, 1355, 1356] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [93, 134, 475, 476, 477, 1366] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert_eq!(counters.get(&200), Some(&1));
+    assert_eq!(counters.get(&100), Some(&255));
+    assert_eq!(counters.get(&101), Some(&255));
+    assert!(!snow.contains(&18));
+    assert!(!steps.contains(&JumpStep::SetItem { id: 325, count: 1 }));
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_forest_jump_enters_the_forest_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::ForestInside);
+    assert_eq!(name, "C_FOREST_FIELD_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::ForestInside, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::ForestInside, false).is_none());
 }
