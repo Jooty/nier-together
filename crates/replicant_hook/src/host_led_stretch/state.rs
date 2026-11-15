@@ -2,7 +2,8 @@ use std::sync::{Mutex, PoisonError};
 
 use replicant_game::Replicant;
 use replicant_game::host_led_stretch::{
-    HostLedStretchState, StretchChange, ended_line, started_line,
+    GUEST_REFUSED_DOOR_CALLBACK_PREFIX, HostLedStretch, HostLedStretchState, StretchChange,
+    armed_line, disarmed_line, ended_line, started_line,
 };
 use replicant_game::shared_events::phase_name;
 use replicant_game::stay_together::FollowRole;
@@ -38,7 +39,7 @@ pub(crate) fn note_own_step(name: &str, the_gate_sends_it: bool) {
     let Some(change) = change else {
         return;
     };
-    report(change, true);
+    report(change, true, name);
     // The callback gate never sends a talk the host started, so its start goes from here.
     if let StretchChange::Started(_) = change
         && !the_gate_sends_it
@@ -72,7 +73,7 @@ pub(crate) fn note_hosts_step(phase: u16, name: &str) {
     let change = stretch.host_step(pack, name, net_clock_ms());
     drop(stretch);
     if let Some(change) = change {
-        report(change, false);
+        report(change, false, name);
     }
 }
 
@@ -95,7 +96,7 @@ pub(crate) fn tick(build: &VerifiedBuild) {
     if let Some(change) = change {
         let host = net::handle()
             .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Host);
-        report(change, host);
+        report(change, host, "");
     }
     let host_leads = hosts_stretch_first_step().is_some();
     crate::fade_sync::arm_host_led_stretch(host_leads);
@@ -125,8 +126,44 @@ pub(crate) fn guest_watches_a_stretch() -> bool {
             .is_some()
 }
 
-fn report(change: StretchChange, host: bool) {
+pub(crate) fn guest_door_ban(callback: &str) -> Option<&'static HostLedStretch> {
+    if !callback.starts_with(GUEST_REFUSED_DOOR_CALLBACK_PREFIX) || !is_the_guest() {
+        return None;
+    }
+    STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .door_ban()
+}
+
+pub(crate) fn host_runs_are_not_replayed(phase: u16) -> Option<&'static HostLedStretch> {
+    if !is_the_guest() {
+        return None;
+    }
+    let stretch = STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .current()?;
+    (stretch.guest_is_not_taken_along && phase_name(phase) == Some(stretch.pack)).then_some(stretch)
+}
+
+pub(crate) fn guest_is_not_taken_along_now() -> Option<&'static HostLedStretch> {
+    STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .current()
+        .filter(|stretch| stretch.guest_is_not_taken_along)
+}
+
+fn is_the_guest() -> bool {
+    net::handle()
+        .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Guest)
+}
+
+fn report(change: StretchChange, host: bool, step: &str) {
     log_line(&match change {
+        StretchChange::Armed(stretch) => armed_line(stretch, step),
+        StretchChange::Disarmed(stretch, end) => disarmed_line(stretch, end),
         StretchChange::Started(stretch) => started_line(stretch, host),
         StretchChange::Ended(stretch, end) => ended_line(stretch, end),
     });

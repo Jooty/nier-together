@@ -37,6 +37,18 @@ impl PartnerPlace {
         }
     }
 
+    pub fn judge_counting_a_watcher(
+        local: Option<Whereabouts>,
+        partner: Option<Whereabouts>,
+        partner_watches: bool,
+    ) -> Self {
+        let judged = Self::judge(local, partner);
+        if partner_watches && matches!(judged, Self::TooFar { .. }) {
+            return Self::Same;
+        }
+        judged
+    }
+
     pub fn is_same(self) -> bool {
         self == Self::Same
     }

@@ -44,7 +44,7 @@ impl NetSharedExt for NetShared {
         if !self.partner_in_play() {
             return PartnerPlace::Unknown;
         }
-        PartnerPlace::judge(
+        PartnerPlace::judge_counting_a_watcher(
             self.local.as_ref().map(|local| Whereabouts {
                 phase: local.phase,
                 position: local.position,
@@ -53,6 +53,7 @@ impl NetSharedExt for NetShared {
                 phase: remote.state.phase,
                 position: remote.state.position,
             }),
+            crate::story_watch::guest_is_watched(),
         )
     }
 
