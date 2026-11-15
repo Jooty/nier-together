@@ -2,9 +2,10 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 
 use replicant_game::move_log::{
     SPEED_CAP_LIFTED_VALUE, SpeedCapLift, SpeedCapReading, SpeedCapSecond, SpeedCapWatch,
-    format_speed_cap_log, format_speed_cap_second, is_house_speed_cap_value, read_move_sample,
-    read_speed_cap, read_state_rva, write_lifted_speed_cap,
+    format_feet_second, format_speed_cap_log, format_speed_cap_second, is_house_speed_cap_value,
+    read_feet, read_move_sample, read_speed_cap, read_state_rva, write_lifted_speed_cap,
 };
+use replicant_game::puppet::motion_name;
 use replicant_proto::PartnerBody;
 
 use crate::build_gate::VerifiedBuild;
@@ -67,4 +68,13 @@ pub fn lift_house_speed_cap(
         ground_speed: sample.speed,
         state_rva: sample.state_rva,
     }));
+    if kaine_swapped {
+        let feet = read_feet(&memory, actor);
+        let name = feet.and_then(|feet| motion_name(&memory, actor, feet.index).ok().flatten());
+        log_line(&format_feet_second(
+            name.as_deref(),
+            feet,
+            sample.applied_step_per_second,
+        ));
+    }
 }

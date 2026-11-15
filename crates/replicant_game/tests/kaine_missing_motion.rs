@@ -42,8 +42,23 @@ fn a_motion_her_pack_has_gets_no_twin() {
 }
 
 #[test]
-fn the_indoor_jog_gets_no_twin_because_the_house_walk_lift_covers_it() {
-    assert_eq!(swapped_body_motion_twin("NIER013_jog_lp"), None);
+fn the_indoor_jog_has_her_run_loop_as_its_twin() {
+    assert_eq!(
+        swapped_body_motion_twin("NIER013_jog_lp").as_deref(),
+        Some("KAINE015_run_lp")
+    );
+}
+
+#[test]
+fn the_twin_is_found_for_a_name_asked_without_the_pack_prefix() {
+    assert_eq!(
+        swapped_body_motion_twin("jog_lp").as_deref(),
+        Some("KAINE015_run_lp")
+    );
+    assert_eq!(
+        swapped_body_motion_twin("bioRun_lp").as_deref(),
+        Some("KAINE015_run_lp")
+    );
 }
 
 #[test]
@@ -55,8 +70,8 @@ fn the_twin_is_found_whatever_the_case() {
 }
 
 #[test]
-fn a_name_with_no_pack_prefix_has_no_twin() {
-    assert_eq!(swapped_body_motion_twin("bioRun_lp"), None);
+fn a_name_of_another_pack_or_an_empty_one_has_no_twin() {
+    assert_eq!(swapped_body_motion_twin("EM_jog_lp"), None);
     assert_eq!(swapped_body_motion_twin(""), None);
 }
 
@@ -90,15 +105,16 @@ fn a_missed_name_is_logged_once_with_its_twin() {
 #[test]
 fn a_missed_name_with_no_twin_says_nothing_plays() {
     let mut missed = MissedMotionNames::new();
-    let line = missed.observe("NIER013_jog_lp", None).expect("first miss");
-    assert_eq!(line, missed_motion_text("NIER013_jog_lp", None));
+    let line = missed.observe("NIER013_wait_lp", None).expect("first miss");
+    assert_eq!(line, missed_motion_text("NIER013_wait_lp", None));
     assert!(line.ends_with("no twin is set, nothing plays"));
 }
 
 #[test]
-fn names_of_other_actors_are_never_logged() {
+fn an_empty_name_is_never_logged_and_a_name_without_the_pack_prefix_is() {
     let mut missed = MissedMotionNames::new();
-    assert_eq!(missed.observe("EM_slime_walk", None), None);
+    assert_eq!(missed.observe("", None), None);
+    assert!(missed.observe("jog_lp", None).is_some());
 }
 
 #[test]
