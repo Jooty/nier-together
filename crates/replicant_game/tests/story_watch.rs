@@ -11,6 +11,7 @@ fn facts(story_has_taken_her: bool) -> WatchFacts<'static> {
         setting_on: true,
         guest_in_session: true,
         story_has_taken_her,
+        host_leads_a_stretch: false,
         pack: "A_DESERT_TEMPLE_01",
     }
 }

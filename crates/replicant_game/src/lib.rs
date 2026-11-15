@@ -29,6 +29,7 @@ pub mod fix_buttons;
 pub mod focus;
 mod game;
 pub mod game_closing;
+pub mod host_led_stretch;
 pub mod kaine;
 pub mod lift_rides;
 pub mod loading_lines;

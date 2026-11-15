@@ -4,6 +4,7 @@ use crate::fade_sync::{SCENE_START_FADE_WINDOW_MS, ZONE_CHANGE_FADE_WINDOW_MS};
 pub struct HostFadeSync {
     armed_until_ms: Option<u64>,
     scene_start_until_ms: Option<u64>,
+    host_led_stretch: bool,
     sent_fade_out: bool,
 }
 
@@ -12,6 +13,7 @@ impl HostFadeSync {
         Self {
             armed_until_ms: None,
             scene_start_until_ms: None,
+            host_led_stretch: false,
             sent_fade_out: false,
         }
     }
@@ -24,9 +26,15 @@ impl HostFadeSync {
         self.scene_start_until_ms = Some(now_ms + SCENE_START_FADE_WINDOW_MS);
     }
 
+    /// While the host leads a stretch every fade out of the main layer goes to the guest.
+    pub const fn set_host_led_stretch(&mut self, on: bool) {
+        self.host_led_stretch = on;
+    }
+
     pub fn should_send_fade_out(&mut self, now_ms: u64) -> bool {
         let live = |until: Option<u64>| until.is_some_and(|until| now_ms < until);
-        let armed = live(self.armed_until_ms) || live(self.scene_start_until_ms);
+        let armed =
+            self.host_led_stretch || live(self.armed_until_ms) || live(self.scene_start_until_ms);
         if armed {
             self.armed_until_ms = None;
             self.scene_start_until_ms = None;

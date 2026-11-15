@@ -46,6 +46,8 @@ mod game_hooks;
 #[cfg(all(windows, feature = "probes"))]
 mod gimmick_probe;
 #[cfg(windows)]
+mod host_led_stretch;
+#[cfg(windows)]
 mod host_view;
 #[cfg(windows)]
 mod kaine;

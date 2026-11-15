@@ -153,6 +153,8 @@ mod hit_stagger;
 mod host_led_runs;
 #[path = "host_led_script_talk.rs"]
 mod host_led_script_talk;
+#[path = "host_led_stretch.rs"]
+mod host_led_stretch;
 #[path = "host_removal.rs"]
 mod host_removal;
 #[path = "host_story_talk_pace.rs"]

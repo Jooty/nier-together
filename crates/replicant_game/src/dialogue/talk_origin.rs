@@ -34,6 +34,7 @@ pub struct TalkOriginTracker {
     last_popped: Option<ScriptTalkStart>,
     talk: Option<(u32, TalkOrigin)>,
     story_talk_ended: Option<(String, u64)>,
+    host_led_stretch: Option<&'static str>,
 }
 
 impl TalkOrigin {
@@ -65,7 +66,14 @@ impl TalkOriginTracker {
             last_popped: None,
             talk: None,
             story_talk_ended: None,
+            host_led_stretch: None,
         }
+    }
+
+    /// While the host leads a stretch (its first step `Some`), every talk the host's window
+    /// opens is a story step of it, the ones the host started with the talk command included.
+    pub const fn set_host_led_stretch(&mut self, first_step: Option<&'static str>) {
+        self.host_led_stretch = first_step;
     }
 
     /// The script call the game popped last, at `at_ms`: a talk with no talk start native (an
@@ -145,6 +153,10 @@ impl TalkOriginTracker {
             TalkOrigin::StoryStep(call)
         } else {
             TalkOrigin::NotClassed(None)
+        };
+        let origin = match (origin, self.host_led_stretch) {
+            (origin @ TalkOrigin::StoryStep(_), _) | (origin, None) => origin,
+            (_, Some(first_step)) => TalkOrigin::StoryStep(first_step.to_owned()),
         };
         self.story_talk_ended = None;
         self.talk = Some((talk_id, origin.clone()));
