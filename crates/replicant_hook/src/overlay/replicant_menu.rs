@@ -52,6 +52,11 @@ const STORY_JUMPS: [(StoryJumpPoint, &str); 15] = [
         StoryJumpPoint::VillageBackFromTemple,
         "The village: back from the temple",
     ),
+    (
+        StoryJumpPoint::SeafrontWithRedBag,
+        "Seafront: before entering, with the red bag",
+    ),
+    (StoryJumpPoint::ManorFront, "The manor: in front of it"),
 ];
 
 impl GameMenu for ReplicantOverlay {

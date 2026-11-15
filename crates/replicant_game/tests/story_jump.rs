@@ -323,6 +323,8 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::TempleEntrance,
         StoryJumpPoint::TempleBeforeBoss,
         StoryJumpPoint::VillageBackFromTemple,
+        StoryJumpPoint::SeafrontWithRedBag,
+        StoryJumpPoint::ManorFront,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -931,4 +933,75 @@ fn the_village_jump_enters_the_village_at_point_two_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::VillageBackFromTemple, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::VillageBackFromTemple, false).is_none());
+}
+
+#[test]
+fn the_seafront_jump_carries_the_red_bag_and_the_flags_the_run_set_by_then() {
+    let steps = loadout_steps(StoryJumpPoint::SeafrontWithRedBag);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [
+        1365, 470, 471, 472, 473, 254, 93, 134, 475, 476, 558, 559, 560, 477, 1366,
+    ] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [1355, 1356] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [11, 12, 14, 15, 16, 18, 26] {
+        assert!(snow.contains(&id), "{id}");
+    }
+    for id in [19, 20, 21, 22, 24, 700] {
+        assert!(!snow.contains(&id), "{id}");
+    }
+    assert_eq!(counters.get(&200), Some(&1));
+    assert_eq!(counters.get(&100), Some(&3));
+    assert_eq!(counters.get(&101), Some(&3));
+    assert!(steps.contains(&JumpStep::SetItem { id: 325, count: 1 }));
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_seafront_jump_enters_the_southern_plains_at_point_three_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::SeafrontWithRedBag);
+    assert_eq!(name, "A_SOUTH_FIELD_01");
+    assert_eq!(point, 3);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::SeafrontWithRedBag, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::SeafrontWithRedBag, false).is_none());
+}
+
+#[test]
+fn the_manor_jump_has_given_the_bag_away_and_has_not_played_the_entrance_scene() {
+    let steps = loadout_steps(StoryJumpPoint::ManorFront);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [499, 500, 501, 1311, 348, 477] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [502, 513, 131] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [18, 19, 20, 21, 22, 24, 26] {
+        assert!(snow.contains(&id), "{id}");
+    }
+    assert_eq!(counters.get(&100), Some(&3));
+    assert_eq!(counters.get(&101), Some(&3));
+    let last_bag_step = steps
+        .iter()
+        .rev()
+        .find(|step| matches!(step, JumpStep::SetItem { id: 325, .. }));
+    assert_eq!(
+        last_bag_step,
+        Some(&JumpStep::SetItem { id: 325, count: 0 })
+    );
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_manor_jump_enters_the_southern_plains_at_point_two_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::ManorFront);
+    assert_eq!(name, "A_SOUTH_FIELD_01");
+    assert_eq!(point, 2);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::ManorFront, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::ManorFront, false).is_none());
 }

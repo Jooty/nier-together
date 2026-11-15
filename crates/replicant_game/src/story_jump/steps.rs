@@ -529,6 +529,47 @@ const TEMPLE_BEFORE_BOSS_TO_VILLAGE_EXTRA_STEPS: [JumpStep; 15] = [
     JumpStep::SetGameCounter { id: 101, value: 3 },
 ];
 
+const VILLAGE_TO_SEAFRONT_WITH_RED_BAG_EXTRA_STEPS: [JumpStep; 24] = [
+    JumpStep::SetFlag { id: 1365 },
+    JumpStep::SetFlag { id: 470 },
+    JumpStep::SetFlag { id: 471 },
+    JumpStep::SetFlag { id: 472 },
+    JumpStep::SetFlag { id: 473 },
+    JumpStep::SetFlag { id: 254 },
+    JumpStep::SetFlag { id: 93 },
+    JumpStep::SetFlag { id: 134 },
+    JumpStep::SetFlag { id: 475 },
+    JumpStep::SetFlag { id: 476 },
+    JumpStep::SetFlag { id: 558 },
+    JumpStep::SetFlag { id: 559 },
+    JumpStep::SetFlag { id: 560 },
+    JumpStep::SetFlag { id: 477 },
+    JumpStep::SetFlag { id: 1366 },
+    JumpStep::SetGameCounter { id: 200, value: 1 },
+    JumpStep::SetSnowFlag { id: 11 },
+    JumpStep::SetSnowFlag { id: 12 },
+    JumpStep::SetSnowFlag { id: 14 },
+    JumpStep::SetSnowFlag { id: 15 },
+    JumpStep::SetSnowFlag { id: 16 },
+    JumpStep::SetSnowFlag { id: 26 },
+    JumpStep::SetSnowFlag { id: 18 },
+    JumpStep::SetItem { id: 325, count: 1 },
+];
+
+const SEAFRONT_WITH_RED_BAG_TO_MANOR_FRONT_EXTRA_STEPS: [JumpStep; 11] = [
+    JumpStep::SetItem { id: 325, count: 0 },
+    JumpStep::SetSnowFlag { id: 19 },
+    JumpStep::SetSnowFlag { id: 20 },
+    JumpStep::SetSnowFlag { id: 22 },
+    JumpStep::SetSnowFlag { id: 21 },
+    JumpStep::SetSnowFlag { id: 24 },
+    JumpStep::SetFlag { id: 499 },
+    JumpStep::SetFlag { id: 500 },
+    JumpStep::SetFlag { id: 501 },
+    JumpStep::SetFlag { id: 1311 },
+    JumpStep::SetFlag { id: 348 },
+];
+
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
 const AFTER_PROLOGUE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const AFTER_PROLOGUE_POINT: i32 = 8;
@@ -560,6 +601,10 @@ const TEMPLE_BEFORE_BOSS_PHASE: &str = "A_DESERT_TEMPLE_02";
 const TEMPLE_BEFORE_BOSS_POINT: i32 = 1;
 const VILLAGE_BACK_FROM_TEMPLE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const VILLAGE_BACK_FROM_TEMPLE_POINT: i32 = 2;
+const SEAFRONT_WITH_RED_BAG_PHASE: &str = "A_SOUTH_FIELD_01";
+const SEAFRONT_WITH_RED_BAG_POINT: i32 = 3;
+const MANOR_FRONT_PHASE: &str = "A_SOUTH_FIELD_01";
+const MANOR_FRONT_POINT: i32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpStep {
@@ -687,6 +732,20 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::SeafrontWithRedBag => {
+            let mut steps = loadout_steps(StoryJumpPoint::VillageBackFromTemple);
+            steps.pop();
+            steps.extend_from_slice(&VILLAGE_TO_SEAFRONT_WITH_RED_BAG_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
+        StoryJumpPoint::ManorFront => {
+            let mut steps = loadout_steps(StoryJumpPoint::SeafrontWithRedBag);
+            steps.pop();
+            steps.extend_from_slice(&SEAFRONT_WITH_RED_BAG_TO_MANOR_FRONT_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -712,5 +771,9 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
             VILLAGE_BACK_FROM_TEMPLE_PHASE,
             VILLAGE_BACK_FROM_TEMPLE_POINT,
         ),
+        StoryJumpPoint::SeafrontWithRedBag => {
+            (SEAFRONT_WITH_RED_BAG_PHASE, SEAFRONT_WITH_RED_BAG_POINT)
+        }
+        StoryJumpPoint::ManorFront => (MANOR_FRONT_PHASE, MANOR_FRONT_POINT),
     }
 }

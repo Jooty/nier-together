@@ -179,10 +179,12 @@ fn every_gather_answer_round_trips_and_is_relayed() {
 }
 
 #[test]
-fn the_temple_before_boss_and_complete_jumps_round_trip_and_are_indexes_13_and_14() {
+fn the_temple_village_seafront_and_manor_jumps_round_trip_and_are_indexes_13_to_16() {
     for (point, index) in [
         (StoryJumpPoint::TempleBeforeBoss, 13u8),
         (StoryJumpPoint::VillageBackFromTemple, 14u8),
+        (StoryJumpPoint::SeafrontWithRedBag, 15u8),
+        (StoryJumpPoint::ManorFront, 16u8),
     ] {
         let message = Message::StoryJump(StoryJump { point });
         assert!(message.is_relayed());
