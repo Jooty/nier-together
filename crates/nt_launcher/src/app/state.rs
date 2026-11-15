@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use eframe::egui::Context;
 
 use nt_launcher_core::{
-    ALL_PROFILES, Character, GameProfile, SeatNameChoice, SeatNameInputs, SessionEndCause,
-    current_map, current_mode, default_profile, followed_lobby_kind, hosting_kind, own_seat_name,
+    ALL_PROFILES, Character, GameProfile, ScaleUpInputs, SeatNameChoice, SeatNameInputs,
+    SessionEndCause, current_map, current_mode, declined_scale_up_kept, default_profile,
+    followed_lobby_kind, hosting_kind, own_seat_name, scale_up_offered,
 };
 
 use replicant_proto::{GUEST_BODY, GameReadiness, HOST_BODY, PartnerBody};
@@ -140,6 +141,7 @@ pub struct Launcher {
     guest_round: Option<GuestSeatRound>,
     pub(super) pending_host_start: Option<u8>,
     seat_flush_due: bool,
+    scale_up_declined: Option<u8>,
 }
 
 impl Launcher {
@@ -218,6 +220,7 @@ impl Launcher {
             guest_round: None,
             pending_host_start: None,
             seat_flush_due: false,
+            scale_up_declined: None,
         }
     }
 
@@ -1491,6 +1494,16 @@ impl Launcher {
         self.guest_round = Some(round);
     }
 
+    #[cfg(feature = "snapshots")]
+    pub(crate) fn hold_card_without_seat(&mut self) {
+        let Some(slot) = self.selected_save().cloned() else {
+            return;
+        };
+        let mut round = HostSeatRound::new(PathBuf::new());
+        round.hold_card_without_seat(slot);
+        self.host_round = Some(round);
+    }
+
     pub fn host_start_waiting(&self) -> bool {
         self.pending_host_start.is_some()
     }
@@ -1529,6 +1542,47 @@ impl Launcher {
         }
     }
 
+    pub fn scale_up_offered(&self) -> bool {
+        let picked = self.selected_save().map(|slot| slot.index);
+        scale_up_offered(ScaleUpInputs {
+            viewer_is_guest: self.link.guest,
+            continue_mode: self.lobby_mode == LOBBY_MODE_CONTINUE,
+            already_started: self.lobby_started || self.pending_host_start.is_some(),
+            picked_slot: picked,
+            guest_connected: self.link.partner().is_some(),
+            picked_slot_has_seat: picked.and_then(|slot| {
+                self.host_round
+                    .as_ref()
+                    .and_then(|round| round.picked_slot_has_seat(slot))
+            }),
+            declined_slot: self.scale_up_declined,
+        })
+    }
+
+    pub fn scale_up_guest_name(&self) -> Option<String> {
+        self.link
+            .partner()
+            .map(|partner| partner.name.trim().to_owned())
+    }
+
+    pub fn decline_scale_up(&mut self) {
+        self.scale_up_declined = self.selected_slot;
+    }
+
+    pub fn scale_up_partner(&mut self, net: &dyn LauncherNet) {
+        let (Some(name), Some(round)) = (self.scale_up_guest_name(), self.host_round.as_mut())
+        else {
+            return;
+        };
+        if let Err(reason) = round.give_seat_copy(net, &name) {
+            self.log.push(format!(
+                "could not give {name} a copy of the host's save: {reason}"
+            ));
+            self.scale_up_declined = self.selected_slot;
+        }
+        self.take_round_logs();
+    }
+
     pub fn step_seat_round(&mut self, net: &dyn LauncherNet, now_seconds: f64) {
         if let Some(step) = self
             .host_round
@@ -1542,6 +1596,11 @@ impl Launcher {
         {
             round.flush(net);
         }
+        self.scale_up_declined = declined_scale_up_kept(
+            self.scale_up_declined,
+            self.selected_slot,
+            self.link.partner().is_some(),
+        );
         self.send_card_for_pick(net);
         self.take_round_logs();
     }

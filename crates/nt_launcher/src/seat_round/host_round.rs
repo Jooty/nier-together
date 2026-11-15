@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use nt_launcher_core::{HostStartGate, LauncherEvent, LauncherNet, NetState, StartGateStep};
+use nt_launcher_core::{
+    HostStartGate, LauncherEvent, LauncherNet, NetState, StartGateStep, seat_bytes_of,
+    seat_with_name,
+};
 
 use crate::saves::{
     ArrivedSeat, Campaign, SlotSummary, campaign_card_of, campaign_for_host_slot,
@@ -50,6 +53,26 @@ impl HostSeatRound {
         self.card_for.as_ref().map(|(slot, _)| slot.index)
     }
 
+    pub fn picked_slot_has_seat(&self, slot: u8) -> Option<bool> {
+        self.card_for
+            .as_ref()
+            .filter(|(picked, _)| picked.index == slot)
+            .map(|(_, campaign)| campaign.seat.is_some())
+    }
+
+    #[cfg(feature = "snapshots")]
+    pub fn hold_card_without_seat(&mut self, slot: SlotSummary) {
+        let campaign = Campaign {
+            id: "00c0ffee00c0ffee".to_owned(),
+            host_name: slot.name.clone(),
+            host_play_seconds: slot.play_seconds,
+            seat: None,
+            arrived_unix_seconds: None,
+            seat_checksum: None,
+        };
+        self.card_for = Some((slot, campaign));
+    }
+
     pub fn playing(&self) -> Option<&PlayingCampaign> {
         self.playing.as_ref()
     }
@@ -81,6 +104,43 @@ impl HostSeatRound {
                 slot.index
             )),
         }
+    }
+
+    /// Stores a copy of the card's host save under the guest's name as the campaign's second seat and
+    /// sends the card again.
+    pub fn give_seat_copy(
+        &mut self,
+        net: &dyn LauncherNet,
+        guest_name: &str,
+    ) -> Result<(), String> {
+        let (slot, campaign) = self
+            .card_for
+            .clone()
+            .ok_or_else(|| "no campaign is picked".to_owned())?;
+        let file = std::fs::read(&self.coop_file)
+            .map_err(|error| format!("the co-op save file could not be read: {error}"))?;
+        let host_seat = seat_bytes_of(&file, slot.index)
+            .map_err(|error| format!("the host's save failed its checks ({error:?})"))?;
+        let renamed = seat_with_name(&host_seat, guest_name)
+            .ok_or_else(|| "the host's save could not be given the guest's name".to_owned())?;
+        match store_arrived_seat(
+            &self.coop_file,
+            slot.index,
+            &campaign.id,
+            &renamed,
+            unix_seconds_now(),
+        ) {
+            Ok(ArrivedSeat::Stored { .. }) => {}
+            Ok(ArrivedSeat::KeptAside { reason, .. }) => return Err(reason),
+            Err(error) => return Err(error.to_string()),
+        }
+        self.log.push(format!(
+            "campaign {}: gave the second seat a copy of the host's save as {}",
+            shown_campaign_id(&campaign.id),
+            guest_name.trim()
+        ));
+        self.pick(net, &slot);
+        Ok(())
     }
 
     /// Start pressed: the campaign of `slot` is the one played until the next start, and its seat

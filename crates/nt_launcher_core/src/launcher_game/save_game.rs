@@ -40,6 +40,10 @@ pub fn seat_bytes_of(file: &[u8], slot: u8) -> Result<Vec<u8>, SeatError> {
     })
 }
 
+pub fn seat_with_name(seat: &[u8], name: &str) -> Option<Vec<u8>> {
+    save_game()?.seat_with_name(seat, name)
+}
+
 pub fn session_file_with_seat(blank: &[u8], seat: &[u8]) -> Result<Vec<u8>, SeatError> {
     save_game().map_or(Err(SeatError::GameKeepsNoSaves), |saves| {
         saves.session_file_with_seat(blank, seat)

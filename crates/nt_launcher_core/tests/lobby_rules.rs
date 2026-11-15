@@ -1,8 +1,9 @@
 use nt_launcher_core::{
     AUTOMATA, CO_OP_CAMPAIGN, FREE_ROAM, FREE_ROAM_MODE, GameMode, LobbyOption, PlayerStatus,
-    REPLICANT, RosterSeat, SessionOptions, StartButton, StartInputs, characters_shareable,
-    current_mode, lobby_permissions, option_available, remove_offered, roster, rules_for_mode,
-    start_allowed, start_button,
+    REPLICANT, RosterSeat, ScaleUpInputs, SessionOptions, StartButton, StartInputs,
+    characters_shareable, current_mode, declined_scale_up_kept, lobby_permissions,
+    option_available, remove_offered, roster, rules_for_mode, scale_up_offered, start_allowed,
+    start_button,
 };
 
 const UNKNOWN_MODE: u8 = 200;
@@ -197,4 +198,86 @@ fn a_guest_sees_waiting_for_host() {
 fn a_guest_whose_game_closed_sees_rejoin() {
     assert_eq!(start_button(true, true), StartButton::Rejoin);
     assert_eq!(StartButton::Rejoin.label(), "Rejoin");
+}
+
+fn offer_inputs() -> ScaleUpInputs {
+    ScaleUpInputs {
+        viewer_is_guest: false,
+        continue_mode: true,
+        already_started: false,
+        picked_slot: Some(2),
+        guest_connected: true,
+        picked_slot_has_seat: Some(false),
+        declined_slot: None,
+    }
+}
+
+#[test]
+fn the_scale_up_is_offered_when_all_three_conditions_hold() {
+    assert!(scale_up_offered(offer_inputs()));
+}
+
+#[test]
+fn the_scale_up_waits_for_each_condition() {
+    let no_guest = ScaleUpInputs {
+        guest_connected: false,
+        ..offer_inputs()
+    };
+    let new_game = ScaleUpInputs {
+        continue_mode: false,
+        ..offer_inputs()
+    };
+    let no_slot = ScaleUpInputs {
+        picked_slot: None,
+        ..offer_inputs()
+    };
+    let has_seat = ScaleUpInputs {
+        picked_slot_has_seat: Some(true),
+        ..offer_inputs()
+    };
+    let unknown_campaign = ScaleUpInputs {
+        picked_slot_has_seat: None,
+        ..offer_inputs()
+    };
+    for inputs in [no_guest, new_game, no_slot, has_seat, unknown_campaign] {
+        assert!(!scale_up_offered(inputs));
+    }
+}
+
+#[test]
+fn the_scale_up_is_never_offered_to_a_guest_or_after_the_start() {
+    let guest = ScaleUpInputs {
+        viewer_is_guest: true,
+        ..offer_inputs()
+    };
+    let started = ScaleUpInputs {
+        already_started: true,
+        ..offer_inputs()
+    };
+    assert!(!scale_up_offered(guest));
+    assert!(!scale_up_offered(started));
+}
+
+#[test]
+fn not_now_holds_for_the_slot_and_is_asked_again_for_another() {
+    let declined = ScaleUpInputs {
+        declined_slot: Some(2),
+        ..offer_inputs()
+    };
+    let other_slot = ScaleUpInputs {
+        picked_slot: Some(3),
+        declined_slot: Some(2),
+        ..offer_inputs()
+    };
+    assert!(!scale_up_offered(declined));
+    assert!(scale_up_offered(other_slot));
+}
+
+#[test]
+fn not_now_is_forgotten_when_the_guest_leaves_or_another_slot_is_picked() {
+    assert_eq!(declined_scale_up_kept(Some(2), Some(2), true), Some(2));
+    assert_eq!(declined_scale_up_kept(Some(2), Some(2), false), None);
+    assert_eq!(declined_scale_up_kept(Some(2), Some(3), true), None);
+    assert_eq!(declined_scale_up_kept(Some(2), None, true), None);
+    assert_eq!(declined_scale_up_kept(None, Some(2), true), None);
 }

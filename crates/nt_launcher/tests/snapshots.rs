@@ -7,7 +7,8 @@ use egui_kittest::Harness;
 use egui_kittest::wgpu::WgpuTestRenderer;
 use nt_launcher::app::{
     ConsoleRun, JoinDialog, Launcher, NetForms, Screen, Tab, UpdateState, apply_launcher_look,
-    copy_line_id, draw, draw_parts_sheet, fixture_campaign_card, fixture_launcher,
+    copy_line_id, draw, draw_parts_sheet, fixture_campaign_card, fixture_card_without_seat,
+    fixture_launcher,
 };
 use nt_launcher::game_link::{StartChoice, write_start};
 use nt_launcher::home::{GameCard, MapBannerStore};
@@ -1381,6 +1382,22 @@ fn continue_for_the_first_game_with_a_save_picked() {
         "continue-replicant",
         continue_page(&REPLICANT, "continue-replicant", false),
     );
+}
+
+#[test]
+fn the_host_is_offered_to_scale_the_partner_up() {
+    let mut page = continue_page(&REPLICANT, "continue-replicant-scale-up", false);
+    fixture_card_without_seat(&mut page.launcher);
+    assert!(page.launcher.scale_up_offered());
+    render_page("continue-replicant-scale-up", page);
+}
+
+#[test]
+fn not_now_closes_the_scale_up_offer() {
+    let mut page = continue_page(&REPLICANT, "continue-replicant-not-now", false);
+    fixture_card_without_seat(&mut page.launcher);
+    page.launcher.decline_scale_up();
+    assert!(!page.launcher.scale_up_offered());
 }
 
 #[test]

@@ -321,6 +321,8 @@ mod script_runner;
 mod scripted_camera;
 #[path = "seat.rs"]
 mod seat;
+#[path = "seat_name.rs"]
+mod seat_name;
 #[path = "shared_events.rs"]
 mod shared_events;
 #[path = "shared_items.rs"]

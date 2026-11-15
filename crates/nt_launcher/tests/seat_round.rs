@@ -12,7 +12,7 @@ use nt_launcher_core::{
 };
 use nt_net::{LoopbackNetwork, Transport};
 use replicant_game::story_progress::{
-    SLOT_BYTES, SLOTS_FILE_OFFSET, fix_header_checksum, seat_bytes_of,
+    SLOT_BYTES, SLOTS_FILE_OFFSET, fix_header_checksum, fix_slot_checksum, seat_bytes_of,
 };
 
 use crate::scratch::fresh_dir;
@@ -306,4 +306,44 @@ fn a_seat_that_cannot_be_sent_or_never_arrives_stops_the_start() {
         pair.host.round.begin_start(&pair.host.core, guest_slot, &host_slot(), 0.0),
         HostStartStep::Stop(reason) if reason.contains("not connected")
     ));
+}
+
+#[test]
+fn scaling_the_partner_up_stores_the_hosts_save_under_the_guests_name_and_updates_the_card() {
+    let network = LoopbackNetwork::new();
+    let folders = folders("seat_round_scale_up");
+    let coop = coop_gamedata_path(&folders.host_saves).unwrap();
+    let mut host_file = std::fs::read(&coop).unwrap();
+    host_file[SLOTS_FILE_OFFSET + 0x64..SLOTS_FILE_OFFSET + 0x68]
+        .copy_from_slice(&17_u32.to_le_bytes());
+    let mut slot = host_file[SLOTS_FILE_OFFSET..SLOTS_FILE_OFFSET + SLOT_BYTES].to_vec();
+    assert!(fix_slot_checksum(&mut slot));
+    host_file[SLOTS_FILE_OFFSET..SLOTS_FILE_OFFSET + SLOT_BYTES].copy_from_slice(&slot);
+    fix_header_checksum(&mut host_file).unwrap();
+    std::fs::write(&coop, host_file).unwrap();
+    let mut pair = pair(&network, &folders);
+    pair.connect();
+    pair.host.round.pick(&pair.host.core, &host_slot());
+    assert!(pair.wait_for(|pair| pair.guest.round.card().is_some()));
+    assert!(pair.guest.round.card().unwrap().second_seat.is_none());
+    assert_eq!(pair.host.round.picked_slot_has_seat(HOST_SLOT), Some(false));
+
+    pair.host
+        .round
+        .give_seat_copy(&pair.host.core, "Guesty")
+        .unwrap();
+
+    assert_eq!(pair.host.round.picked_slot_has_seat(HOST_SLOT), Some(true));
+    assert!(pair.wait_for(|pair| {
+        pair.guest
+            .round
+            .card()
+            .is_some_and(|card| card.second_seat.is_some())
+    }));
+    let card = pair.guest.round.card().unwrap().clone();
+    let seat = card.second_seat.unwrap();
+    assert_eq!(seat.summary.name, "Guesty");
+    assert_eq!(seat.summary.level, 17);
+    assert_eq!(seat.summary.play_seconds, 500.0);
+    assert_eq!(stored_seat_play(&folders), Some(500.0));
 }

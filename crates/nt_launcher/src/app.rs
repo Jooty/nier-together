@@ -29,7 +29,9 @@ pub use coop_save_menu::CoopSaveMenu;
 pub use ended_lobby::EndedLobby;
 pub use events::{describe_event, event_log_line};
 #[cfg(feature = "snapshots")]
-pub use fixture::{draw_parts_sheet, fixture_campaign_card, fixture_launcher};
+pub use fixture::{
+    draw_parts_sheet, fixture_campaign_card, fixture_card_without_seat, fixture_launcher,
+};
 pub use forms::NetForms;
 pub use game_look::{GameLook, GameMark, TitleFace, game_look};
 pub use join_dialog::JoinDialog;

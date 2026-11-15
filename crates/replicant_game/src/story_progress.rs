@@ -9,6 +9,7 @@ mod player_local_flags;
 mod rank;
 mod save_rule;
 mod seat;
+mod seat_name;
 mod sidecar;
 mod slot_story;
 
@@ -29,6 +30,7 @@ pub use save_rule::{
     SlotOutcome, StoryRule, StorySource, apply_story_rule, best_story_for_name, save_file_is_valid,
 };
 pub use seat::{SeatError, check_seat, seat_bytes_of, session_file_with_seat};
+pub use seat_name::{SEAT_NAME_MAX_CHARS, seat_with_player_name};
 pub use sidecar::{decode_high_water_sidecar, encode_high_water_sidecar};
 pub use slot_story::{SlotStory, fix_slot_checksum, slot_checksum, slot_player_name};
 

@@ -10,6 +10,7 @@ pub trait GameSaves: Debug + Sync {
     fn check_seat(&self, seat: &[u8]) -> Result<(), SeatError>;
     fn changed_slot(&self, before: &[u8], after: &[u8]) -> Option<u8>;
     fn seat_bytes_of(&self, file: &[u8], slot: u8) -> Result<Vec<u8>, SeatError>;
+    fn seat_with_name(&self, seat: &[u8], name: &str) -> Option<Vec<u8>>;
     fn session_file_with_seat(&self, blank: &[u8], seat: &[u8]) -> Result<Vec<u8>, SeatError>;
     fn fix_header_checksum(&self, file: &mut [u8]) -> bool;
 }

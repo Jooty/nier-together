@@ -37,6 +37,10 @@ impl GameSaves for ReplicantSaves {
         story_progress::seat_bytes_of(file, slot).map_err(seat_error_of)
     }
 
+    fn seat_with_name(&self, seat: &[u8], name: &str) -> Option<Vec<u8>> {
+        story_progress::seat_with_player_name(seat, name)
+    }
+
     fn session_file_with_seat(&self, blank: &[u8], seat: &[u8]) -> Result<Vec<u8>, SeatError> {
         story_progress::session_file_with_seat(blank, seat).map_err(seat_error_of)
     }
