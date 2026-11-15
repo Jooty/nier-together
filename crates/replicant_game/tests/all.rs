@@ -285,6 +285,8 @@ mod radio_pause;
 mod radio_waits;
 #[path = "readiness.rs"]
 mod readiness;
+#[path = "red_bag_gather.rs"]
+mod red_bag_gather;
 #[path = "relay_call_gate.rs"]
 mod relay_call_gate;
 #[path = "relayed_scenes.rs"]

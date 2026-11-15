@@ -2,7 +2,7 @@ use crate::callback_gate::GATED_CALLBACK_NAMES;
 use crate::own_ride::is_the_riders_own;
 use crate::story_calls::{
     LOCAL_SCENE_NAME_PARTS_LOWERCASE, LOCAL_SCENE_NAME_PREFIXES, LOCAL_SCENE_NAMES,
-    is_event_callback_name, is_own_body_callback_name,
+    TALK_CALLS_THAT_GATHER_THE_PARTNER, is_event_callback_name, is_own_body_callback_name,
 };
 
 /// Who a scripted call or event callback belongs to when two players share a story.
@@ -22,7 +22,10 @@ impl SceneScope {
         if is_own_body_callback_name(name) || is_the_riders_own(name) {
             return Self::LocalScene;
         }
-        if is_event_callback_name(name) || GATED_CALLBACK_NAMES.contains(&name) {
+        if is_event_callback_name(name)
+            || GATED_CALLBACK_NAMES.contains(&name)
+            || TALK_CALLS_THAT_GATHER_THE_PARTNER.contains(&name)
+        {
             return Self::SharedScene;
         }
         let lowered = name.to_ascii_lowercase();
