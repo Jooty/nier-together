@@ -9,6 +9,13 @@ pub enum StretchEnd {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StretchPlace {
+    NotInOne,
+    InsideIt,
+    ItsLastStep,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StretchChange {
     Armed(&'static HostLedStretch),
     Disarmed(&'static HostLedStretch, StretchEnd),
@@ -22,6 +29,7 @@ pub enum StretchChange {
 pub struct HostLedStretchState {
     armed: Option<(&'static HostLedStretch, u64)>,
     on: Option<(&'static HostLedStretch, u64)>,
+    ended_at_its_last_step: Option<&'static HostLedStretch>,
 }
 
 impl HostLedStretchState {
@@ -29,6 +37,7 @@ impl HostLedStretchState {
         Self {
             armed: None,
             on: None,
+            ended_at_its_last_step: None,
         }
     }
 
@@ -38,6 +47,21 @@ impl HostLedStretchState {
 
     pub fn armed(&self) -> Option<&'static HostLedStretch> {
         self.armed.map(|(stretch, _)| stretch)
+    }
+
+    /// Where the host's End `step` falls: inside the stretch the guest watches now, its last
+    /// step (the stretch just ended there), or neither.
+    pub fn place_of_end(&self, step: &str) -> StretchPlace {
+        if let Some((stretch, _)) = self.on {
+            if stretch.last_step == step {
+                return StretchPlace::ItsLastStep;
+            }
+            return StretchPlace::InsideIt;
+        }
+        match self.ended_at_its_last_step {
+            Some(stretch) if stretch.last_step == step => StretchPlace::ItsLastStep,
+            _ => StretchPlace::NotInOne,
+        }
     }
 
     pub fn door_ban(&self) -> Option<&'static HostLedStretch> {
@@ -51,6 +75,7 @@ impl HostLedStretchState {
         if let Some((stretch, _)) = self.on {
             if stretch.last_pack == pack && stretch.last_step == step {
                 self.on = None;
+                self.ended_at_its_last_step = Some(stretch);
                 return Some(StretchChange::Ended(stretch, StretchEnd::LastStep));
             }
             return None;
@@ -65,6 +90,7 @@ impl HostLedStretchState {
         }
         self.armed = None;
         self.on = Some((stretch, now_ms));
+        self.ended_at_its_last_step = None;
         Some(StretchChange::Started(stretch))
     }
 
@@ -85,6 +111,7 @@ impl HostLedStretchState {
     }
 
     pub fn end_with_the_session(&mut self) -> Option<StretchChange> {
+        self.ended_at_its_last_step = None;
         if let Some((stretch, _)) = self.on.take() {
             self.armed = None;
             return Some(StretchChange::Ended(stretch, StretchEnd::SessionOver));

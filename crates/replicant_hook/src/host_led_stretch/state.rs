@@ -3,7 +3,8 @@ use std::sync::{Mutex, PoisonError};
 use replicant_game::Replicant;
 use replicant_game::host_led_stretch::{
     GUEST_REFUSED_DOOR_CALLBACK_PREFIX, HostLedStretch, HostLedStretchState, StretchChange,
-    armed_line, disarmed_line, ended_line, started_line,
+    StretchPlace, armed_line, disarmed_line, ended_line, started_line,
+    stretch_the_guest_waits_to_start,
 };
 use replicant_game::shared_events::phase_name;
 use replicant_game::stay_together::FollowRole;
@@ -40,6 +41,12 @@ pub(crate) fn note_own_step(name: &str, the_gate_sends_it: bool) {
         return;
     };
     report(change, true, name);
+    // The step's own fade out runs before the next tick would arm the fade sync.
+    match change {
+        StretchChange::Started(_) => crate::fade_sync::arm_host_led_stretch(true),
+        StretchChange::Ended(..) => crate::fade_sync::arm_host_led_stretch(false),
+        StretchChange::Armed(_) | StretchChange::Disarmed(..) => {}
+    }
     // The callback gate never sends a talk the host started, so its start goes from here.
     if let StretchChange::Started(_) = change
         && !the_gate_sends_it
@@ -124,6 +131,38 @@ pub(crate) fn guest_watches_a_stretch() -> bool {
             .unwrap_or_else(PoisonError::into_inner)
             .current()
             .is_some()
+}
+
+pub(crate) fn place_of_hosts_end(name: &str) -> StretchPlace {
+    if !is_the_guest() {
+        return StretchPlace::NotInOne;
+    }
+    STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .place_of_end(name)
+}
+
+pub(crate) fn first_step_the_guest_leaves_to_the_host(
+    callback: &str,
+) -> Option<&'static HostLedStretch> {
+    let net = net::handle()?;
+    let view = net.view();
+    if FollowRole::from_slot(view.local_slot) != FollowRole::Guest
+        || view.state != NetState::Connected
+    {
+        return None;
+    }
+    let pack = phase_name(view.local.as_ref()?.phase)?;
+    let stretch_on = STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .current()
+        .is_some();
+    if stretch_on {
+        return None;
+    }
+    stretch_the_guest_waits_to_start(pack, callback)
 }
 
 pub(crate) fn guest_door_ban(callback: &str) -> Option<&'static HostLedStretch> {

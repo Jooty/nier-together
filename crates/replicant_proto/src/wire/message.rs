@@ -20,9 +20,9 @@ use crate::wire::{
     PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage, ScriptRoll, SeatPart, SeatReceipt,
     SessionOptions, SharedFunctionRan, ShotCue, SkipPromptAnswer, SkipPromptVerdict, SkyAssets,
     SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges, StoryDigest,
-    StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TeleportHere, TutorialPrompt,
-    VoiceCharacter, WallBroken, WireError, WorldEffectMove, WorldEffectPlay, WorldObjectBroken,
-    WorldObjectMoved,
+    StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize, TeleportHere,
+    TutorialPrompt, VoiceCharacter, WallBroken, WireError, WorldEffectMove, WorldEffectPlay,
+    WorldObjectBroken, WorldObjectMoved,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -153,6 +153,7 @@ pub enum Message {
     WorldObjectMoved(WorldObjectMoved),
     WorldObjectBroken(WorldObjectBroken),
     GuestWatches(GuestWatches),
+    TalkWindowSize(TalkWindowSize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,6 +291,7 @@ impl Message {
             Message::WorldObjectMoved(_) => "WorldObjectMoved",
             Message::WorldObjectBroken(_) => "WorldObjectBroken",
             Message::GuestWatches(_) => "GuestWatches",
+            Message::TalkWindowSize(_) => "TalkWindowSize",
         }
     }
 
@@ -419,6 +421,7 @@ impl Message {
                 | Message::WorldObjectMoved(_)
                 | Message::WorldObjectBroken(_)
                 | Message::GuestWatches(_)
+                | Message::TalkWindowSize(_)
         )
     }
 
@@ -529,9 +532,10 @@ impl Message {
             Message::MemberPings(pings) => validate_member_pings(pings),
             Message::CampaignCard(card) => card.validate(),
             Message::SeatPart(part) => part.validate(),
-            Message::SeatReceipt(_) | Message::GameSaved { .. } | Message::GuestWatches(_) => {
-                Ok(())
-            }
+            Message::SeatReceipt(_)
+            | Message::GameSaved { .. }
+            | Message::GuestWatches(_)
+            | Message::TalkWindowSize(_) => Ok(()),
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),

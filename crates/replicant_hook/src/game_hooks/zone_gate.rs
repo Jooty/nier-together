@@ -6,7 +6,10 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
-use replicant_game::host_led_stretch::{GUEST_DOOR_REFUSED_TEXT, door_refused_line};
+use replicant_game::host_led_stretch::{
+    GUEST_DOOR_REFUSED_TEXT, GUEST_WAITS_FOR_THE_HOSTS_TALK_TEXT, door_refused_line,
+    first_step_refused_line,
+};
 use replicant_game::lift_rides::warp_pick_origin;
 use replicant_game::offsets::{
     CHANGE_MAP_NATIVE_FUNCTION_RVA, CHANGE_PHASE_NATIVE_FUNCTION_RVA,
@@ -204,6 +207,9 @@ fn judge_popped_callback(
     if !queued_by_the_mod && refuse_the_guest_a_door(&name) {
         return 0;
     }
+    if !queued_by_the_mod && leave_the_stretch_start_to_the_host(&name) {
+        return 0;
+    }
     if crate::cutscene_skip::hold_fired_callback(&name) {
         return 0;
     }
@@ -234,6 +240,16 @@ fn refuse_the_guest_a_door(name: &str) -> bool {
     };
     log_line(&door_refused_line(stretch, name));
     post_event(GUEST_DOOR_REFUSED_TEXT);
+    true
+}
+
+fn leave_the_stretch_start_to_the_host(name: &str) -> bool {
+    let Some(stretch) = crate::host_led_stretch::first_step_the_guest_leaves_to_the_host(name)
+    else {
+        return false;
+    };
+    log_line(&first_step_refused_line(stretch));
+    post_event(GUEST_WAITS_FOR_THE_HOSTS_TALK_TEXT);
     true
 }
 

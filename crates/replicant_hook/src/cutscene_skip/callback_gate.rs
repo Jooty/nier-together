@@ -6,8 +6,8 @@ use replicant_game::callback_gate::{
     CALLBACK_GATE_HOST_GRACE_MS, CallbackGate, EndArrival, EndFollow, EndQueue, GateRole, GateStep,
     LocalFire, MaskIdleTimer, ParkedCall, PartnerFire, PartnerStartedCopies, PlayedStart,
     QueueEvent, RanEnds, RelayedScenesPlayed, Released, TALK_START_AFTER_COMMAND_MS,
-    control_slots_free, end_follow, event_base, is_end_callback, is_event_talk, is_gated_callback,
-    slots_an_end_waits_on,
+    control_slots_free, end_follow_around_a_stretch, event_base, is_end_callback, is_event_talk,
+    is_gated_callback, slots_an_end_waits_on,
 };
 use replicant_game::marker::{CONTROL_MASK_FIRST_RVA, read_world_flags};
 use replicant_game::message_handlers::HandlerFire;
@@ -362,7 +362,7 @@ fn partner_end_verdict(
             .unwrap_or_else(PoisonError::into_inner)
             .contains(name, phase),
     };
-    end_follow(&arrival)
+    end_follow_around_a_stretch(&arrival, crate::host_led_stretch::place_of_hosts_end(name))
 }
 
 pub(crate) fn control_slots_free_now(build: &VerifiedBuild) -> bool {

@@ -6,6 +6,7 @@ mod partner_copies;
 mod ran_ends;
 mod relayed_scenes;
 mod scene_pull;
+mod stretch_end;
 
 pub use end_follow::{
     EndArrival, EndDrop, EndFollow, MaskIdleTimer, PendingEnd, WaitStep, control_slots_free,
@@ -18,6 +19,7 @@ pub use partner_copies::{PartnerStartedCopies, event_base, event_family};
 pub use ran_ends::RanEnds;
 pub use relayed_scenes::{PlayedStart, RelayedScenesPlayed, scene_base, start_base};
 pub use scene_pull::{ScenePull, ScenePullFacts, ScenePullSkip, scene_pull};
+pub use stretch_end::end_follow_around_a_stretch;
 
 pub const GATED_CALLBACK_NAMES: [&str; 1] = ["Boss_Battle_Start"];
 pub const GATED_EVENT_SUFFIX: &str = "_Start";

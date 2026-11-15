@@ -393,6 +393,8 @@ mod ui_scenes;
 mod view_list;
 #[path = "voice_character.rs"]
 mod voice_character;
+#[path = "watch_talks.rs"]
+mod watch_talks;
 #[path = "watching_guest_rules.rs"]
 mod watching_guest_rules;
 #[path = "world_effects.rs"]
