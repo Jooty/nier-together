@@ -73,6 +73,8 @@ mod door_sync;
 mod downed;
 #[path = "downed_while_watching.rs"]
 mod downed_while_watching;
+#[path = "dream_screen.rs"]
+mod dream_screen;
 #[path = "dropped_ride_step.rs"]
 mod dropped_ride_step;
 #[path = "dummy_hits.rs"]

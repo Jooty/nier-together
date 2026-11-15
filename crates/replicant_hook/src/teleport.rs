@@ -6,7 +6,8 @@ mod status;
 mod verify;
 
 pub(crate) use door_steps::{
-    door_action_for_a_move_here, door_steps_can_run, note_mod_area_change, run_door_action,
+    door_action_for_a_move_here, door_steps_can_run, note_mod_area_change, note_scene_callback,
+    run_door_action,
 };
 pub(crate) use mod_move::{mod_moved_the_player_just_now, note_mod_move};
 pub(crate) use native_move::{move_player_facing, move_player_with_native};

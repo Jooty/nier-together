@@ -55,5 +55,8 @@ pub(super) fn observe() {
 }
 
 pub(super) fn note_callback(name: &str) {
+    if let Some(build) = HOOKED_BUILD.get() {
+        crate::teleport::note_scene_callback(build, name);
+    }
     name.clone_into(&mut LAST_CALLBACK.lock().unwrap_or_else(PoisonError::into_inner));
 }

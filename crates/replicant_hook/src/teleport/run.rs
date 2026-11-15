@@ -29,7 +29,7 @@ use crate::stay_together::{
 };
 use crate::teleport::door_steps::{
     door_action_for_a_move_here, door_steps_are_running, door_steps_can_run, run_door_action,
-    tick_indoor_arrival,
+    tick_indoor_arrival, tick_scene_arrival,
 };
 use crate::teleport::move_player_with_native;
 use crate::teleport::status::{host_can_teleport, remember_outcome};
@@ -41,6 +41,7 @@ static PULL_ARRIVAL: Mutex<PullArrival> = Mutex::new(PullArrival::new());
 
 pub(crate) fn tick(build: &VerifiedBuild) {
     tick_indoor_arrival(build);
+    tick_scene_arrival(build);
     let Some(net) = net::handle() else {
         return;
     };

@@ -608,6 +608,9 @@ fn decide(name: &str, announce_when_alone: bool) -> bool {
             log_line(&format!(
                 "callback follow: you fired {name}, sent to the guest"
             ));
+            if !partner_place.is_same() && is_event_callback_name(name) {
+                crate::fade_sync::arm_host_scene_start();
+            }
             announce();
         }
         (GateRole::Guest, LocalFire::Hold) => {
