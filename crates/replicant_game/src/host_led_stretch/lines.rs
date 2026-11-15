@@ -47,6 +47,25 @@ pub fn door_refused_line(stretch: &HostLedStretch, door: &str) -> String {
     )
 }
 
+pub fn first_step_refused_line(stretch: &HostLedStretch) -> String {
+    format!(
+        "host-led stretch: your game reached {} in {} first, it is not run here; it waits for the host's, which you then watch to {}",
+        stretch.first_step, stretch.pack, stretch.last_step
+    )
+}
+
+pub fn window_size_sent_line(size: i32, first_step: &str) -> String {
+    format!(
+        "host-led stretch: your script set the talk window size {size}, sent to the guest (the stretch started by {first_step})"
+    )
+}
+
+pub fn window_size_mirrored_line(size: i32) -> String {
+    format!(
+        "host-led stretch: the host's script set the talk window size {size}, set here too so the host's talks show as on the host"
+    )
+}
+
 pub fn host_run_not_replayed_line(stretch: &HostLedStretch, function: &str) -> String {
     format!(
         "host-led stretch: the host's {function} is not replayed here, you watch the host to {}",

@@ -68,6 +68,7 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
         follow_now_ms,
     );
     crate::dialogue::choice_hover::receive_partner_hovers(net);
+    crate::dialogue::talk_window_size::take_hosts_window_sizes(build, net);
     receive_partner_lines(net);
     crate::dialogue::choice_hover::partner_moved_to(
         PARTNER_TALK

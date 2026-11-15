@@ -816,6 +816,7 @@ fn samples() -> Vec<Message> {
             key: world_object_key(),
         }),
         Message::GuestWatches(GuestWatches { watching: true }),
+        Message::TalkWindowSize(TalkWindowSize { size: 9 }),
     ]
 }
 
@@ -833,7 +834,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 75);
+    assert_eq!(PROTOCOL_VERSION, 76);
 }
 
 #[test]

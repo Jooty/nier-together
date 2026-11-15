@@ -3,6 +3,7 @@ mod choices;
 mod hooks;
 mod set_talk;
 mod tags;
+mod talk_window_size;
 mod talker_name;
 mod tick;
 mod watcher_hold;

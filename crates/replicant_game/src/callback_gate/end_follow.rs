@@ -26,6 +26,7 @@ pub enum EndDrop {
     OwnTalkOpen,
     ControlMaskBusy,
     AlreadyRanHere,
+    HostLeadsTheStretch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +55,9 @@ impl EndDrop {
             Self::OwnTalkOpen => "your game is in its own talk",
             Self::ControlMaskBusy => "your controls are not free yet",
             Self::AlreadyRanHere => "your game ran it already",
+            Self::HostLeadsTheStretch => {
+                "you watch the host's stretch of the story, the host's game runs its steps"
+            }
         }
     }
 

@@ -14,10 +14,11 @@ pub struct HostLedStretch {
     pub armed_by: Option<&'static str>,
     pub refuses_guest_doors: bool,
     pub guest_is_not_taken_along: bool,
+    pub guest_waits_for_the_hosts_first_step: bool,
     pub ends_itself_after_ms: u64,
 }
 
-pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
+pub static HOST_LED_STRETCHES: [HostLedStretch; 4] = [
     HostLedStretch {
         pack: "A_CENTER_VILLAGE_01",
         first_step: "EID_1500_a0005_010_01_Start",
@@ -26,6 +27,7 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         armed_by: None,
         refuses_guest_doors: false,
         guest_is_not_taken_along: false,
+        guest_waits_for_the_hosts_first_step: false,
         ends_itself_after_ms: HOST_LED_STRETCH_ENDS_ITSELF_AFTER_MS,
     },
     HostLedStretch {
@@ -36,6 +38,7 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         armed_by: None,
         refuses_guest_doors: false,
         guest_is_not_taken_along: false,
+        guest_waits_for_the_hosts_first_step: true,
         ends_itself_after_ms: HOST_LED_STRETCH_ENDS_ITSELF_AFTER_MS,
     },
     HostLedStretch {
@@ -46,7 +49,19 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         armed_by: Some("ScriptMode_to_Kaine_03_04"),
         refuses_guest_doors: true,
         guest_is_not_taken_along: true,
+        guest_waits_for_the_hosts_first_step: false,
         ends_itself_after_ms: HOST_LED_LONG_STRETCH_ENDS_ITSELF_AFTER_MS,
+    },
+    HostLedStretch {
+        pack: "A_SEASIDE_TOWN_01",
+        first_step: "EID_9300_a0050_0010_Start",
+        last_pack: "A_SEASIDE_TOWN_01",
+        last_step: "EID_9300_a0050_0240_End",
+        armed_by: None,
+        refuses_guest_doors: false,
+        guest_is_not_taken_along: false,
+        guest_waits_for_the_hosts_first_step: true,
+        ends_itself_after_ms: HOST_LED_STRETCH_ENDS_ITSELF_AFTER_MS,
     },
 ];
 
@@ -54,6 +69,10 @@ pub fn stretch_starting_at(pack: &str, step: &str) -> Option<&'static HostLedStr
     HOST_LED_STRETCHES
         .iter()
         .find(|stretch| stretch.pack == pack && stretch.first_step == step)
+}
+
+pub fn stretch_the_guest_waits_to_start(pack: &str, step: &str) -> Option<&'static HostLedStretch> {
+    stretch_starting_at(pack, step).filter(|stretch| stretch.guest_waits_for_the_hosts_first_step)
 }
 
 pub fn stretch_armed_by(pack: &str, step: &str) -> Option<&'static HostLedStretch> {
