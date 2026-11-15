@@ -564,6 +564,7 @@ fn share_own_talk(
     let current = tracker.current_line();
     drop(tracker);
     let mut origin = TALK_ORIGIN.lock().unwrap_or_else(PoisonError::into_inner);
+    origin.set_host_led_stretch(crate::host_led_stretch::hosts_stretch_first_step());
     if let Some((call, at_ms)) = crate::game_hooks::last_pop() {
         origin.note_popped_call(&call, at_ms);
     }

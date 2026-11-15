@@ -7,8 +7,8 @@ use replicant_game::rule_rooms::BreakerBodyHold;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_watch::{
     GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_LINE_EVERY_MS, WatchEnd,
-    WatchFacts, WatchStep, camera_line, ended_line, started_line, watch_hold_line,
-    watch_let_go_line, watching_host_text,
+    WatchFacts, WatchStep, camera_line, ended_line, started_line, stretch_started_line,
+    watch_hold_line, watch_let_go_line, watching_host_text,
 };
 use replicant_proto::{GuestWatches, Message};
 
@@ -66,6 +66,7 @@ pub(crate) fn this_game_is_watching() -> bool {
 }
 
 pub(crate) fn tick_story_watch(build: &VerifiedBuild) {
+    crate::host_led_stretch::tick(build);
     if let Some(change) = step_removal() {
         log_line(match change {
             RemovalChange::TakenOut => {
@@ -129,10 +130,15 @@ fn tick_guest(
         setting_on: guest_watches_setting(),
         guest_in_session: in_session,
         story_has_taken_her: story_has_taken_her(),
+        host_leads_a_stretch: crate::host_led_stretch::guest_watches_a_stretch(),
         pack: &pack,
     };
     let host = host_name.unwrap_or("the host");
     match guest.watch.step(&facts) {
+        WatchStep::Started if guest.watch.for_a_stretch() => {
+            log_line(&stretch_started_line(host, &pack));
+            guest.controls_locked_in = None;
+        }
         WatchStep::Started => {
             log_line(&started_line(host, &pack));
             guest.controls_locked_in = None;
@@ -202,6 +208,7 @@ fn end_without_session(build: &VerifiedBuild) {
         setting_on: guest_watches_setting(),
         guest_in_session: false,
         story_has_taken_her: false,
+        host_leads_a_stretch: false,
         pack: "",
     };
     if let WatchStep::Ended(end) = guest.watch.step(&facts) {

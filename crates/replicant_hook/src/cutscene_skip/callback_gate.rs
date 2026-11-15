@@ -174,6 +174,7 @@ pub fn hold_fired_callback(name: &str) -> bool {
     }
     if is_end_callback(name) {
         let _ = panic::catch_unwind(|| announce_end(name));
+        let _ = panic::catch_unwind(|| crate::host_led_stretch::note_own_step(name, true));
         return false;
     }
     if !is_gated_callback(name) {
@@ -183,7 +184,12 @@ pub fn hold_fired_callback(name: &str) -> bool {
         return false;
     }
     let after_talk_command = is_event_callback_name(name) && take_recent_talk_command();
-    match start_path(current_phase_name().as_deref(), name, after_talk_command) {
+    let path = start_path(current_phase_name().as_deref(), name, after_talk_command);
+    let the_gate_sends_it = matches!(path, StartPath::SharedEvent | StartPath::Cutscene);
+    let _ = panic::catch_unwind(|| {
+        crate::host_led_stretch::note_own_step(name, the_gate_sends_it);
+    });
+    match path {
         StartPath::YourTalk => decide_talk(name, true),
         StartPath::SceneTalk => decide_talk(name, false),
         StartPath::SharedEvent => panic::catch_unwind(|| decide_shared(name)).unwrap_or(false),
@@ -679,17 +685,21 @@ pub(super) fn clear_per_phase_sets_after_a_load() {
 
 pub(super) fn tick(build: &VerifiedBuild, net: &NetThread, view: &NetShared) {
     clear_per_phase_sets_after_a_load();
-    let (ends, received): (Vec<Message>, Vec<Message>) = net
-        .take_relayed(|message| {
-            matches!(
-                message,
-                Message::CallbackFired(_)
-                    | Message::SharedFunctionRan(_)
-                    | Message::MessageHandlerRan(_)
-            )
-        })
-        .into_iter()
-        .partition(|message| match message {
+    let taken = net.take_relayed(|message| {
+        matches!(
+            message,
+            Message::CallbackFired(_)
+                | Message::SharedFunctionRan(_)
+                | Message::MessageHandlerRan(_)
+        )
+    });
+    for message in &taken {
+        if let Message::CallbackFired(fired) = message {
+            crate::host_led_stretch::note_hosts_step(fired.phase, &fired.name);
+        }
+    }
+    let (ends, received): (Vec<Message>, Vec<Message>) =
+        taken.into_iter().partition(|message| match message {
             Message::CallbackFired(fired) => is_end_callback(&fired.name),
             _ => true,
         });

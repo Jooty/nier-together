@@ -7,6 +7,13 @@ pub fn started_line(host_name: &str, pack: &str) -> String {
     )
 }
 
+pub fn stretch_started_line(host_name: &str, pack: &str) -> String {
+    format!(
+        "watching: {host_name} leads a stretch of the story; this game's body is hidden, locked and \
+         kept at {host_name}'s body in {pack}, the screen shows the host's talks and fades"
+    )
+}
+
 pub fn ended_line(end: WatchEnd) -> String {
     let why = match end {
         WatchEnd::StoryBroughtHerBack => {
@@ -15,6 +22,7 @@ pub fn ended_line(end: WatchEnd) -> String {
         WatchEnd::LeftTheSession => "the session is over",
         WatchEnd::SettingOff => "guest_watches_when_the_story_takes_her is off",
         WatchEnd::PackIsOneWhereTheGuestPlays => "this pack is one where the guest plays",
+        WatchEnd::HostLedStretchOver => "the host-led stretch is over",
     };
     format!("watching: ended, {why}; this game's body is shown and free again at the host's place")
 }

@@ -105,7 +105,9 @@ pub fn tick(build: &VerifiedBuild) {
             guest.mirrored_fade_in(now_ms());
         }
     }
-    if guest.backstop_due(now_ms())
+    let black_held_for_the_stretch = crate::host_led_stretch::guest_watches_a_stretch();
+    if !black_held_for_the_stretch
+        && guest.backstop_due(now_ms())
         && call_fade(
             false,
             BACKSTOP_FADE_IN_KIND,

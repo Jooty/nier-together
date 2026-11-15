@@ -44,6 +44,13 @@ pub fn arm_host_scene_start() {
         .arm_for_scene_start(now_ms());
 }
 
+pub fn arm_host_led_stretch(on: bool) {
+    HOST_SYNC
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .set_host_led_stretch(on);
+}
+
 pub(super) fn call_fade(fading_out: bool, kind: i32, seconds: f32, depth: u32) -> bool {
     let original = if fading_out {
         ORIGINAL_FADE_OUT.load(Ordering::Acquire)
