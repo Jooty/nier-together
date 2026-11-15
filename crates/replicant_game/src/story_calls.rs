@@ -16,6 +16,7 @@ pub use table::STORY_CALL_TABLE;
 
 pub const LIBRARY_PACK_HASH: u64 = 0x7588_BE80_E701_6100;
 pub const SAME_PLACE_RANGE_UNITS: f32 = 30.0;
+pub const TALK_CALLS_THAT_GATHER_THE_PARTNER: [&str; 1] = ["Red_Bag_Get"];
 pub const LOCAL_SCENE_NAMES: [&str; 3] =
     ["PlayerActionDoor", "PlayerCloseDoor", "Reset_Camera_Flag"];
 pub const LOCAL_SCENE_NAME_PREFIXES: [&str; 16] = [
