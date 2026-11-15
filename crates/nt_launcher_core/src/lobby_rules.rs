@@ -11,6 +11,7 @@ mod own_seat_name;
 mod player_status;
 mod roster;
 mod session_end;
+mod start_button;
 mod start_rule;
 mod ticket_check;
 
@@ -29,5 +30,6 @@ pub use roster::{ROSTER_COLUMN_SEATS, Roster, RosterSeat, roster};
 pub use session_end::{
     AfterSessionEnd, SessionEndCause, SessionEndSide, after_session_end, session_end_log_line,
 };
+pub use start_button::{StartButton, start_button};
 pub use start_rule::{StartInputs, start_allowed};
 pub use ticket_check::ticket_check;

@@ -9,7 +9,6 @@ use crate::lobby::body_label;
 use crate::saves::play_time_short;
 
 const CAMPAIGN_HEADING: &str = "Campaign";
-const CAMPAIGN_NOTE: &str = "Kept by the host";
 const HEADING_TO_LINES_GAP_PX: f32 = 10.0;
 const LINES_TO_NOTE_GAP_PX: f32 = 8.0;
 const WAITING_FOR_CARD: &str = "Waiting for the host to pick a save";
@@ -19,10 +18,9 @@ const OWN_BODY_LABEL: &str = "Your character";
 const NO_SEAT_YET: &str = "None yet";
 const SEAT_KEPT_NOTE: &str =
     "The host keeps this save. It is sent to you at the start and back after every save.";
-const NO_SEAT_NOTE: &str = "You continue your own latest co-op save this time.";
 
 pub(super) fn draw_campaign_card(ui: &mut Ui, launcher: &Launcher) {
-    section_heading(ui, CAMPAIGN_HEADING, Some(CAMPAIGN_NOTE));
+    section_heading(ui, CAMPAIGN_HEADING, None);
     ui.add_space(HEADING_TO_LINES_GAP_PX);
     let ink = (INK, INK);
     let Some(card) = launcher.campaign_card() else {
@@ -42,7 +40,7 @@ pub(super) fn draw_campaign_card(ui: &mut Ui, launcher: &Launcher) {
         ValueLettering::Body,
         ink,
     );
-    let note = match &card.second_seat {
+    match &card.second_seat {
         Some(seat) => {
             value_line(
                 ui,
@@ -58,7 +56,15 @@ pub(super) fn draw_campaign_card(ui: &mut Ui, launcher: &Launcher) {
                 ValueLettering::Body,
                 ink,
             );
-            SEAT_KEPT_NOTE
+            ui.add_space(LINES_TO_NOTE_GAP_PX);
+            ui.add(
+                Label::new(
+                    RichText::new(SEAT_KEPT_NOTE)
+                        .font(small_font())
+                        .color(INK_MUTED),
+                )
+                .wrap(),
+            );
         }
         None => {
             value_line(
@@ -68,11 +74,8 @@ pub(super) fn draw_campaign_card(ui: &mut Ui, launcher: &Launcher) {
                 ValueLettering::Body,
                 (INK, INK_MUTED),
             );
-            NO_SEAT_NOTE
         }
-    };
-    ui.add_space(LINES_TO_NOTE_GAP_PX);
-    ui.add(Label::new(RichText::new(note).font(small_font()).color(INK_MUTED)).wrap());
+    }
 }
 
 fn save_text(summary: &SaveSummary) -> String {

@@ -1,7 +1,8 @@
 use nt_launcher_core::{
     AUTOMATA, CO_OP_CAMPAIGN, FREE_ROAM, FREE_ROAM_MODE, GameMode, LobbyOption, PlayerStatus,
-    REPLICANT, RosterSeat, SessionOptions, StartInputs, characters_shareable, current_mode,
-    lobby_permissions, option_available, remove_offered, roster, rules_for_mode, start_allowed,
+    REPLICANT, RosterSeat, SessionOptions, StartButton, StartInputs, characters_shareable,
+    current_mode, lobby_permissions, option_available, remove_offered, roster, rules_for_mode,
+    start_allowed, start_button,
 };
 
 const UNKNOWN_MODE: u8 = 200;
@@ -178,4 +179,22 @@ fn two_players_may_share_a_character_outside_the_campaign() {
         &AUTOMATA,
         rules_for_mode(&AUTOMATA, FREE_ROAM_MODE).expect("free roam")
     ));
+}
+
+#[test]
+fn the_host_always_sees_start() {
+    assert_eq!(start_button(false, false), StartButton::Start);
+    assert_eq!(StartButton::Start.label(), "Start");
+}
+
+#[test]
+fn a_guest_sees_waiting_for_host() {
+    assert_eq!(start_button(true, false), StartButton::WaitingForHost);
+    assert_eq!(StartButton::WaitingForHost.label(), "Waiting for host");
+}
+
+#[test]
+fn a_guest_whose_game_closed_sees_rejoin() {
+    assert_eq!(start_button(true, true), StartButton::Rejoin);
+    assert_eq!(StartButton::Rejoin.label(), "Rejoin");
 }
