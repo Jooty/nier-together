@@ -53,6 +53,11 @@ pub(crate) fn tick(build: &VerifiedBuild) {
     };
     for message in net.take_relayed(wanted) {
         match message {
+            Message::TeleportHere(_)
+                if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() =>
+            {
+                log_line("teleport: the host's pull is not followed, you watch the host");
+            }
             Message::TeleportHere(here) => offer_pull(build, here),
             Message::GatherForScene(gather) => gather_for_scene(build, gather),
             _ => {}
@@ -69,6 +74,12 @@ pub(crate) fn bring_guest_along(
     to: [f32; 3],
     partner_away: f32,
 ) {
+    if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() {
+        log_line(
+            "teleport: a script moved the host, the guest is not brought along while it watches",
+        );
+        return;
+    }
     match send_host_position(build) {
         Ok(()) => log_line(&format!(
             "teleport: a script moved the host ({:.1}, {:.1}, {:.1} -> {:.1}, {:.1}, {:.1}), brought the guest along (partner was {partner_away:.0} away)",
@@ -121,6 +132,9 @@ fn apply_held_pull(build: &VerifiedBuild) {
 }
 
 pub(crate) fn bring_guest_here(build: &VerifiedBuild) -> Result<(), String> {
+    if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() {
+        return Err("the guest is not brought along while it watches".to_owned());
+    }
     let result = send_host_position(build);
     report(&result, "teleport: asked the guest to come to the host");
     result

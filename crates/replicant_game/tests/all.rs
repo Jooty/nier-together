@@ -2,6 +2,8 @@ mod fake_memory;
 
 #[path = "actor_model.rs"]
 mod actor_model;
+#[path = "armed_host_led_stretch.rs"]
+mod armed_host_led_stretch;
 #[path = "arrival.rs"]
 mod arrival;
 #[path = "arrive_in_state.rs"]

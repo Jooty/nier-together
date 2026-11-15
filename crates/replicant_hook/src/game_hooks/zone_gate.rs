@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
+use replicant_game::host_led_stretch::{GUEST_DOOR_REFUSED_TEXT, door_refused_line};
 use replicant_game::lift_rides::warp_pick_origin;
 use replicant_game::offsets::{
     CHANGE_MAP_NATIVE_FUNCTION_RVA, CHANGE_PHASE_NATIVE_FUNCTION_RVA,
@@ -18,6 +19,7 @@ use replicant_game::zone_rules::{ZoneChangeSource, is_zone_exit_callback};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::event_log::post_event;
 use crate::fight_sync::FightPop;
 use crate::game_hooks::door_walk::take_recent_door_use;
 use crate::game_hooks::script_runner_log;
@@ -199,6 +201,9 @@ fn judge_popped_callback(
     {
         return 0;
     }
+    if !queued_by_the_mod && refuse_the_guest_a_door(&name) {
+        return 0;
+    }
     if crate::cutscene_skip::hold_fired_callback(&name) {
         return 0;
     }
@@ -221,6 +226,15 @@ fn judge_popped_callback(
     crate::kaine::stand_in_function_ran(&name);
     crate::fight_sync::pop_ran(&name, arguments);
     fired
+}
+
+fn refuse_the_guest_a_door(name: &str) -> bool {
+    let Some(stretch) = crate::host_led_stretch::guest_door_ban(name) else {
+        return false;
+    };
+    log_line(&door_refused_line(stretch, name));
+    post_event(GUEST_DOOR_REFUSED_TEXT);
+    true
 }
 
 fn run_rule_room_call_here_only(fired: u64, name: &str) -> u64 {

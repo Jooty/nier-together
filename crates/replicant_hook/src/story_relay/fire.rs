@@ -61,6 +61,9 @@ fn decide(function_name: &str, arguments: u64, partners_copy: bool) -> bool {
         return false;
     };
     let view = net.view();
+    if !partners_copy {
+        crate::host_led_stretch::note_own_step(function_name, true);
+    }
     let game = Replicant::new(InProcessMemory::new(build));
     let phase_name = game.current_phase().ok();
     let local_phase = phase_name
