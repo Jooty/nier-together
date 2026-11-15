@@ -8,6 +8,7 @@ mod door_state;
 mod functions_that_drive_her_from_scripts;
 mod hit_power;
 mod level_in_use;
+mod missing_motion;
 mod partner_hide;
 mod reference_weapon;
 mod row_origin;
@@ -56,6 +57,11 @@ pub use hit_power::{
     weapon_factor, weapon_powered_source,
 };
 pub use level_in_use::{LevelFields, level_fields_in_use};
+pub use missing_motion::{
+    MOST_DISTINCT_MISSED_MOTION_NAMES_LOGGED, MOTION_SUFFIXES_HER_PACK_LACKS_WITH_THEIR_TWINS,
+    MissedMotionNames, PLAYER_MOTION_PACK_PREFIXES, is_player_motion_name, missed_motion_text,
+    swapped_body_motion_twin,
+};
 pub use partner_hide::{PartnerHideStep, PartnerKaineHide, partner_kaine_hidden_wanted};
 pub use reference_weapon::{ReferenceSource, ReferenceWeapon};
 pub use row_origin::RowOrigin;
