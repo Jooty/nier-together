@@ -48,6 +48,9 @@ pub enum ActorCueKind {
     StopSound {
         handle: u64,
     },
+    /// The host's statue broke: the damage dummy its stone state spawned is gone. `id` is
+    /// unused (0).
+    StoneBroken,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -90,7 +93,8 @@ impl ActorCue {
                 .all(|value| value.is_finite() && value.abs() <= MAX_BULLET_STYLE_ABS),
             ActorCueKind::RemoveEffect { .. }
             | ActorCueKind::TurnedToStone(_)
-            | ActorCueKind::StopSound { .. } => true,
+            | ActorCueKind::StopSound { .. }
+            | ActorCueKind::StoneBroken => true,
             ActorCueKind::PlaceEffect { transform } => {
                 transform.iter().enumerate().all(|(index, value)| {
                     let limit = if index % 4 == 3 {

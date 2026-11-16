@@ -30,6 +30,7 @@ pub enum ActorCueCall {
     LastingSoundById,
     StopSound,
     StoneHandler,
+    StoneBreak,
 }
 
 /// What the host knew when the game made an effect or a sound.
@@ -70,6 +71,7 @@ impl ActorCueCall {
             ActorCueKind::LastingSound { .. } => Self::LastingSoundById,
             ActorCueKind::StopSound { .. } => Self::StopSound,
             ActorCueKind::TurnedToStone(_) => Self::StoneHandler,
+            ActorCueKind::StoneBroken => Self::StoneBreak,
         }
     }
 }
@@ -203,6 +205,7 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
             "lasting sound {} of {actor} stopped (host handle {handle:#x})",
             cue.id
         ),
+        ActorCueKind::StoneBroken => format!("{actor}'s statue broke"),
         ActorCueKind::TurnedToStone(turn) => format!(
             "{actor} turned to stone by its {:?} handler (state bytes {:?})",
             turn.handler, turn.state_bytes
@@ -210,7 +213,11 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
     }
 }
 
-/// A stone turn changes the enemy's state, so the enemy sync takes it; the effects take the rest.
+/// A stone turn or break changes the enemy's state, so the enemy sync takes it; the effects
+/// take the rest.
 pub fn actor_cue_goes_to_enemy_sync(kind: &ActorCueKind) -> bool {
-    matches!(kind, ActorCueKind::TurnedToStone(_))
+    matches!(
+        kind,
+        ActorCueKind::TurnedToStone(_) | ActorCueKind::StoneBroken
+    )
 }

@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use replicant_game::GameMemory;
+use replicant_game::effects::{
+    StoneCopyStep, hold_off_off_camera_end, read_stone_state, stone_copy_step,
+};
 use replicant_game::enemies::{
     CopyStance, DAMAGE_STATE_NAME, EnemySighting, FIGHT_GUEST_ONLY_ENEMY_GRACE_MS,
     HOST_HIT_STAGGER_CHECK_WINDOW_MS, HitReaction, HostHas, HostListView, ListDiff, LocalKeep,
@@ -20,7 +23,7 @@ use replicant_proto::{
 
 use crate::boss_messages::is_boss;
 use crate::diagnostics::log_line;
-use crate::enemies::combat::{CombatState, GhostCopy};
+use crate::enemies::combat::{CombatState, GhostCopy, StonedCopy};
 use crate::enemies::combat_view::{CombatView, as_remote, as_remote_with_reaction, publish_view};
 use crate::enemies::drop_hook::drop_at_actor;
 use crate::enemies::hold_hook::{
@@ -52,6 +55,11 @@ pub(super) fn receive(combat: &mut CombatState, now_ms: u64, message: &Message) 
             kind: ActorCueKind::TurnedToStone(turn),
             ..
         }) => combat.pending_stones.push((*actor, *turn, now_ms)),
+        Message::ActorCue(ActorCue {
+            actor,
+            kind: ActorCueKind::StoneBroken,
+            ..
+        }) => combat.pending_stone_breaks.push(*actor),
         Message::EnemyDrop(drop) => combat.pending_drops.push(*drop),
         Message::EnemyWordDrop(drop) => combat.pending_word_drops.push(*drop),
         Message::EnemyBodyGone(gone) => combat.pending_body_gone.push((gone.phase, gone.id)),
@@ -134,6 +142,7 @@ pub(super) fn step(
     apply_player_hits(combat, local, now_ms, local_player);
     apply_stones(combat, local, &mut memory, now_ms, local_player);
     apply_kills(combat, local, &mut memory, now_ms, local_player, puppet);
+    step_stoned_copies(combat, local, &mut memory);
     apply_drops(combat, local, local_player);
     apply_word_drops(combat, local, local_player);
     apply_removals(combat, local);
@@ -613,6 +622,16 @@ fn apply_stones(
             .read_i32(copy + ACTOR_SPAWN_SERIAL_OFFSET)
             .unwrap_or_default();
         combat.dying_bodies.insert(copy, (id, now_ms, serial));
+        combat.stoned_copies.insert(
+            id,
+            StonedCopy {
+                copy,
+                serial,
+                handler: turn.handler,
+                host_broke: false,
+                guarded_dummy: None,
+            },
+        );
         if !paid {
             log_line(&format!(
                 "stone: no kill credit for {} (no local player)",
@@ -620,6 +639,81 @@ fn apply_stones(
             ));
         }
     }
+}
+
+fn step_stoned_copies(
+    combat: &mut CombatState,
+    local: &LocalView<'_>,
+    memory: &mut InProcessMemory,
+) {
+    for id in std::mem::take(&mut combat.pending_stone_breaks) {
+        match combat.stoned_copies.get_mut(&id) {
+            Some(stoned) => {
+                stoned.host_broke = true;
+                log_line(&format!(
+                    "stone: host's statue of {} broke; your copy breaks once its dummy is destroyed",
+                    enemy_id_text(id)
+                ));
+            }
+            None => log_line(&format!(
+                "stone: host's statue of {} broke, no stoned copy here",
+                enemy_id_text(id)
+            )),
+        }
+    }
+    let host_gone = &combat.host_gone_bodies;
+    combat.stoned_copies.retain(|id, stoned| {
+        let still_it = actor_is_live(memory, stoned.copy).unwrap_or(false)
+            && memory
+                .read_i32(stoned.copy + ACTOR_SPAWN_SERIAL_OFFSET)
+                .is_ok_and(|serial| serial == stoned.serial);
+        if !still_it {
+            return false;
+        }
+        if host_gone.contains(id) && !stoned.host_broke {
+            log_line(&format!(
+                "stone: host's statue of {} ended without a break; your copy is left to its own stone state",
+                enemy_id_text(*id)
+            ));
+            return false;
+        }
+        let view = read_stone_state(memory, stoned.copy, stoned.handler);
+        match stone_copy_step(view, stoned.host_broke) {
+            StoneCopyStep::WaitForDummy => true,
+            StoneCopyStep::HoldUntilHostBreaks { state, dummy } => {
+                hold_off_off_camera_end(memory, state);
+                if stoned.guarded_dummy != Some(dummy) {
+                    stoned.guarded_dummy = Some(dummy);
+                    let guarded = local.calls.set_survive_at_one_hp(memory, dummy, true);
+                    log_line(&format!(
+                        "stone: your copy of {}'s damage dummy {dummy:#x} stands; kept from your hits {guarded}, its off-camera end held until the host's statue breaks",
+                        enemy_id_text(*id)
+                    ));
+                }
+                true
+            }
+            StoneCopyStep::BreakNow { dummy } => {
+                local.calls.destroy(dummy);
+                log_line(&format!(
+                    "stone: your copy of {}'s damage dummy {dummy:#x} destroyed, so it breaks now as the host's did",
+                    enemy_id_text(*id)
+                ));
+                false
+            }
+            StoneCopyStep::Over => {
+                log_line(&format!(
+                    "stone: your copy of {} left its stone state ({})",
+                    enemy_id_text(*id),
+                    if view.is_some() {
+                        "its dummy went before the host's statue broke"
+                    } else {
+                        "the state ended"
+                    }
+                ));
+                false
+            }
+        }
+    });
 }
 
 fn kill_copy(

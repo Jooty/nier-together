@@ -9,11 +9,15 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
-use replicant_game::effects::{STONE_HANDLERS, actor_holds_stone, stone_handler_rva};
-use replicant_game::offsets::{
-    AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET, STONE_MESSAGE_ID, STONE_STATE_BYTES_OFFSET,
+use replicant_game::effects::{
+    STONE_HANDLERS, actor_holds_stone, host_statue_broke, read_stone_state, stone_handler_rva,
 };
-use replicant_proto::{ActorCue, ActorCueKind, Message, StoneHandler, StoneTurn};
+use replicant_game::offsets::{
+    ACTOR_SPAWN_SERIAL_OFFSET, AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET,
+    STONE_MESSAGE_ID, STONE_STATE_BYTES_OFFSET,
+};
+use replicant_game::puppet::actor_is_live;
+use replicant_proto::{ActorCue, ActorCueKind, EnemyId, Message, StoneHandler, StoneTurn};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
@@ -29,13 +33,27 @@ static ORIGINAL_HANDLERS: [AtomicPtr<c_void>; 3] = [
     AtomicPtr::new(ptr::null_mut()),
 ];
 static LOGGED_ACTORS: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
+static HOST_STATUES: Mutex<Vec<HostStatue>> = Mutex::new(Vec::new());
 
 const MAX_LOGGED_STONE_ACTORS: usize = 256;
+const MAX_WATCHED_HOST_STATUES: usize = 32;
 
 type StoneMessageHandler = unsafe extern "system" fn(*mut c_void, *mut c_void, *const u8) -> u64;
 
 #[repr(C, align(16))]
 struct MessageRecord([u8; AI_MESSAGE_RECORD_BYTES]);
+
+struct StoneBefore {
+    state_bytes: [u8; 2],
+    was_stone: bool,
+}
+
+struct HostStatue {
+    actor: u64,
+    serial: i32,
+    enemy: EnemyId,
+    handler: StoneHandler,
+}
 
 pub(super) fn install(build: VerifiedBuild) {
     if HOOKED_BUILD.set(build).is_err() {
@@ -95,6 +113,48 @@ pub(super) fn turn_copy(build: &VerifiedBuild, copy: u64, turn: StoneTurn) -> bo
     actor_holds_stone(&memory, copy, turn.handler)
 }
 
+/// On the host, each tick: a statue whose damage dummy is gone broke here, so the guest's copy
+/// is told to break too.
+pub(super) fn watch_host_statues(build: &VerifiedBuild) {
+    let broke = {
+        let mut statues = HOST_STATUES.lock().unwrap_or_else(PoisonError::into_inner);
+        if statues.is_empty() {
+            return;
+        }
+        let memory = InProcessMemory::new(build);
+        let mut broke = Vec::new();
+        statues.retain(|statue| {
+            let still_it = actor_is_live(&memory, statue.actor).unwrap_or(false)
+                && memory
+                    .read_i32(statue.actor + ACTOR_SPAWN_SERIAL_OFFSET)
+                    .is_ok_and(|serial| serial == statue.serial);
+            let view = still_it
+                .then(|| read_stone_state(&memory, statue.actor, statue.handler))
+                .flatten();
+            if host_statue_broke(view) {
+                broke.push(statue.enemy);
+            }
+            view.is_some() && !host_statue_broke(view)
+        });
+        broke
+    };
+    let Some(net) = net::handle() else {
+        return;
+    };
+    for enemy in broke {
+        let cue = ActorCue {
+            actor: enemy,
+            id: 0,
+            kind: ActorCueKind::StoneBroken,
+        };
+        net.send_relayed(Message::ActorCue(cue));
+        log_line(&format!(
+            "stone: {}'s statue broke here (its damage dummy is gone), sent to the guest",
+            enemy_id_text(enemy)
+        ));
+    }
+}
+
 fn handler_name(handler: StoneHandler) -> &'static str {
     match handler {
         StoneHandler::Leader => "EnemyLeader::StoneMessage",
@@ -145,11 +205,6 @@ fn run_handler(index: usize, global: *mut c_void, actor: *mut c_void, record: *c
         let _ = panic::catch_unwind(|| after_stone_message(handler, actor_address, before));
     }
     handled
-}
-
-struct StoneBefore {
-    state_bytes: [u8; 2],
-    was_stone: bool,
 }
 
 fn read_before(actor: u64, record: u64, handler: StoneHandler) -> Option<StoneBefore> {
@@ -207,5 +262,19 @@ fn after_stone_message(handler: StoneHandler, actor: u64, before: StoneBefore) {
     if cue.validate().is_ok() {
         net.send_relayed(Message::ActorCue(cue));
         log_line(&format!("stone: {name} turned to stone, sent to the guest"));
+        let serial = memory
+            .read_i32(actor + ACTOR_SPAWN_SERIAL_OFFSET)
+            .unwrap_or_default();
+        let mut statues = HOST_STATUES.lock().unwrap_or_else(PoisonError::into_inner);
+        statues.retain(|statue| statue.actor != actor);
+        if statues.len() >= MAX_WATCHED_HOST_STATUES {
+            statues.remove(0);
+        }
+        statues.push(HostStatue {
+            actor,
+            serial,
+            enemy: id,
+            handler,
+        });
     }
 }

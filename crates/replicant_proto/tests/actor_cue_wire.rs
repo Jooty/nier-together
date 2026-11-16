@@ -99,6 +99,10 @@ fn every_kind_round_trips_fits_a_message_and_is_relayed() {
         },
         emil_loop_sound(),
         emil_loop_sound_stop(),
+        ActorCue {
+            kind: ActorCueKind::StoneBroken,
+            ..stone
+        },
     ];
     for cue in cues {
         let message = Message::ActorCue(cue);
@@ -163,4 +167,19 @@ fn a_lasting_sound_stop_has_its_fixed_bytes() {
     let bytes = encode(&Message::ActorCue(emil_loop_sound_stop())).unwrap();
     let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(hex, "7fffff03feff03e6b503068098c1f829");
+}
+
+#[test]
+fn a_stone_break_has_its_fixed_bytes() {
+    let broken = ActorCue {
+        actor: EnemyId {
+            group: 9,
+            ordinal: 0,
+        },
+        id: 0,
+        kind: ActorCueKind::StoneBroken,
+    };
+    let bytes = encode(&Message::ActorCue(broken)).unwrap();
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    assert_eq!(hex, "7f09000007");
 }

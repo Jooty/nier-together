@@ -384,7 +384,7 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
             stop_lasting_sound(build, &cue, handle);
             return;
         }
-        (ActorCueKind::TurnedToStone(_), _) => return,
+        (ActorCueKind::TurnedToStone(_) | ActorCueKind::StoneBroken, _) => return,
         (_, None) => None,
     };
     let counter = if outcome.is_some() {

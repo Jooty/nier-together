@@ -373,6 +373,8 @@ mod sky;
 mod stay_together;
 #[path = "step_echo.rs"]
 mod step_echo;
+#[path = "stone_break.rs"]
+mod stone_break;
 #[path = "story_calls.rs"]
 mod story_calls;
 #[path = "story_jump.rs"]

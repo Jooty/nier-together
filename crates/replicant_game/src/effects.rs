@@ -12,6 +12,7 @@ mod name_tally;
 mod push;
 mod sent_effects;
 mod source;
+mod stone_dummy;
 mod voice_character;
 mod world_trail;
 
@@ -58,6 +59,10 @@ pub use source::{
     EffectSource, POWER_ACTOR_CLASSES, PowerActorClass, SoundRoute, classify_effect_source,
     is_normal_bullet, local_book_actor, local_has_book, power_actor_class, power_actor_owner,
     projectile_kind, projectile_owner, read_actor_position,
+};
+pub use stone_dummy::{
+    StoneCopyStep, StoneDummy, StoneStateView, hold_off_off_camera_end, host_statue_broke,
+    read_stone_state, stone_copy_step, stone_state_of,
 };
 pub use voice_character::{
     FirstTimeNames, VOICE_SWITCH_GROUP, VoiceCharacterSchedule, read_character_state,
