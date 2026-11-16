@@ -1,4 +1,4 @@
-use crate::callback_gate::{END_FOLLOW_EVENT_SUFFIX, END_FOLLOW_MASK_IDLE_MS};
+use crate::callback_gate::{END_FOLLOW_EVENT_SUFFIX, END_FOLLOW_MASK_IDLE_MS, EndQueue};
 use crate::coop_pause::MENU_OWN_BITS;
 use crate::dialogue::WATCHER_HOLD_MASK;
 use crate::story_calls::is_event_callback_name;
@@ -140,4 +140,8 @@ pub fn end_follow(arrival: &EndArrival) -> EndFollow {
         return EndFollow::Drop(EndDrop::ControlMaskBusy);
     }
     EndFollow::Mirror
+}
+
+pub fn own_end_is_the_copy_a_waiting_host_end_needs(name: &str, waiting_ends: &EndQueue) -> bool {
+    is_end_callback(name) && waiting_ends.contains(name)
 }

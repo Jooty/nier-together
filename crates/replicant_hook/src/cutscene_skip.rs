@@ -13,7 +13,8 @@ mod tick;
 
 pub(crate) use callback_gate::{
     control_slots_free_now, drop_start_of_a_played_scene, forget_gate_copies,
-    note_relayed_scene_played, park_partner_call, partner_calls_waiting, partner_end_waiting_for,
+    note_relayed_scene_played, own_end_is_the_copy_the_waiting_host_end_needs, park_partner_call,
+    partner_calls_waiting, partner_end_waiting_for,
 };
 pub use callback_gate::{
     end_ran_here, hold_fired_callback, latest_partner_end, note_talk_command,
