@@ -8,7 +8,7 @@ use replicant_game::dialogue::{
     TALK_UPDATE_INPUT_CONFIRM_OFFSET, TALK_UPDATE_INPUT_ENABLED_OFFSET, TALK_WINDOW_CLOSE_RVA,
     TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET,
     TALK_WINDOW_MASK_BEFORE_OPEN_OFFSET, TALK_WINDOW_OPEN_RVA, TALK_WINDOW_PAGE_OFFSET,
-    TALK_WINDOW_PLAYER_OFFSET, TALK_WINDOW_RVA, TalkWindowReading,
+    TALK_WINDOW_PLAYER_OFFSET, TALK_WINDOW_RVA, TalkWindowReading, find_talk_id,
 };
 use replicant_proto::DialogueLine;
 
@@ -64,7 +64,7 @@ pub(super) fn open_mirror(build: &VerifiedBuild, line: DialogueLine) -> bool {
         }
     }
     if line.line > 0 {
-        want_line(&memory, line, true);
+        want_line(&memory, line);
     }
     true
 }
@@ -143,20 +143,20 @@ pub(super) fn current_step(memory: &InProcessMemory) -> u16 {
 }
 
 /// Asks for the partner's line and step: the window's update presses confirm, as the partner's
-/// own presses did, until the window is there. `on_this_talk` when the window already holds that talk.
-pub(super) fn want_line(memory: &InProcessMemory, line: DialogueLine, on_this_talk: bool) {
+/// own presses did, until the window is there. Whether the window already holds that talk is
+/// read from its talk table, so a move right after a switch is never taken for the old talk's.
+pub(super) fn want_line(memory: &InProcessMemory, line: DialogueLine) {
     let reading = read_talk_window(memory);
     let mut press = LINE_PRESS.lock().unwrap_or_else(PoisonError::into_inner);
-    let before = press.wanted();
-    press.want(
+    let new_wish = press.want(
         line.talk_id,
         line.line,
         line.step,
-        on_this_talk,
-        reading.talk_address,
+        &reading,
+        || find_talk_id(memory, reading.talk_address).ok().flatten(),
         net_clock_ms(),
     );
-    if press.wanted() == before {
+    if !new_wish {
         return;
     }
     log_line(&format!(
@@ -168,10 +168,10 @@ pub(super) fn want_line(memory: &InProcessMemory, line: DialogueLine, on_this_ta
         reading.step,
         reading.line_count,
         reading.player_state,
-        if on_this_talk {
-            ""
-        } else {
+        if press.wants_a_switch() {
             ", past the last line of the talk it holds"
+        } else {
+            ""
         }
     ));
 }

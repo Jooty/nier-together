@@ -317,3 +317,56 @@ fn run_1115j_the_guests_own_copy_stays_led_while_its_presses_take_it_to_the_host
     );
     assert!(!stuck.holds_own_talk());
 }
+
+#[test]
+fn run_1115j_a_copy_that_arrives_on_the_chained_talk_after_the_host_left_it_chains_on_again() {
+    const SECOND_DREAM_TALK: u32 = 1423;
+    const THIRD_DREAM_TALK: u32 = 1424;
+    const FOURTH_DREAM_TALK: u32 = 1425;
+    const HOST_LINE_1_OF_1423_MS: u64 = 6_505_362;
+    const HOST_ON_1424_MS: u64 = 6_505_477;
+    const HOST_ON_1425_MS: u64 = 6_505_855;
+    const COPY_ARRIVES_ON_1424_MS: u64 = 6_505_900;
+    let led = |own: DialogueLine, partner: DialogueLine, now_ms: u64| MirrorInput {
+        partner_line: Some(partner),
+        partner_ended_talk: None,
+        can_show: true,
+        window_open: true,
+        own_talk: Some(own),
+        leader: TalkLeader::Partner,
+        answer_open: false,
+        now_ms,
+    };
+    let mut mirror = PartnerTalkMirror::new();
+    mirror.step(led(
+        line(SECOND_DREAM_TALK, 1),
+        line(SECOND_DREAM_TALK, 1),
+        HOST_LINE_1_OF_1423_MS,
+    ));
+    assert_eq!(
+        mirror.step(led(
+            line(SECOND_DREAM_TALK, 1),
+            line(THIRD_DREAM_TALK, 0),
+            HOST_ON_1424_MS
+        )),
+        Some(MirrorAction::ChainOwnTalk(line(THIRD_DREAM_TALK, 0)))
+    );
+    assert_eq!(
+        mirror.step(led(
+            line(THIRD_DREAM_TALK, 0),
+            line(FOURTH_DREAM_TALK, 0),
+            COPY_ARRIVES_ON_1424_MS
+        )),
+        Some(MirrorAction::ChainOwnTalk(line(FOURTH_DREAM_TALK, 0))),
+        "R1b D2b: the host stayed 378 ms on talk 1424 (01:48:25.477 to 25.855); a copy arriving after that waited for a host that had left, and got its buttons back 2 s later mid-dream"
+    );
+    assert!(mirror.holds_own_talk());
+    assert_eq!(
+        mirror.step(led(
+            line(FOURTH_DREAM_TALK, 0),
+            line(FOURTH_DREAM_TALK, 0),
+            HOST_ON_1425_MS + 100
+        )),
+        Some(MirrorAction::FollowStarted(FOURTH_DREAM_TALK))
+    );
+}

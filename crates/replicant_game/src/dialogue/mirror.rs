@@ -414,10 +414,17 @@ impl PartnerTalkMirror {
             .following
             .is_none_or(|followed| followed.talk_id != own.talk_id);
         if fresh {
+            // The copy arrived on the talk the host chained to: the host was on it, even if it
+            // has moved on since, so the copy chains on instead of waiting for the host to show it.
+            let host_was_on_it = self.following.is_some_and(|followed| {
+                followed
+                    .chained_to
+                    .is_some_and(|(next, _)| next == own.talk_id)
+            });
             self.following = Some(FollowedTalk {
                 talk_id: own.talk_id,
                 since_ms: now_ms,
-                host_seen_on_it: false,
+                host_seen_on_it: host_was_on_it,
                 gave_up: false,
                 chained_to: None,
                 finish_deferred_since_ms: None,

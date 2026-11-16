@@ -259,7 +259,7 @@ fn keep_up_with_the_partners_line(
     let led_own_copy =
         leader == TalkLeader::Partner && own_talk.is_some_and(|own| own.talk_id == partner.talk_id);
     if led_own_copy || (mirror_showing && own_talk.is_none()) {
-        want_line(&InProcessMemory::new(build), partner, true);
+        want_line(&InProcessMemory::new(build), partner);
     }
 }
 
@@ -274,7 +274,7 @@ fn settle_pressed_talk_switches(build: &VerifiedBuild) {
                 wanted.talk_id
             ));
             if wanted.line > 0 {
-                want_line(&memory, wanted, true);
+                want_line(&memory, wanted);
             }
         } else {
             log_line(&format!(
@@ -714,7 +714,7 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
         MirrorAction::FollowLine(line) => {
             // The guest's own copy of the talk: its line tags run here as the script's own.
             if let Some(partner) = partner_current_line() {
-                want_line(&InProcessMemory::new(build), partner, true);
+                want_line(&InProcessMemory::new(build), partner);
             }
             log_line(&format!(
                 "dialogue: your copy follows the host to line {line}"
@@ -722,7 +722,7 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
             return;
         }
         MirrorAction::ChainOwnTalk(next) => {
-            want_line(&InProcessMemory::new(build), next, false);
+            want_line(&InProcessMemory::new(build), next);
             log_line(&format!(
                 "dialogue: the host went on to talk {}, your copy steps on with it",
                 next.talk_id
@@ -783,7 +783,7 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
         }
         MirrorAction::SwitchTalk(line) => {
             begin_talk();
-            want_line(&InProcessMemory::new(build), line, false);
+            want_line(&InProcessMemory::new(build), line);
             log_line(&format!(
                 "dialogue: mirror goes on to talk {} at line {} by the press past the last line, as the host's window went",
                 line.talk_id, line.line
@@ -791,7 +791,7 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
         }
         MirrorAction::ShowLine(line) => {
             if let Some(partner) = partner_current_line() {
-                want_line(&InProcessMemory::new(build), partner, true);
+                want_line(&InProcessMemory::new(build), partner);
             }
             log_line(&format!("dialogue: mirror line {line}"));
         }
@@ -801,7 +801,7 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
         }
         MirrorAction::JumpOwnTalk(line) => {
             if let Some(partner) = partner_current_line() {
-                want_line(&InProcessMemory::new(build), partner, true);
+                want_line(&InProcessMemory::new(build), partner);
             }
             log_line(&format!(
                 "dialogue: own talk joined the partner's at line {line}"
