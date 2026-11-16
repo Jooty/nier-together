@@ -4,11 +4,13 @@ use std::sync::{Mutex, PoisonError};
 use replicant_game::GameMemory;
 use replicant_game::callback_gate::{
     CALLBACK_GATE_HOST_GRACE_MS, CallbackGate, EndArrival, EndFollow, EndQueue, GateRole, GateStep,
-    LocalFire, MaskIdleTimer, ParkedCall, PartnerFire, PartnerStartedCopies, PlayedStart,
-    QueueEvent, RanEnds, RelayedScenesPlayed, Released, TALK_START_AFTER_COMMAND_MS,
-    control_slots_free, end_follow_around_a_stretch, event_base, is_end_callback, is_event_talk,
-    is_gated_callback, own_end_is_the_copy_a_waiting_host_end_needs, slots_an_end_waits_on,
+    LocalFire, MaskIdleTimer, OwnStartPauseFacts, OwnStartPauseRelease, ParkedCall, PartnerFire,
+    PartnerStartedCopies, PlayedStart, QueueEvent, RanEnds, RelayedScenesPlayed, Released,
+    TALK_START_AFTER_COMMAND_MS, control_slots_free, end_follow_around_a_stretch, event_base,
+    is_end_callback, is_event_talk, is_gated_callback,
+    own_end_is_the_copy_a_waiting_host_end_needs, own_start_pause_release, slots_an_end_waits_on,
 };
+use replicant_game::fight_sync::{SlotState, script_slot_state};
 use replicant_game::marker::{CONTROL_MASK_FIRST_RVA, read_world_flags};
 use replicant_game::message_handlers::HandlerFire;
 use replicant_game::script_functions::{ClearCause, LateCopy, PhaseLoadWatch};
@@ -53,6 +55,7 @@ static SHARED_RAN: Mutex<SharedEventsRan> = Mutex::new(SharedEventsRan::new());
 static RELAYED_SCENES: Mutex<RelayedScenesPlayed> = Mutex::new(RelayedScenesPlayed::new());
 static LATEST_PARTNER_END: Mutex<Option<String>> = Mutex::new(None);
 static LAST_TALK_COMMAND_MS: Mutex<Option<u64>> = Mutex::new(None);
+static OWN_START_PAUSE_RELEASES: Mutex<Option<(String, OwnStartPauseRelease)>> = Mutex::new(None);
 
 static LAST_PLAYER_TALK_COMMAND_MS: Mutex<Option<u64>> = Mutex::new(None);
 
@@ -344,15 +347,19 @@ fn partner_end_verdict(
     view: &NetShared,
     name: &str,
     phase: u16,
+    waited_ms: u64,
 ) -> EndFollow {
+    let talk_window_open =
+        read_world_flags(&InProcessMemory::new(build)).is_ok_and(|flags| flags.talk_window_open);
+    let settled = control_mask_settled(build);
+    let released_from_own_start_pause =
+        !settled && end_runs_under_its_own_starts_pause(build, name, waited_ms, talk_window_open);
     let arrival = EndArrival {
         message_phase: phase,
         shared_phase: shared_phase(view),
         local_phase: local_phase(build),
-        local_in_own_talk: read_world_flags(&InProcessMemory::new(build))
-            .is_ok_and(|flags| flags.talk_window_open)
-            && !crate::dialogue::mirror_showing(),
-        control_mask_settled: control_mask_settled(build),
+        local_in_own_talk: talk_window_open && !crate::dialogue::mirror_showing(),
+        control_mask_settled: settled || released_from_own_start_pause,
         already_ran_here: RAN_ENDS
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -397,6 +404,55 @@ pub(crate) fn own_end_is_the_copy_the_waiting_host_end_needs(name: &str) -> bool
     )
 }
 
+fn end_runs_under_its_own_starts_pause(
+    build: &VerifiedBuild,
+    name: &str,
+    waited_ms: u64,
+    talk_window_open: bool,
+) -> bool {
+    let last_pause_on = crate::game_hooks::last_pause_on();
+    let release = own_start_pause_release(&OwnStartPauseFacts {
+        end_name: name,
+        waited_ms,
+        last_pause_on: last_pause_on.as_ref(),
+        slots: slots_an_end_waits_on(
+            read_control_slots(build),
+            crate::dialogue::watcher_hold_owns_talk_slot(),
+        ),
+        menu_open: main_menu_open(build) || pause_menu_open(build),
+        script_slot_idle: script_slot_state(crate::fight_sync::script_manager_state(build))
+            == SlotState::Idle,
+        talk_window_open,
+    });
+    let mut noted = OWN_START_PAUSE_RELEASES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    match release {
+        Some(release) => {
+            *noted = Some((name.to_owned(), release));
+            true
+        }
+        None => {
+            if noted
+                .as_ref()
+                .is_some_and(|(noted_name, _)| noted_name == name)
+            {
+                *noted = None;
+            }
+            false
+        }
+    }
+}
+
+fn own_start_pause_note(name: &str) -> String {
+    OWN_START_PAUSE_RELEASES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_if(|(noted_name, _)| noted_name == name)
+        .map(|(_, release)| format!(", your controls were held but {}", release.describe(name)))
+        .unwrap_or_default()
+}
+
 fn control_mask_settled(build: &VerifiedBuild) -> bool {
     let free = control_slots_free(
         slots_an_end_waits_on(
@@ -414,7 +470,7 @@ fn control_mask_settled(build: &VerifiedBuild) -> bool {
 fn follow_end(build: &VerifiedBuild, role: GateRole, view: &NetShared, fired: &CallbackFired) {
     let now = net_clock_ms();
     let partner = partner_label(role);
-    match partner_end_verdict(build, view, &fired.name, fired.phase) {
+    match partner_end_verdict(build, view, &fired.name, fired.phase, 0) {
         EndFollow::Drop(reason) if !reason.can_wait() => log_line(&format!(
             "callback follow: the {partner} ended {}, not run here: {}",
             fired.name,
@@ -458,7 +514,13 @@ fn run_waiting_ends(build: &VerifiedBuild, role: GateRole, view: &NetShared) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .advance(now, |end| {
-            partner_end_verdict(build, view, &end.name, end.phase)
+            partner_end_verdict(
+                build,
+                view,
+                &end.name,
+                end.phase,
+                now.saturating_sub(end.since_ms),
+            )
         });
     for event in events {
         match event {
@@ -468,10 +530,11 @@ fn run_waiting_ends(build: &VerifiedBuild, role: GateRole, view: &NetShared) {
                 waited_ms,
             } => {
                 log_line(&format!(
-                    "callback follow: the {partner} ended {}, queue position {position}, runs now after waiting {}s{}",
+                    "callback follow: the {partner} ended {}, queue position {position}, runs now after waiting {}s{}{}",
                     end.name,
                     waited_ms / 1000,
-                    own_copy_note(&end.name, end.phase)
+                    own_copy_note(&end.name, end.phase),
+                    own_start_pause_note(&end.name)
                 ));
                 start(build, end.phase, &end.name, now);
             }
@@ -517,7 +580,9 @@ pub(crate) fn park_partner_call(build: &VerifiedBuild, parked: ParkedCall) -> bo
     };
     let behind = match (front, net::handle()) {
         (Some(end), Some(net)) => {
-            let why = match partner_end_verdict(build, &net.view(), &end.name, end.phase) {
+            let waited_ms = net_clock_ms().saturating_sub(end.since_ms);
+            let why = match partner_end_verdict(build, &net.view(), &end.name, end.phase, waited_ms)
+            {
                 EndFollow::Drop(reason) => reason.reason(),
                 EndFollow::Mirror => "it runs on the next tick",
             };

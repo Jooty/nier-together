@@ -44,9 +44,9 @@ pub use noclip_keys::{game_window_is_foreground, set_keyboard_taken_by_overlay};
 pub(crate) use nt_hook::detour::hook_address;
 pub use script_runner_log::log_runner_state;
 pub(crate) use script_runner_log::{
-    host_led_run, host_led_runs_enter_phase, last_native, last_pop, last_yielding_native,
-    note_host_led_handler, note_native, note_yielding_native, script_pause_in_force,
-    slot_holder_name, slot_holding_for,
+    host_led_run, host_led_runs_enter_phase, last_native, last_pause_on, last_pop,
+    last_yielding_native, note_host_led_handler, note_native, note_yielding_native,
+    script_pause_in_force, slot_holder_name, slot_holding_for,
 };
 pub(crate) use side_view_log::own_side_view_door;
 pub use teleport::{request_teleport, teleport_available};

@@ -1,5 +1,6 @@
 mod game_calls;
 mod hold_hook;
+mod side_view_report;
 mod sync;
 mod talk_guard_hook;
 mod talk_press;

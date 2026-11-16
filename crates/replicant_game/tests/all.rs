@@ -233,6 +233,8 @@ mod manor_watch;
 mod message_handlers;
 #[path = "minimap.rs"]
 mod minimap;
+#[path = "mirror_window_size.rs"]
+mod mirror_window_size;
 #[path = "move_log.rs"]
 mod move_log;
 #[path = "music.rs"]
@@ -251,6 +253,10 @@ mod own_body_calls;
 mod own_hit_log;
 #[path = "own_ride.rs"]
 mod own_ride;
+#[path = "own_start_pause.rs"]
+mod own_start_pause;
+#[path = "own_step_copy.rs"]
+mod own_step_copy;
 #[path = "part_pickups.rs"]
 mod part_pickups;
 #[path = "partner_holds.rs"]

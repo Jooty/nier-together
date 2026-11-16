@@ -8,21 +8,21 @@ use crate::wire::{
     AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved, BodyPackName,
     BombBlast, BulletEffectPlay, BulletFlight, CallbackFired, CampaignCard, CartRide, CartRun,
     ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk, DesyncDigest, DialogueUpdate,
-    DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone,
-    EnemyBulletFlight, EnemyCreation, EnemyDrop, EnemyGone, EnemyHit, EnemyIdList, EnemyKilled,
-    EnemySnapshot, EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim,
-    FightPromptCount, FightRadioWaitEnded, FightRequest, FightRequestAnswer, FightStreamEntry,
-    FightTape, FightWindowMark, FollowPhase, GameReadiness, GatherAnswer, GatherForScene,
-    GuestWatches, HostDefeatScreen, ItemCounts, ItemPickup, ItemTake, LiftCall, LiftCallAnswer,
-    LobbyBody, LobbyCharacter, LobbyReady, LobbyStart, MAX_DISPLAY_NAME_BYTES, MAX_PLAYERS,
-    MessageHandlerRan, MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup,
-    PartnerNotice, PausedHits, PlayerHit, PlayerSettings, PlayerState, PowerModelEnded,
-    PowerModelMotion, PowerModelState, PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage,
-    ScriptRoll, SeatPart, SeatReceipt, SessionOptions, SharedFunctionRan, ShotCue,
-    SkipPromptAnswer, SkipPromptVerdict, SkyAssets, SkyRecordChunk, SkyState, SoundPlay,
-    StoryArrayPart, StoryCall, StoryChanges, StoryDigest, StoryJump, StoryRefused, StoryRequest,
-    StoryWrite, TalkChoice, TalkWindowSize, TeleportHere, TutorialPrompt, VoiceCharacter,
-    WallBroken, WireError, WorldEffectMove, WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
+    DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone, EnemyBulletFlight,
+    EnemyCreation, EnemyDrop, EnemyGone, EnemyHit, EnemyIdList, EnemyKilled, EnemySnapshot,
+    EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim, FightPromptCount,
+    FightRadioWaitEnded, FightRequest, FightRequestAnswer, FightStreamEntry, FightTape,
+    FightWindowMark, FollowPhase, GameReadiness, GatherAnswer, GatherForScene, GuestWatches,
+    HostDefeatScreen, ItemCounts, ItemPickup, ItemTake, LiftCall, LiftCallAnswer, LobbyBody,
+    LobbyCharacter, LobbyReady, LobbyStart, MAX_DISPLAY_NAME_BYTES, MAX_PLAYERS, MessageHandlerRan,
+    MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup, PartnerNotice, PausedHits,
+    PlayerHit, PlayerSettings, PlayerState, PowerModelEnded, PowerModelMotion, PowerModelState,
+    PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage, ScriptRoll, SeatPart, SeatReceipt,
+    SessionOptions, SharedFunctionRan, ShotCue, SideViewState, SkipPromptAnswer, SkipPromptVerdict,
+    SkyAssets, SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges,
+    StoryDigest, StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize,
+    TeleportHere, TutorialPrompt, VoiceCharacter, WallBroken, WireError, WorldEffectMove,
+    WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -155,6 +155,7 @@ pub enum Message {
     GuestWatches(GuestWatches),
     TalkWindowSize(TalkWindowSize),
     HostDefeatScreen(HostDefeatScreen),
+    SideViewState(SideViewState),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -294,6 +295,7 @@ impl Message {
             Message::GuestWatches(_) => "GuestWatches",
             Message::TalkWindowSize(_) => "TalkWindowSize",
             Message::HostDefeatScreen(_) => "HostDefeatScreen",
+            Message::SideViewState(_) => "SideViewState",
         }
     }
 
@@ -425,6 +427,7 @@ impl Message {
                 | Message::GuestWatches(_)
                 | Message::TalkWindowSize(_)
                 | Message::HostDefeatScreen(_)
+                | Message::SideViewState(_)
         )
     }
 
@@ -538,7 +541,8 @@ impl Message {
             Message::SeatReceipt(_)
             | Message::GameSaved { .. }
             | Message::GuestWatches(_)
-            | Message::TalkWindowSize(_) => Ok(()),
+            | Message::TalkWindowSize(_)
+            | Message::SideViewState(_) => Ok(()),
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),

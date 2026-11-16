@@ -4,7 +4,9 @@ mod choice_hover;
 mod held_talk_start;
 mod line_press;
 mod mirror;
+mod mirror_window_size;
 mod on_screen;
+mod own_step_copy;
 mod own_window;
 mod story_talk_menu_close;
 mod talk_cursor;
@@ -27,10 +29,12 @@ pub use mirror::{
     HostLedScriptTalk, MirrorAction, MirrorInput, PartnerTalkMemory, PartnerTalkMirror, TalkLeader,
     leader_for_own_talk, talk_tags_run_here, within_talk_range,
 };
+pub use mirror_window_size::{MirrorWindowSize, layout_size_text};
 pub use on_screen::{
     ScreenReport, TalkScreenVerdict, TalkWindowScreen, put_may_show_flag_back,
     read_talk_window_screen,
 };
+pub use own_step_copy::{OwnStepCopyEvent, OwnStepCopyReading, OwnStepCopyWait};
 pub use own_window::{OwnTalkWindow, SetTalkCalls};
 pub use story_talk_menu_close::{
     STORY_TALK_MENU_CLOSE_MOST_ASKS_PER_TALK, STORY_TALK_MENU_CLOSE_RETRY_AFTER_MS,
@@ -55,6 +59,8 @@ pub const TALK_WINDOW_CURRENT_TALK_OFFSET: u64 = 0x46_3040;
 pub const TALK_WINDOW_CURRENT_LINE_OFFSET: u64 = 0x46_3048;
 pub const TALK_WINDOW_MASK_BEFORE_OPEN_OFFSET: u64 = 0x4A_4170;
 pub const TALK_WINDOW_MAY_SHOW_OFFSET: u64 = 0x4A_4185;
+pub const TALK_WINDOW_LAYOUT_SIZE_OFFSET: u64 = 0x4A_4168;
+pub const TALK_WINDOW_FULL_PAGE_LAYOUT_SIZES: core::ops::RangeInclusive<i32> = 0xB..=0xD;
 pub const TALK_WINDOW_WIDGET_OFFSET: u64 = 0x4A_32C8;
 pub const TALK_WIDGET_NODE_OFFSET: u64 = 0xE88;
 pub const WIDGET_NODE_HANDLE_OFFSET: u64 = 0x30;
@@ -113,6 +119,7 @@ pub const TALK_TAG_RUN_ALL_RVA: u32 = 0xD_8950;
 pub const MIRROR_OPEN_RETRY_MS: u64 = 1000;
 pub const CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS: u64 = 5000;
 pub const FOLLOW_HOST_TALK_WAIT_MS: u64 = 2000;
+pub const OWN_STEP_COPY_AWAITED_MS: u64 = 3000;
 pub const OWN_ENDED_TALK_NOT_MIRRORED_MS: u64 = 3000;
 pub const MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS: u64 = 600_000;
 pub const SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS: u64 = 1000;

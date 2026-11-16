@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
+use replicant_game::callback_gate::LastPauseOn;
 use replicant_game::cutscene_skip::TRIGGER_MANAGER_RVA;
 use replicant_game::fight_sync::{SlotState, script_slot_state};
 use replicant_game::marker::CONTROL_MASK_FIRST_RVA;
@@ -33,6 +34,7 @@ static LAST_POP: Mutex<Option<(String, u64)>> = Mutex::new(None);
 static SLOT_HOLDER: Mutex<SlotHolderWatch> = Mutex::new(SlotHolderWatch::new());
 static SCRIPT_PAUSES: Mutex<ScriptPauseWatch> = Mutex::new(ScriptPauseWatch::new());
 static HOST_LED_RUNS: Mutex<HostLedRuns> = Mutex::new(HostLedRuns::new());
+static LAST_PAUSE_ON: Mutex<Option<LastPauseOn>> = Mutex::new(None);
 
 type LuaNative = unsafe extern "system" fn(*mut c_void);
 
@@ -145,6 +147,13 @@ pub(crate) fn last_native() -> Option<(&'static str, u64)> {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .last_native(net_clock_ms())
+}
+
+pub(crate) fn last_pause_on() -> Option<LastPauseOn> {
+    LAST_PAUSE_ON
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 pub(crate) fn last_pop() -> Option<(String, u64)> {
@@ -310,10 +319,13 @@ fn log_pause_call(call: PauseCall, before: u32) {
         .as_ref()
         .map(|(name, _)| name.clone())
         .unwrap_or_default();
-    log_line(&format_pause_call(
-        call,
-        before,
-        current_pause_mask(),
-        &running,
-    ));
+    let after = current_pause_mask();
+    *LAST_PAUSE_ON.lock().unwrap_or_else(PoisonError::into_inner) = match call {
+        PauseCall::On => Some(LastPauseOn {
+            step: running.clone(),
+            mask_after: after,
+        }),
+        PauseCall::Off => None,
+    };
+    log_line(&format_pause_call(call, before, after, &running));
 }

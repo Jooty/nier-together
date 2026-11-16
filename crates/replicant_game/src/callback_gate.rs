@@ -2,6 +2,7 @@ mod end_follow;
 mod end_queue;
 mod gate;
 mod names;
+mod own_start_pause;
 mod partner_copies;
 mod ran_ends;
 mod relayed_scenes;
@@ -16,6 +17,10 @@ pub use end_follow::{
 pub use end_queue::{EndQueue, ParkedCall, ParkedKind, QueueEvent, Released};
 pub use gate::{CallbackGate, GateRole, GateStep, LocalFire, PartnerFire};
 pub use names::{is_event_talk, is_gated_callback, is_scene_talk};
+pub use own_start_pause::{
+    LastPauseOn, OwnStartPauseFacts, OwnStartPauseRelease, own_start_of_end,
+    own_start_pause_release,
+};
 pub use partner_copies::{PartnerStartedCopies, event_base, event_family};
 pub use ran_ends::RanEnds;
 pub use relayed_scenes::{PlayedStart, RelayedScenesPlayed, scene_base, start_base};
@@ -36,5 +41,10 @@ pub const SCENE_TALK_PREFIX: &str = "SEID_";
 pub const END_FOLLOW_EVENT_SUFFIX: &str = "_End";
 pub const END_FOLLOW_STILL_WAITING_LOG_MS: u64 = 60_000;
 pub const END_FOLLOW_MASK_IDLE_MS: u64 = 500;
+pub const ENDS_THAT_RUN_UNDER_THEIR_OWN_STARTS_PAUSE: [&str; 1] = ["EID_1500_a0005_010_01_End"];
+pub const ENDS_THAT_RUN_ANYWAY_AFTER_WAITING: [&str; 2] =
+    ["EID_1500_a0005_010_01_End", "EID_1500_a0005_010_01_End02"];
+pub const END_RUNS_UNDER_ITS_OWN_STARTS_PAUSE_AFTER_MS: u64 = 2_000;
+pub const END_RUNS_ANYWAY_AFTER_WAITING_MS: u64 = 20_000;
 pub const TALK_EVENT_SUFFIX: &str = "_Talk";
 pub const TALK_START_AFTER_COMMAND_MS: u64 = 2_000;
