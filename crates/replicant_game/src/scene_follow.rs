@@ -7,7 +7,10 @@ mod unplayed;
 mod watch;
 
 pub use coming_over::{AnnounceDrop, AnnounceVerdict, ComingOver, ComingStep};
-pub use cut::{LocalCut, cut_load_call, cut_name_from_buffer, cut_to_load, host_scene_cut};
+pub use cut::{
+    LocalCut, StaleCutLoad, cut_load_call, cut_name_from_buffer, cut_to_load, host_scene_cut,
+    stale_cut_load,
+};
 pub use host_view::{
     HostViewFacts, HostViewHold, HostViewKind, HostViewRelease, HostViewVerdict,
     guest_to_host_units,
