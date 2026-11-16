@@ -151,6 +151,8 @@ mod hit_kind;
 mod hit_reaction;
 #[path = "hit_stagger.rs"]
 mod hit_stagger;
+#[path = "host_led_defeat.rs"]
+mod host_led_defeat;
 #[path = "host_led_runs.rs"]
 mod host_led_runs;
 #[path = "host_led_script_talk.rs"]
