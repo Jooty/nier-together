@@ -818,7 +818,25 @@ fn samples() -> Vec<Message> {
         }),
         Message::GuestWatches(GuestWatches { watching: true }),
         Message::TalkWindowSize(TalkWindowSize { size: 9 }),
+        Message::SideViewState(SideViewState {
+            phase: 1,
+            in_side_view: true,
+            side_view_door: 1,
+        }),
     ]
+}
+
+fn varint_of(mut value: u32) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    loop {
+        let low = (value & 0x7f) as u8;
+        value >>= 7;
+        if value == 0 {
+            bytes.push(low);
+            return bytes;
+        }
+        bytes.push(low | 0x80);
+    }
 }
 
 fn hex_of(bytes: &[u8]) -> String {
@@ -835,7 +853,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 77);
+    assert_eq!(PROTOCOL_VERSION, 78);
 }
 
 #[test]
@@ -881,8 +899,8 @@ fn samples_are_the_variants_in_declaration_order() {
 
 #[test]
 fn every_variant_has_a_sample() {
-    let next_index = u8::try_from(samples().len()).expect("fewer than 128 variants");
-    let beyond_last = postcard::from_bytes::<Message>(&[next_index]);
+    let next_index = u32::try_from(samples().len()).expect("fewer than 2^32 variants");
+    let beyond_last = postcard::from_bytes::<Message>(&varint_of(next_index));
     assert!(
         matches!(beyond_last, Err(postcard::Error::SerdeDeCustom)),
         "Message has a variant after sample {next_index}: add its sample and its golden line"

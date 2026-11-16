@@ -53,6 +53,7 @@ mod seat_transfer;
 mod session_options;
 mod shared_function_ran;
 mod shot_cue;
+mod side_view_state;
 mod sky_state;
 mod story_call;
 mod story_jump;
@@ -176,6 +177,7 @@ pub use shared_function_ran::SharedFunctionRan;
 pub use shot_cue::{
     MAX_SHOT_CUE_ID, MAX_SHOT_SOUND_LEVEL_ABS, SHOT_SOUND_LEVELS, ShotCue, ShotCueKind,
 };
+pub use side_view_state::SideViewState;
 pub use sky_state::{SkyAssets, SkyRecordChunk, SkyState};
 pub(crate) use story_call::validate_story_function_and_args;
 pub use story_call::{
@@ -194,7 +196,7 @@ pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 77;
+pub const PROTOCOL_VERSION: u16 = 78;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;

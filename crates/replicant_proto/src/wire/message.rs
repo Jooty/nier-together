@@ -18,11 +18,11 @@ use crate::wire::{
     MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup, PartnerNotice, PausedHits,
     PlayerHit, PlayerSettings, PlayerState, PowerModelEnded, PowerModelMotion, PowerModelState,
     PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage, ScriptRoll, SeatPart, SeatReceipt,
-    SessionOptions, SharedFunctionRan, ShotCue, SkipPromptAnswer, SkipPromptVerdict, SkyAssets,
-    SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges, StoryDigest,
-    StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize, TeleportHere,
-    TutorialPrompt, VoiceCharacter, WallBroken, WireError, WorldEffectMove, WorldEffectPlay,
-    WorldObjectBroken, WorldObjectMoved,
+    SessionOptions, SharedFunctionRan, ShotCue, SideViewState, SkipPromptAnswer, SkipPromptVerdict,
+    SkyAssets, SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges,
+    StoryDigest, StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize,
+    TeleportHere, TutorialPrompt, VoiceCharacter, WallBroken, WireError, WorldEffectMove,
+    WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -154,6 +154,7 @@ pub enum Message {
     WorldObjectBroken(WorldObjectBroken),
     GuestWatches(GuestWatches),
     TalkWindowSize(TalkWindowSize),
+    SideViewState(SideViewState),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -292,6 +293,7 @@ impl Message {
             Message::WorldObjectBroken(_) => "WorldObjectBroken",
             Message::GuestWatches(_) => "GuestWatches",
             Message::TalkWindowSize(_) => "TalkWindowSize",
+            Message::SideViewState(_) => "SideViewState",
         }
     }
 
@@ -422,6 +424,7 @@ impl Message {
                 | Message::WorldObjectBroken(_)
                 | Message::GuestWatches(_)
                 | Message::TalkWindowSize(_)
+                | Message::SideViewState(_)
         )
     }
 
@@ -535,7 +538,8 @@ impl Message {
             Message::SeatReceipt(_)
             | Message::GameSaved { .. }
             | Message::GuestWatches(_)
-            | Message::TalkWindowSize(_) => Ok(()),
+            | Message::TalkWindowSize(_)
+            | Message::SideViewState(_) => Ok(()),
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),

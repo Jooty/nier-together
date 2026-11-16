@@ -249,6 +249,8 @@ mod own_body_calls;
 mod own_hit_log;
 #[path = "own_ride.rs"]
 mod own_ride;
+#[path = "own_start_pause.rs"]
+mod own_start_pause;
 #[path = "own_step_copy.rs"]
 mod own_step_copy;
 #[path = "part_pickups.rs"]
