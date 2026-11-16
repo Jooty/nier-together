@@ -109,11 +109,11 @@ fn run34_enemy_count_is_relayed_when_popped_and_fills_in_on_the_guest() {
     // The host's engine popped it (group 6 emptied); it is not in the shared function table.
     assert!(script_function(STONE_FIELD_PACK, ENEMY_COUNT).is_none());
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, ENEMY_COUNT, true, false),
+        traced_relay(STONE_FIELD_PACK, ENEMY_COUNT, true, false, false),
         TracedRelay::Send
     );
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, ENEMY_COUNT, false, false),
+        traced_relay(STONE_FIELD_PACK, ENEMY_COUNT, false, false, false),
         TracedRelay::NotRelayed,
         "only a popped event callback outside the table is relayed"
     );
@@ -165,23 +165,23 @@ fn run34_enemy_count_is_relayed_when_popped_and_fills_in_on_the_guest() {
 #[test]
 fn popped_ends_gated_callbacks_and_message_handlers_stay_on_the_callback_path() {
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, WAVE_END, true, false),
+        traced_relay(STONE_FIELD_PACK, WAVE_END, true, false, false),
         TracedRelay::CallbackPathRelays
     );
     assert_eq!(
-        traced_relay(PROLOGUE_PACK, PROLOGUE_END, true, false),
+        traced_relay(PROLOGUE_PACK, PROLOGUE_END, true, false, false),
         TracedRelay::CallbackPathRelays
     );
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, BOOK_TALK_02, true, true),
+        traced_relay(STONE_FIELD_PACK, BOOK_TALK_02, true, true, false),
         TracedRelay::CallbackPathRelays
     );
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, BOOK_TALK_02, false, false),
+        traced_relay(STONE_FIELD_PACK, BOOK_TALK_02, false, false, false),
         TracedRelay::Send
     );
     assert_eq!(
-        traced_relay(STONE_FIELD_PACK, "AttackCount_Talk", true, false),
+        traced_relay(STONE_FIELD_PACK, "AttackCount_Talk", true, false, false),
         TracedRelay::NotRelayed
     );
 }
@@ -326,5 +326,31 @@ fn a_step_the_hosts_own_villager_talk_starts_runs_on_the_guest_at_once() {
         relay
             .tick(true, RUN_1115J_HOST_COPY_ARRIVED_MS)
             .is_some_and(|copy| copy.name == CHOICE_STEP)
+    );
+}
+
+const BOSS9_PACK: &str = "A_CENTER_VILLAGE_01";
+const BOSS9_FIRST_TALK: &str = "EID_2000_TALK_DEBOL";
+
+#[test]
+fn a_function_the_fight_stream_claims_still_gets_its_one_trace_line() {
+    assert!(script_function(BOSS9_PACK, BOSS9_FIRST_TALK).is_none());
+    assert_eq!(
+        traced_relay(BOSS9_PACK, BOSS9_FIRST_TALK, false, false, false),
+        TracedRelay::NotRelayed,
+        "run 151352: no pop was noted, so no trace line came and the wait failed"
+    );
+    assert_eq!(
+        traced_relay(BOSS9_PACK, BOSS9_FIRST_TALK, false, false, true),
+        TracedRelay::LoggedOnly,
+        "claimed by the stream: traced, never sent"
+    );
+}
+
+#[test]
+fn a_claimed_function_that_is_not_a_script_event_stays_unlogged() {
+    assert_eq!(
+        traced_relay(BOSS9_PACK, "AttackCount_Talk", false, false, true),
+        TracedRelay::NotRelayed
     );
 }

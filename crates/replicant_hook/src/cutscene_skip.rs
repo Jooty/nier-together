@@ -29,7 +29,7 @@ pub(crate) use prompt_vote::hold_skip_prompt_answer;
 pub(crate) use restart_signals::restart_signals;
 pub use scene_follow::{is_injected_duplicate, note_fired_callback};
 pub(crate) use shared_functions::{
-    close_menus_for_modal_entry, on_function_traced, run_shared_function,
+    close_menus_for_modal_entry, note_claimed_by_a_stream, on_function_traced, run_shared_function,
 };
 pub(crate) use state::event_scene_running;
 pub use state::local_in_cutscene;

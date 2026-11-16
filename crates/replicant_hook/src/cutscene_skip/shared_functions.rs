@@ -38,12 +38,19 @@ const MAX_PENDING_INJECTED_FUNCTIONS: usize = 32;
 static RAN: Mutex<FunctionsRan> = Mutex::new(FunctionsRan::new());
 static INJECTED: Mutex<Vec<(String, u64)>> = Mutex::new(Vec::new());
 static LAST_POPPED: Mutex<Option<(String, u64)>> = Mutex::new(None);
+static LAST_CLAIMED_BY_A_STREAM: Mutex<Option<(String, u64)>> = Mutex::new(None);
 static MISSING_FROM_TABLE_LOGGED: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 static FILL_IN: Mutex<FillInRelay> = Mutex::new(FillInRelay::new());
 
 pub(super) fn note_popped_callback(name: &str) {
     *LAST_POPPED.lock().unwrap_or_else(PoisonError::into_inner) =
         Some((name.to_owned(), net_clock_ms()));
+}
+
+pub(crate) fn note_claimed_by_a_stream(name: &str) {
+    *LAST_CLAIMED_BY_A_STREAM
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some((name.to_owned(), net_clock_ms()));
 }
 
 pub(super) fn set_local_phase(phase: Option<u16>) {
@@ -68,6 +75,9 @@ pub(super) fn reset_shared_functions() {
         .unwrap_or_else(PoisonError::into_inner)
         .clear();
     *LAST_POPPED.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *LAST_CLAIMED_BY_A_STREAM
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = None;
     let dropped = FILL_IN
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -99,6 +109,7 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
         name,
         popped,
         popped && is_message_handler(phase, name),
+        take_claimed_by_a_stream(name),
     );
     if relay == TracedRelay::NotRelayed {
         return;
@@ -131,6 +142,9 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
         ));
     }
     if !newly {
+        return;
+    }
+    if relay == TracedRelay::LoggedOnly {
         return;
     }
     if crate::fight_sync::covers_phase(phase) {
@@ -473,7 +487,15 @@ fn take_pending_injected(name: &str) -> bool {
 }
 
 fn take_popped_callback(name: &str) -> bool {
-    let mut last = LAST_POPPED.lock().unwrap_or_else(PoisonError::into_inner);
+    take_recent(&LAST_POPPED, name)
+}
+
+fn take_claimed_by_a_stream(name: &str) -> bool {
+    take_recent(&LAST_CLAIMED_BY_A_STREAM, name)
+}
+
+fn take_recent(slot: &Mutex<Option<(String, u64)>>, name: &str) -> bool {
+    let mut last = slot.lock().unwrap_or_else(PoisonError::into_inner);
     let matches = last.as_ref().is_some_and(|(popped_name, at)| {
         popped_name == name && net_clock_ms().saturating_sub(*at) <= POPPED_CALLBACK_MATCH_MS
     });
