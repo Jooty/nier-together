@@ -4,16 +4,19 @@ use std::sync::{Mutex, PoisonError};
 use replicant_game::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, ChoiceFollowInput, ChoiceFollower,
     ChoiceStep, DialogueTracker, FollowClock, HostLedScriptTalk, LINE_PRESS_GIVES_UP_AFTER_MS,
-    MirrorAction, MirrorInput, OwnTalkWindow, PartnerTalkMemory, PartnerTalkMirror, ScreenReport,
-    StoryTalkMenuClose, TALK_SCREEN_REPORT_AFTER_OPEN_MS, TALK_WINDOW_RVA, TalkLeader,
-    TalkOriginTracker, WATCHER_HOLD_MASK, WatcherHold, WatcherHoldAction, WatcherHoldInput,
-    find_talk_id, host_answer_fits, leader_for_own_talk, own_talk_started, put_may_show_flag_back,
+    MirrorAction, MirrorInput, OwnStepCopyReading, OwnStepCopyWait, OwnTalkWindow,
+    PartnerTalkMemory, PartnerTalkMirror, ScreenReport, StoryTalkMenuClose,
+    TALK_SCREEN_REPORT_AFTER_OPEN_MS, TALK_WINDOW_RVA, TalkLeader, TalkOriginTracker,
+    WATCHER_HOLD_MASK, WatcherHold, WatcherHoldAction, WatcherHoldInput, find_talk_id,
+    host_answer_fits, leader_for_own_talk, own_talk_started, put_may_show_flag_back,
     read_choice_prompt, read_talk_cursor, read_talk_window_screen, story_talk_menu_close_text,
     talk_command_came_from_a_story_step, within_talk_range,
 };
+use replicant_game::fight_sync::{SlotState, script_slot_state};
 use replicant_game::marker::{WorldFlags, read_world_flags};
 use replicant_game::readiness::{classify, read_play_checks};
 use replicant_game::stay_together::{FollowRole, local_phase_index};
+use replicant_game::story_calls::is_event_callback_name;
 use replicant_game::{GameMemory, Replicant};
 use replicant_proto::{DialogueLine, DialogueUpdate, Message, PartnerActivity};
 
@@ -50,6 +53,7 @@ static PARTNER_STORY_TALK_NOTED: Mutex<Option<u32>> = Mutex::new(None);
 static STORY_TALK_MENU_CLOSE: Mutex<StoryTalkMenuClose> = Mutex::new(StoryTalkMenuClose::new());
 static SCREEN_REPORT: Mutex<ScreenReport> = Mutex::new(ScreenReport::new());
 static OWN_TALK_WINDOW: Mutex<OwnTalkWindow> = Mutex::new(OwnTalkWindow::new());
+static OWN_STEP_COPY: Mutex<OwnStepCopyWait> = Mutex::new(OwnStepCopyWait::new());
 
 pub fn tick_dialogue(build: &VerifiedBuild) {
     let Some(net) = net::handle() else {
@@ -97,9 +101,18 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
         && crate::dialogue::set_talk::set_talk_opens_the_window_now());
     let own_window_open = window_open && (started_own_talk || !MIRRORING.load(Ordering::Acquire));
     if OWN_TALK_WINDOW_WAS_OPEN.swap(own_window_open, Ordering::Relaxed) != own_window_open {
-        let by_player_command = own_window_open
-            && crate::cutscene_skip::take_player_talk_command()
-            && !step_made_the_talk_command();
+        let talk_command = own_window_open && crate::cutscene_skip::take_player_talk_command();
+        let from_story_step = talk_command && step_made_the_talk_command();
+        if from_story_step {
+            OWN_TALK_WINDOW
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .note_opened_by_a_story_steps_talk_command();
+            log_line(
+                "dialogue: the story step's talk command opened your window, the talk in it is your game's own copy",
+            );
+        }
+        let by_player_command = talk_command && !from_story_step;
         OWN_TALK_STARTED_BY_PLAYER_COMMAND.store(by_player_command, Ordering::Release);
         log_line(&format!(
             "dialogue: your talk window {} (own talk started: {started_own_talk})",
@@ -133,10 +146,19 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
     let free_to_show = flags
         .is_some_and(|flags| !flags.event_scene && !flags.main_menu_open && !flags.world_frozen())
         && classify(read_play_checks(&game)).is_in_play();
-    // A story step's talk is shown from any distance in the same area.
-    let can_show = (in_range || (partner_story_line.is_some() && same_phase)) && free_to_show;
     let own_talk = own_talk_line.filter(|_| own_copy_open);
     let now_ms = net_clock_ms();
+    let own_step_opens_its_copy = wait_for_own_step_copy(
+        build,
+        partner_story_line.map(|story| story.talk_id),
+        own_talk.is_some(),
+        mirror.is_showing(),
+        now_ms,
+    );
+    // A story step's talk is shown from any distance in the same area.
+    let can_show = (in_range || (partner_story_line.is_some() && same_phase))
+        && free_to_show
+        && !own_step_opens_its_copy;
     let started_by_player_command = OWN_TALK_STARTED_BY_PLAYER_COMMAND.load(Ordering::Acquire);
     let host_leads_from_afar = host_leads_script_talk_from_afar(
         &game,
@@ -217,6 +239,7 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
     let mirror_showing = mirror.is_showing() && window_still_open;
     if !window_still_open {
         forget_mirror_wrote_slot_one();
+        crate::dialogue::talk_window_size::give_back_the_own_size(build);
     }
     MIRRORING.store(mirror_showing, Ordering::Release);
     drop(mirror);
@@ -242,6 +265,40 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
             taken_over,
         });
     apply_hold(build, hold_action, view.partner_name());
+}
+
+fn wait_for_own_step_copy(
+    build: &VerifiedBuild,
+    host_story_talk: Option<u32>,
+    own_copy_open: bool,
+    mirror_showing: bool,
+    now_ms: u64,
+) -> bool {
+    let slot_busy =
+        script_slot_state(crate::fight_sync::script_manager_state(build)) != SlotState::Idle;
+    let last_pop = crate::game_hooks::last_pop();
+    let own_step = last_pop
+        .as_ref()
+        .map(|(call, _)| call.as_str())
+        .filter(|call| slot_busy && is_event_callback_name(call));
+    let (hold, event) = OWN_STEP_COPY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .step(&OwnStepCopyReading {
+            host_story_talk,
+            story_step_running_here: own_step,
+            own_copy_open,
+            mirror_showing,
+            now_ms,
+        });
+    if let Some(event) = event {
+        log_line(&format!(
+            "{} (window size {})",
+            event.describe(),
+            crate::dialogue::talk_window_size::window_layout_size_text(build)
+        ));
+    }
+    hold
 }
 
 fn keep_up_with_the_partners_line(
@@ -769,16 +826,25 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
     match action {
         MirrorAction::Open(line) => {
             begin_talk();
+            let hosts_story_talk = PARTNER_TALK
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .story_line()
+                .is_some_and(|story| story.talk_id == line.talk_id);
+            if hosts_story_talk {
+                crate::dialogue::talk_window_size::lend_the_hosts_size_to_the_mirror(build);
+            }
             let opened = open_mirror(build, line);
             log_line(&format!(
-                "dialogue: mirror open talk {} at line {} ({})",
+                "dialogue: mirror open talk {} at line {} ({}, window size {})",
                 line.talk_id,
                 line.line,
                 if opened {
                     "opened, the on-screen line follows"
                 } else {
                     "the game refused"
-                }
+                },
+                crate::dialogue::talk_window_size::window_layout_size_text(build)
             ));
         }
         MirrorAction::SwitchTalk(line) => {

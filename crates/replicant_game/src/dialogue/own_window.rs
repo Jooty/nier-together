@@ -31,6 +31,12 @@ impl OwnTalkWindow {
         self.had_own_talk |= started_own_talk;
         self.had_own_talk
     }
+
+    /// A talk command a story step gave (`LIB_NPC_Force_Action`) opened the window: the talk is
+    /// this game's own copy of the step's talk, though the game left control slot one clear.
+    pub fn note_opened_by_a_story_steps_talk_command(&mut self) {
+        self.had_own_talk = true;
+    }
 }
 
 impl SetTalkCalls {
