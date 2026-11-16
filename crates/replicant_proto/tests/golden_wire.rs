@@ -818,6 +818,11 @@ fn samples() -> Vec<Message> {
         }),
         Message::GuestWatches(GuestWatches { watching: true }),
         Message::TalkWindowSize(TalkWindowSize { size: 9 }),
+        Message::HostDefeatScreen(HostDefeatScreen {
+            defeat: 3,
+            cursor: 1,
+            pick: Some(DefeatPick::Leave),
+        }),
     ]
 }
 
@@ -835,7 +840,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 77);
+    assert_eq!(PROTOCOL_VERSION, 78);
 }
 
 #[test]
@@ -881,8 +886,10 @@ fn samples_are_the_variants_in_declaration_order() {
 
 #[test]
 fn every_variant_has_a_sample() {
-    let next_index = u8::try_from(samples().len()).expect("fewer than 128 variants");
-    let beyond_last = postcard::from_bytes::<Message>(&[next_index]);
+    let next_index = u32::try_from(samples().len()).expect("fewer variants than u32 holds");
+    // A variant tag is a varint, so from index 128 on it takes two bytes.
+    let next_tag = postcard::to_stdvec(&next_index).expect("an index encodes");
+    let beyond_last = postcard::from_bytes::<Message>(&next_tag);
     assert!(
         matches!(beyond_last, Err(postcard::Error::SerdeDeCustom)),
         "Message has a variant after sample {next_index}: add its sample and its golden line"

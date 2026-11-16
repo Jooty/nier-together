@@ -63,6 +63,7 @@ pub fn install(build: VerifiedBuild) {
                 crate::boss_messages::install(build);
                 crate::part_pickups::install(build);
                 crate::rewind::install(build);
+                crate::host_led_defeat::install(build);
                 crate::fade_sync::install(build);
                 crate::cutscene_skip::install(build);
                 crate::enemies::install(build);

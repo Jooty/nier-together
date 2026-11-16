@@ -46,6 +46,8 @@ mod follow_phase;
 mod game_saved_wire;
 #[path = "golden_wire.rs"]
 mod golden_wire;
+#[path = "host_defeat_screen_wire.rs"]
+mod host_defeat_screen_wire;
 #[path = "item_counts_wire.rs"]
 mod item_counts_wire;
 #[path = "lift_call_wire.rs"]
