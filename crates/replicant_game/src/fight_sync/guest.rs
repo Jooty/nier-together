@@ -9,12 +9,12 @@ use crate::fight_sync::{
     Arrival, EarlierQueuedCalls, FIGHT_WINDOWS, FightWindowData, GuestRadioWaits, GuestTape,
     HOST_ENTRY_END_WAIT_LIMIT_MS, HOST_ENTRY_END_WAIT_LOGGED_FROM_MS, InFlight,
     MAX_HELD_NEXT_WINDOW_MESSAGES, NEXT_WINDOW_HELD_AT_MOST_MS, ONE_RESTART_SIGNALS_SPAN_MS,
-    OWN_POP_HELD_FOR_HOST_COPY_MS, OWN_SCENE_SETTLE_CAP_MS, OwnQueuedCall, PARTNER_CALL_POP_EXPECTED_MS,
-    PARTNER_RESTART_EXPECTED_MS, PopSource, PopVerdict, QUEUED_CALL_GIVEN_UP_AFTER_MS,
-    QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS, REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE,
-    RadioWaitContext, RadioWaitMark, RadioWaitPoll, RadioWaitRelease, RadioWaitRun, Replayer,
-    RequestCall, SlotState, StartEntry, StartStreamPop, StreamEntry, StreamStallWatch, TapeKey,
-    TapeValue, TapedResult, counted_wait_ms,
+    OWN_POP_HELD_FOR_HOST_COPY_MS, OWN_SCENE_SETTLE_CAP_MS, OwnQueuedCall,
+    PARTNER_CALL_POP_EXPECTED_MS, PARTNER_RESTART_EXPECTED_MS, PopSource, PopVerdict,
+    QUEUED_CALL_GIVEN_UP_AFTER_MS, QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS,
+    REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE, RadioWaitContext, RadioWaitMark, RadioWaitPoll,
+    RadioWaitRelease, RadioWaitRun, Replayer, RequestCall, SlotState, StartEntry, StartStreamPop,
+    StreamEntry, StreamStallWatch, TapeKey, TapeValue, TapedResult, counted_wait_ms,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -808,13 +808,11 @@ impl GuestFightStream {
             registered_player_local,
         );
         self.note_ran_outside_window(name, verdict, local_phase);
-        if name.ends_with("_End")
-            && !matches!(
-                verdict,
-                GuestPop::RunReplayed { .. } | GuestPop::RunStartEntry
-            )
-        {
-            self.own_scene_end_popped = true;
+        if !matches!(
+            verdict,
+            GuestPop::RunReplayed { .. } | GuestPop::RunStartEntry
+        ) {
+            self.note_own_pop_for_the_scene_hold(name);
         }
         verdict
     }
@@ -887,6 +885,8 @@ impl GuestFightStream {
         now_ms: u64,
     ) -> GuestPop {
         self.tape.end();
+        // Never a stream copy: a player-tested callback or an object-armed call of this game.
+        self.note_own_pop_for_the_scene_hold(name);
         if !self.is_active_in(local_phase) {
             self.note_ran_outside_window(name, GuestPop::Outside, local_phase);
             return GuestPop::Outside;
@@ -942,6 +942,13 @@ impl GuestFightStream {
     /// before its end, and the start entry waits for it too.
     pub fn set_own_scene_playing(&mut self, playing: bool) {
         self.own_scene_playing = playing;
+    }
+
+    fn note_own_pop_for_the_scene_hold(&mut self, name: &str) {
+        // Any verdict counts; a pop while the scene still plays is wiped by `own_scene_hold`.
+        if name.ends_with("_End") {
+            self.own_scene_end_popped = true;
+        }
     }
 
     fn own_scene_hold(&mut self, now_ms: u64) -> OwnSceneHold {
@@ -1450,7 +1457,10 @@ impl GuestFightStream {
             && held_seq == entry.seq
         {
             let (by, since_scene_cleared_ms) = match own_scene_hold {
-                OwnSceneHold::Over { by, since_cleared_ms } => (by, since_cleared_ms),
+                OwnSceneHold::Over {
+                    by,
+                    since_cleared_ms,
+                } => (by, since_cleared_ms),
                 _ => (OwnSceneRelease::OwnEndPopped, 0),
             };
             self.notices.push(GuestNotice::EntryGoesAfterOwnScene {
