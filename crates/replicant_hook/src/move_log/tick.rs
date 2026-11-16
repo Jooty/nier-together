@@ -15,7 +15,7 @@ use crate::diagnostics::log_line;
 use crate::game_hooks::{game_window_is_foreground, take_focus_event_counts, window_unfocused};
 use crate::memory::InProcessMemory;
 use crate::net::{self, net_clock_ms};
-use crate::player_body::{lift_house_speed_cap, real_body};
+use crate::player_body::{drive_indoor_feet, real_body};
 
 const UNKNOWN_SEED: &str = "unknown";
 
@@ -38,7 +38,7 @@ pub fn tick_move_log(build: &VerifiedBuild) {
     if actor == 0 {
         return;
     }
-    lift_house_speed_cap(
+    drive_indoor_feet(
         build,
         actor,
         flags.is_some_and(|flags| flags.event_scene),
