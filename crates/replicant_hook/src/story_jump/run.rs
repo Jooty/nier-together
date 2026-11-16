@@ -18,6 +18,7 @@ use crate::stay_together::close_pause_menu;
 use crate::story_jump::arrival::{expect_arrival, tick_arrival};
 use crate::story_jump::level::{expect_level_after_jump, tick_level};
 use crate::story_jump::natives::call_native;
+use crate::story_jump::restore_point::{expect_restore_point, tick_restore_point};
 use crate::story_jump::stat_level::raise_stat_level;
 use crate::story_jump::status::{GuestLoadouts, PendingJump, remember_outcome};
 use crate::story_progress::apply_change;
@@ -27,6 +28,7 @@ pub(crate) fn tick(build: &VerifiedBuild) {
     run_pending_jump(build);
     tick_level(build);
     tick_arrival(build);
+    tick_restore_point(build);
 }
 
 pub(crate) fn run_story_jump(build: &VerifiedBuild, point: StoryJumpPoint) -> Result<(), String> {
@@ -186,6 +188,7 @@ fn apply_loadout(build: &VerifiedBuild, point: StoryJumpPoint) {
     raise_stat_level(build, point);
     expect_level_after_jump(build, point);
     expect_arrival(build, point, local_is_host().unwrap_or(false));
+    expect_restore_point(build);
 }
 
 fn apply_step(build: &VerifiedBuild, step: JumpStep) {

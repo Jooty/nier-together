@@ -1,6 +1,7 @@
 mod arrival;
 mod level;
 mod natives;
+mod restore_point;
 mod run;
 mod stat_level;
 mod status;

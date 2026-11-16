@@ -2,8 +2,8 @@ use std::sync::{Mutex, PoisonError};
 
 use replicant_game::Replicant;
 use replicant_game::story_jump::{
-    ArrivalSpot, LEVEL_CHECK_SETTLE_MS, SET_PLAYER_POSITION_NATIVE_RVA, arrival_is_due,
-    arrival_spot,
+    ArrivalSpot, LEVEL_CHECK_SETTLE_MS, PLACEMENT_READ_BACK_AFTER_MS,
+    SET_PLAYER_POSITION_NATIVE_RVA, arrival_is_due, arrival_spot,
 };
 use replicant_proto::StoryJumpPoint;
 
@@ -14,7 +14,6 @@ use crate::net::net_clock_ms;
 use crate::story_jump::natives::{NativeArg, call_native_with};
 
 const ARRIVAL_GIVE_UP_MS: u64 = 60_000;
-const READ_BACK_AFTER_MS: u64 = 1000;
 const ARRIVED_WITHIN_UNITS: f32 = 1.5;
 
 static WAITING: Mutex<Option<Waiting>> = Mutex::new(None);
@@ -51,7 +50,7 @@ pub(super) fn tick_arrival(build: &VerifiedBuild) {
     let now = net_clock_ms();
     let game = Replicant::new(InProcessMemory::new(build));
     if let Some(placed_ms) = waiting.placed_ms {
-        if now.saturating_sub(placed_ms) >= READ_BACK_AFTER_MS {
+        if now.saturating_sub(placed_ms) >= PLACEMENT_READ_BACK_AFTER_MS {
             let spot = waiting.spot;
             *guard = None;
             drop(guard);

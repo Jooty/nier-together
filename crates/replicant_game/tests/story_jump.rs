@@ -1,10 +1,12 @@
 use replicant_game::PhaseEntry;
 use replicant_game::host_led_stretch::stretch_the_story_is_inside;
+use replicant_game::prologue_levels::PROLOGUE_PHASES;
 use replicant_game::story_jump::{
-    JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, StoryJumpRefusal, StoryJumpView,
-    arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
-    guest_reloads_in_place, jump_stat_level, jump_waits_for_pause_menu, level_check_is_due,
-    levels_to_raise, loadout_steps,
+    JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, PLACEMENT_READ_BACK_AFTER_MS,
+    PROLOGUE_END_PLAYER_LEVEL, RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS, StoryJumpRefusal,
+    StoryJumpView, arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
+    guest_reloads_in_place, jump_resets_prologue_level, jump_stat_level, jump_waits_for_pause_menu,
+    level_check_is_due, levels_to_raise, loadout_steps, restore_point_is_due,
 };
 use replicant_proto::StoryJumpPoint;
 
@@ -1178,4 +1180,55 @@ fn a_guest_already_in_the_hosts_jump_phase_reloads_it_in_place_as_the_host_did()
     let (field, _) = destination(StoryJumpPoint::ManorFront);
     assert!(!guest_reloads_in_place(Some(field), manor));
     assert!(!guest_reloads_in_place(None, manor));
+}
+
+#[test]
+fn the_restore_point_is_made_after_the_placement_read_back_and_the_level_check() {
+    let (from, to) = ("A_TOKYO_FIELD_01", "A_CENTER_VILLAGE_01");
+    let placed_at = LEVEL_CHECK_SETTLE_MS;
+    assert!(arrival_is_due(from, to, true, true, placed_at));
+    assert!(level_check_is_due(from, to, true, placed_at));
+    assert!(!restore_point_is_due(from, to, true, true, placed_at));
+    let read_back_at = placed_at + PLACEMENT_READ_BACK_AFTER_MS;
+    assert!(RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS >= read_back_at);
+    assert!(!restore_point_is_due(
+        from,
+        to,
+        true,
+        true,
+        RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS - 1
+    ));
+    assert!(restore_point_is_due(
+        from,
+        to,
+        true,
+        true,
+        RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS
+    ));
+}
+
+#[test]
+fn the_restore_point_waits_for_the_destination_to_load() {
+    let late = RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS * 10;
+    let here = "A_CENTER_VILLAGE_01";
+    assert!(!restore_point_is_due(here, here, false, true, late));
+    assert!(!restore_point_is_due(here, "B_TEST", true, false, late));
+    assert!(restore_point_is_due(here, here, true, true, late));
+}
+
+#[test]
+fn a_jump_from_the_prologue_resets_its_forced_level_before_raising() {
+    for phase in PROLOGUE_PHASES {
+        assert!(jump_resets_prologue_level(phase));
+    }
+    assert_eq!(PROLOGUE_END_PLAYER_LEVEL, 0);
+    let target = jump_stat_level(StoryJumpPoint::VillageAfterPrologue);
+    assert_eq!(levels_to_raise(PROLOGUE_END_PLAYER_LEVEL, target), target);
+}
+
+#[test]
+fn a_jump_outside_the_prologue_never_resets_the_level() {
+    let (village, _) = destination(StoryJumpPoint::VillageAfterPrologue);
+    assert!(!jump_resets_prologue_level(village));
+    assert!(!jump_resets_prologue_level(""));
 }

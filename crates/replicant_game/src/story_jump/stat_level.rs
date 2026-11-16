@@ -1,6 +1,9 @@
 use replicant_proto::StoryJumpPoint;
 
 use crate::level_up::LAST_LEVEL_THE_GAME_ALLOWS;
+use crate::prologue_levels::PROLOGUE_PHASES;
+
+pub const PROLOGUE_END_PLAYER_LEVEL: i32 = 0;
 
 pub fn jump_stat_level(point: StoryJumpPoint) -> i32 {
     match point {
@@ -28,4 +31,11 @@ pub fn jump_stat_level(point: StoryJumpPoint) -> i32 {
 
 pub fn levels_to_raise(current: i32, target: i32) -> i32 {
     (target.min(LAST_LEVEL_THE_GAME_ALLOWS) - current).max(0)
+}
+
+/// The prologue's scripts force the stored level (21, then 29) and its end puts it back to 0 with
+/// `_SetUniqueActorLevel(-1, 0)`. A jump taken in the prologue skips that end, so it does the same
+/// reset before raising; anywhere else the level is the player's own and is never lowered.
+pub fn jump_resets_prologue_level(phase_at_apply: &str) -> bool {
+    PROLOGUE_PHASES.contains(&phase_at_apply)
 }
