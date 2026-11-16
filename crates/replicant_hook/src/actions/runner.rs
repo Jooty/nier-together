@@ -17,6 +17,7 @@ use crate::effects::tick as tick_effects;
 use crate::enemy_bullets::tick as tick_enemy_bullets;
 use crate::fade_sync::tick as tick_fade_sync;
 use crate::fight_sync::tick as tick_fight_sync;
+use crate::host_led_defeat::tick as tick_host_led_defeat;
 use crate::host_view::tick as tick_host_view;
 use crate::kaine::tick_swapped_spell_effects;
 use crate::lift_rides::tick as tick_lift_rides;
@@ -37,7 +38,7 @@ use crate::teleport::{bring_guest_here, go_to_guest, tick as tick_teleport};
 
 pub(super) fn run_queued_actions(build: &VerifiedBuild) {
     in_game_thread_step("script tick: queued actions", || run_actions(build));
-    let steps: [(&'static str, fn(&VerifiedBuild)); 33] = [
+    let steps: [(&'static str, fn(&VerifiedBuild)); 34] = [
         ("script tick: puppets", tick_puppets),
         ("script tick: ghost", tick_ghost),
         (
@@ -52,6 +53,7 @@ pub(super) fn run_queued_actions(build: &VerifiedBuild) {
         ("script tick: effects", tick_effects),
         ("script tick: music", tick_music),
         ("script tick: downed", tick_downed),
+        ("script tick: host-led defeat", tick_host_led_defeat),
         ("script tick: pickups", tick_pickups),
         ("script tick: stay together", tick_stay_together),
         ("script tick: dialogue", tick_dialogue),
