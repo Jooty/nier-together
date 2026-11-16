@@ -83,9 +83,10 @@ impl TrainerPanel {
 
     fn draw_buttons(&mut self, ui: &Ui) {
         let gold = format!("+{GOLD_PER_BUTTON_PRESS} gold");
-        match line_buttons(ui, &["refill hp", "refill mp", &gold], &[]) {
+        match line_buttons(ui, &["refill hp", "refill mp", "level up", &gold], &[]) {
             Some(0) => self.queue(Action::RefillHealth),
             Some(1) => self.queue(Action::RefillMagic),
+            Some(2) => self.queue(Action::LevelUp),
             Some(_) => match Action::add_gold(GOLD_PER_BUTTON_PRESS) {
                 Ok(action) => self.queue(action),
                 Err(error) => self.status = error.to_string(),

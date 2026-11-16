@@ -24,7 +24,7 @@ use crate::music::tick as tick_music;
 use crate::one_sided::tick as tick_one_sided;
 use crate::part_pickups::tick as tick_part_pickups;
 use crate::pickups::tick as tick_pickups;
-use crate::prologue_levels::tick as tick_prologue_levels;
+use crate::prologue_levels::{level_up_once, tick as tick_prologue_levels};
 use crate::puppet::{tick as tick_puppets, tick_ghost, tick_own_powers, tick_partner_powers};
 use crate::rule_rooms::tick as tick_rule_rooms;
 use crate::script_rolls::tick as tick_script_rolls;
@@ -89,6 +89,7 @@ fn run_actions(build: &VerifiedBuild) {
             Action::StoryJump(point) => run_story_jump(build, point),
             Action::BringGuestHere => bring_guest_here(build),
             Action::GoToGuest => go_to_guest(build),
+            Action::LevelUp => level_up_once(build),
             other => run_trainer_action(build, other).map_err(|error| error.to_string()),
         };
         match outcome {
