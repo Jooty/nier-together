@@ -48,6 +48,16 @@ struct GuestStory {
     last_apply: Option<HostStoryApply>,
 }
 
+/// A script function ran on this game; the stage start of a freshly loaded phase lets the host's
+/// story changes apply again.
+pub(crate) fn note_function_ran(name: &str) {
+    GUEST
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .apply_gate
+        .note_function_ran(name);
+}
+
 pub fn request_story_resync() {
     RESYNC_REQUESTED.request();
 }
@@ -300,7 +310,7 @@ fn guest_tick(
         log_line(match apply {
             HostStoryApply::Now => "story: the host's changes apply here again",
             HostStoryApply::HeldForTheLoad => {
-                "story: the host's changes wait while this game loads its phase and for the first second after, so this game's stage start reads the flags the host's stage start did"
+                "story: the host's changes wait while this game loads its phase and until its own StartStage has run (15 s at most), so that stage start reads the flags the host's did"
             }
         });
     }
