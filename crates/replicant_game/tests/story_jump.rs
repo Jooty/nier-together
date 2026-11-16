@@ -5,8 +5,9 @@ use replicant_game::story_jump::{
     JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, PLACEMENT_READ_BACK_AFTER_MS,
     PROLOGUE_END_PLAYER_LEVEL, RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS, StoryJumpRefusal,
     StoryJumpView, arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
-    guest_reloads_in_place, jump_resets_prologue_level, jump_stat_level, jump_waits_for_pause_menu,
-    level_check_is_due, levels_to_raise, loadout_steps, restore_point_is_due,
+    guest_reloads_in_place, item_shortfalls, jump_resets_prologue_level, jump_stat_level,
+    jump_waits_for_pause_menu, level_check_is_due, levels_to_raise, loadout_steps,
+    restore_point_is_due, shared_items_the_jump_gives,
 };
 use replicant_proto::StoryJumpPoint;
 
@@ -1231,4 +1232,40 @@ fn a_jump_outside_the_prologue_never_resets_the_level() {
     let (village, _) = destination(StoryJumpPoint::VillageAfterPrologue);
     assert!(!jump_resets_prologue_level(village));
     assert!(!jump_resets_prologue_level(""));
+}
+
+#[test]
+fn the_after_the_facade_jump_gives_one_shared_item_and_no_key_or_story_items() {
+    assert_eq!(
+        shared_items_the_jump_gives(StoryJumpPoint::DesertAfterFacade),
+        vec![(250, 1)]
+    );
+    assert!(shared_items_the_jump_gives(StoryJumpPoint::VillageAfterPrologue).is_empty());
+}
+
+#[test]
+fn a_shared_item_the_load_took_from_this_game_is_found_missing() {
+    let wanted = shared_items_the_jump_gives(StoryJumpPoint::DesertAfterFacade);
+    let lost = item_shortfalls(&wanted, |_| Some(0));
+    assert_eq!(lost.len(), 1);
+    assert_eq!(lost[0].item_id, 250);
+    assert_eq!(lost[0].missing(), 1);
+}
+
+#[test]
+fn a_shared_item_still_held_or_unreadable_is_left_alone() {
+    let wanted = shared_items_the_jump_gives(StoryJumpPoint::DesertAfterFacade);
+    assert!(item_shortfalls(&wanted, |_| Some(1)).is_empty());
+    assert!(item_shortfalls(&wanted, |_| Some(5)).is_empty());
+    assert!(item_shortfalls(&wanted, |_| None).is_empty());
+}
+
+#[test]
+fn a_later_set_to_zero_removes_the_item_from_the_wanted_list() {
+    let wanted = shared_items_the_jump_gives(StoryJumpPoint::VillageBoss9);
+    for step in loadout_steps(StoryJumpPoint::VillageBoss9) {
+        if let JumpStep::SetItem { id, count: 0 } = step {
+            assert!(wanted.iter().all(|(held, _)| i32::from(*held) != id));
+        }
+    }
 }

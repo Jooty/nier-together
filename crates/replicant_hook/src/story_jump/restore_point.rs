@@ -2,18 +2,21 @@ use std::sync::{Mutex, PoisonError};
 
 use replicant_game::Replicant;
 use replicant_game::downed::BACKUP_SAVE_DATA_RVA;
-use replicant_game::story_jump::restore_point_is_due;
+use replicant_game::story_jump::{restore_point_is_due, shared_items_the_jump_gives};
+use replicant_proto::StoryJumpPoint;
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
+use crate::story_jump::lost_items::give_back_lost_items;
 
 const RESTORE_POINT_GIVE_UP_MS: u64 = 60_000;
 
 static WAITING: Mutex<Option<Waiting>> = Mutex::new(None);
 
 struct Waiting {
+    wanted_items: Vec<(u16, u8)>,
     phase_at_apply: String,
     applied_ms: u64,
     phase_changed_ms: Option<u64>,
@@ -22,9 +25,10 @@ struct Waiting {
 
 type BackupSaveData = unsafe extern "system" fn();
 
-pub(super) fn expect_restore_point(build: &VerifiedBuild) {
+pub(super) fn expect_restore_point(build: &VerifiedBuild, point: StoryJumpPoint) {
     let game = Replicant::new(InProcessMemory::new(build));
     *WAITING.lock().unwrap_or_else(PoisonError::into_inner) = Some(Waiting {
+        wanted_items: shared_items_the_jump_gives(point),
         phase_at_apply: game.current_phase().unwrap_or_default(),
         applied_ms: net_clock_ms(),
         phase_changed_ms: None,
@@ -64,8 +68,10 @@ pub(super) fn tick_restore_point(build: &VerifiedBuild) {
     ) {
         return;
     }
+    let wanted_items = std::mem::take(&mut waiting.wanted_items);
     *guard = None;
     drop(guard);
+    give_back_lost_items(build, &wanted_items);
     make_restore_point(build);
     log_line(&format!("story jump: restore point made ({phase_now})"));
 }

@@ -188,7 +188,7 @@ fn apply_loadout(build: &VerifiedBuild, point: StoryJumpPoint) {
     raise_stat_level(build, point);
     expect_level_after_jump(build, point);
     expect_arrival(build, point, local_is_host().unwrap_or(false));
-    expect_restore_point(build);
+    expect_restore_point(build, point);
 }
 
 fn apply_step(build: &VerifiedBuild, step: JumpStep) {

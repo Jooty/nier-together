@@ -1,5 +1,6 @@
 mod arrival;
 mod level;
+mod lost_items;
 mod natives;
 mod restore_point;
 mod run;
