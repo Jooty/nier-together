@@ -629,7 +629,7 @@ fn apply_stones(
                 serial,
                 handler: turn.handler,
                 host_broke: false,
-                guarded_dummy: None,
+                held_dummy: None,
             },
         );
         if !paid {
@@ -682,11 +682,10 @@ fn step_stoned_copies(
             StoneCopyStep::WaitForDummy => true,
             StoneCopyStep::HoldUntilHostBreaks { state, dummy } => {
                 hold_off_off_camera_end(memory, state);
-                if stoned.guarded_dummy != Some(dummy) {
-                    stoned.guarded_dummy = Some(dummy);
-                    let guarded = local.calls.set_survive_at_one_hp(memory, dummy, true);
+                if stoned.held_dummy != Some(dummy) {
+                    stoned.held_dummy = Some(dummy);
                     log_line(&format!(
-                        "stone: your copy of {}'s damage dummy {dummy:#x} stands; kept from your hits {guarded}, its off-camera end held until the host's statue breaks",
+                        "stone: your copy of {}'s damage dummy {dummy:#x} stands; its off-camera end is held until the host's statue breaks, your own hits on it are not kept off",
                         enemy_id_text(*id)
                     ));
                 }

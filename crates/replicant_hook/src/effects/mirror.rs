@@ -230,6 +230,7 @@ impl Mirror {
 
 pub fn tick(build: &VerifiedBuild) {
     let Some(net) = net::handle() else {
+        actor_cues::wind_down(build);
         return;
     };
     let active = net.view().partner_in_play();

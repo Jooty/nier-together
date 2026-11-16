@@ -297,8 +297,14 @@ fn note_stop_sound(handle: u64) {
     }
 }
 
+pub(super) fn wind_down(build: &VerifiedBuild) {
+    keep_lasting_sounds(build, false);
+    remove_replays_from_unheld_copies(build, false);
+}
+
 pub(super) fn tick(build: &VerifiedBuild, active: bool) {
     let Some(net) = net::handle() else {
+        wind_down(build);
         return;
     };
     let arrived = net.take_relayed(|message| {

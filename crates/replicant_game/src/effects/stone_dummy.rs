@@ -29,7 +29,7 @@ pub struct StoneStateView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoneCopyStep {
     WaitForDummy,
-    /// Keep the guest's hits off the dummy and the off-camera end away.
+    /// Keep the off-camera end away; nothing keeps the guest's own hits off the dummy.
     HoldUntilHostBreaks {
         state: u64,
         dummy: u64,
@@ -70,22 +70,55 @@ pub fn read_stone_state(
             dummy: StoneDummy::NotSpawnedYet,
         });
     }
+    let handle = stone_dummy_handle(memory, state)?;
+    let dummy = actor_of_stone_dummy_handle(memory, handle);
+    Some(StoneStateView {
+        state,
+        dummy: dummy.map_or(StoneDummy::Gone, StoneDummy::Standing),
+    })
+}
+
+/// The (slot, generation) handle a stone state keeps for the damage dummy it spawned.
+pub fn stone_dummy_handle(memory: &impl GameMemory, state: u64) -> Option<(u32, u32)> {
     let slot = memory
         .read_i32(state + STONE_STATE_DUMMY_HANDLE_SLOT_OFFSET)
         .ok()?;
     let generation = memory
         .read_i32(state + STONE_STATE_DUMMY_HANDLE_GENERATION_OFFSET)
         .ok()?;
-    let dummy = actor_of_handle(memory, slot.cast_unsigned(), generation.cast_unsigned())
+    Some((slot.cast_unsigned(), generation.cast_unsigned()))
+}
+
+/// The damage dummy a handle still names, or None once it is gone or the slot holds another class.
+pub fn actor_of_stone_dummy_handle(memory: &impl GameMemory, handle: (u32, u32)) -> Option<u64> {
+    actor_of_handle(memory, handle.0, handle.1)
         .ok()
         .flatten()
         .filter(|dummy| {
             memory.read_i32(dummy + ACTOR_CLASS_ID_OFFSET).ok() == Some(DAMAGE_DUMMY_CLASS_ID)
-        });
-    Some(StoneStateView {
-        state,
-        dummy: dummy.map_or(StoneDummy::Gone, StoneDummy::Standing),
-    })
+        })
+}
+
+/// What the host does with a watched statue this tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostStatueWatch {
+    Keep,
+    Broke,
+    Drop,
+}
+
+/// The statue broke when its stone state shows the dummy gone, or when the state can no longer
+/// be read after its dummy was seen standing and that dummy's handle no longer resolves.
+pub fn host_statue_watch(
+    view: Option<StoneStateView>,
+    remembered_dummy_gone: bool,
+) -> HostStatueWatch {
+    match view {
+        Some(view) if view.dummy == StoneDummy::Gone => HostStatueWatch::Broke,
+        Some(_) => HostStatueWatch::Keep,
+        None if remembered_dummy_gone => HostStatueWatch::Broke,
+        None => HostStatueWatch::Drop,
+    }
 }
 
 pub fn stone_copy_step(view: Option<StoneStateView>, host_broke: bool) -> StoneCopyStep {

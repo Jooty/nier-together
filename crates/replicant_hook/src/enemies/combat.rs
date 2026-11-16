@@ -76,7 +76,7 @@ pub(super) struct StonedCopy {
     pub(super) serial: i32,
     pub(super) handler: StoneHandler,
     pub(super) host_broke: bool,
-    pub(super) guarded_dummy: Option<u64>,
+    pub(super) held_dummy: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy)]

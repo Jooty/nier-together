@@ -1,8 +1,9 @@
 use crate::fake_memory::{FAKE_MODULE_BASE, FakeMemory};
 use replicant_game::GameMemory;
 use replicant_game::effects::{
-    StoneCopyStep, StoneDummy, StoneStateView, hold_off_off_camera_end, host_statue_broke,
-    read_stone_state, stone_copy_step, stone_state_machine_pointer_offset, stone_state_vtable_rva,
+    HostStatueWatch, StoneCopyStep, StoneDummy, StoneStateView, actor_of_stone_dummy_handle,
+    hold_off_off_camera_end, host_statue_broke, host_statue_watch, read_stone_state,
+    stone_copy_step, stone_dummy_handle, stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
 use replicant_game::offsets::{
     ACTOR_CLASS_ID_OFFSET, DAMAGE_DUMMY_CLASS_ID, HANDLE_POOL_GENERATIONS_RVA,
@@ -152,5 +153,37 @@ fn the_guests_off_camera_end_is_held_off_while_it_waits() {
             .read_f32(STONE_STATE + STONE_STATE_SECONDS_IN_STATE_OFFSET)
             .unwrap(),
         0.0
+    );
+}
+
+#[test]
+fn the_guests_stone_step_never_writes_a_survive_flag_through_the_dummy() {
+    // Class 0xA5 is 0x1600 bytes (factory 0x14018E750); the parameter-object pointer sits at
+    // actor +0x14350, so a survive-at-one-hp write on the dummy lands in another heap block.
+    let source = include_str!("../../replicant_hook/src/enemies/guest_combat.rs");
+    let step = &source[source.find("fn step_stoned_copies").unwrap()
+        ..source.find("fn kill_copy").unwrap()];
+    assert!(!step.contains("set_survive_at_one_hp"));
+    assert!(!step.contains("ACTOR_PARAMETER_OBJECT_OFFSET"));
+}
+
+#[test]
+fn the_hosts_break_is_sent_when_the_statue_left_before_the_next_step() {
+    let spawned = stoned_copy(STONE_STATE_PHASE_DUMMY_SPAWNED, true);
+    let handle = stone_dummy_handle(&spawned, STONE_STATE).unwrap();
+    assert_eq!(handle, (DUMMY_SLOT, DUMMY_GENERATION));
+    assert_eq!(actor_of_stone_dummy_handle(&spawned, handle), Some(DUMMY));
+    let after = stoned_copy(STONE_STATE_PHASE_DUMMY_SPAWNED, false);
+    assert!(actor_of_stone_dummy_handle(&after, handle).is_none());
+    // The statue is gone from the pool, so its state cannot be read: no view.
+    assert_eq!(host_statue_watch(None, true), HostStatueWatch::Broke);
+    assert_eq!(host_statue_watch(None, false), HostStatueWatch::Drop);
+    assert_eq!(
+        host_statue_watch(view(&spawned), false),
+        HostStatueWatch::Keep
+    );
+    assert_eq!(
+        host_statue_watch(view(&after), true),
+        HostStatueWatch::Broke
     );
 }

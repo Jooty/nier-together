@@ -61,8 +61,9 @@ pub use source::{
     projectile_kind, projectile_owner, read_actor_position,
 };
 pub use stone_dummy::{
-    StoneCopyStep, StoneDummy, StoneStateView, hold_off_off_camera_end, host_statue_broke,
-    read_stone_state, stone_copy_step, stone_state_of,
+    HostStatueWatch, StoneCopyStep, StoneDummy, StoneStateView, actor_of_stone_dummy_handle,
+    hold_off_off_camera_end, host_statue_broke, host_statue_watch, read_stone_state,
+    stone_copy_step, stone_dummy_handle, stone_state_of,
 };
 pub use voice_character::{
     FirstTimeNames, VOICE_SWITCH_GROUP, VoiceCharacterSchedule, read_character_state,

@@ -10,7 +10,8 @@ use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
 use replicant_game::effects::{
-    STONE_HANDLERS, actor_holds_stone, host_statue_broke, read_stone_state, stone_handler_rva,
+    HostStatueWatch, STONE_HANDLERS, StoneDummy, actor_holds_stone, actor_of_stone_dummy_handle,
+    host_statue_watch, read_stone_state, stone_dummy_handle, stone_handler_rva,
 };
 use replicant_game::offsets::{
     ACTOR_SPAWN_SERIAL_OFFSET, AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET,
@@ -53,6 +54,7 @@ struct HostStatue {
     serial: i32,
     enemy: EnemyId,
     handler: StoneHandler,
+    dummy_handle: Option<(u32, u32)>,
 }
 
 pub(super) fn install(build: VerifiedBuild) {
@@ -123,7 +125,7 @@ pub(super) fn watch_host_statues(build: &VerifiedBuild) {
         }
         let memory = InProcessMemory::new(build);
         let mut broke = Vec::new();
-        statues.retain(|statue| {
+        statues.retain_mut(|statue| {
             let still_it = actor_is_live(&memory, statue.actor).unwrap_or(false)
                 && memory
                     .read_i32(statue.actor + ACTOR_SPAWN_SERIAL_OFFSET)
@@ -131,10 +133,22 @@ pub(super) fn watch_host_statues(build: &VerifiedBuild) {
             let view = still_it
                 .then(|| read_stone_state(&memory, statue.actor, statue.handler))
                 .flatten();
-            if host_statue_broke(view) {
-                broke.push(statue.enemy);
+            if let Some(view) = view
+                && matches!(view.dummy, StoneDummy::Standing(_))
+            {
+                statue.dummy_handle = stone_dummy_handle(&memory, view.state);
             }
-            view.is_some() && !host_statue_broke(view)
+            let remembered_dummy_gone = statue
+                .dummy_handle
+                .is_some_and(|handle| actor_of_stone_dummy_handle(&memory, handle).is_none());
+            match host_statue_watch(view, remembered_dummy_gone) {
+                HostStatueWatch::Keep => true,
+                HostStatueWatch::Broke => {
+                    broke.push(statue.enemy);
+                    false
+                }
+                HostStatueWatch::Drop => false,
+            }
         });
         broke
     };
@@ -275,6 +289,7 @@ fn after_stone_message(handler: StoneHandler, actor: u64, before: StoneBefore) {
             serial,
             enemy: id,
             handler,
+            dummy_handle: None,
         });
     }
 }
