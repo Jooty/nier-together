@@ -99,8 +99,9 @@ pub(crate) fn companion_off_function_ran(build: &VerifiedBuild, name: &str) {
             .write_u8(actor + PARTNER_ACTIVE_FLAG_OFFSET, 1)
             .is_ok();
     log_line(&format!(
-        "companion off ({}): {name} addresses her, she is given back for it and the {COMPANION_LENT_AFTER_A_CALL_MS} ms after (active byte found {found}, {})",
+        "companion off ({}): {name} addresses her, she is given back for it{} (active byte found {found}, {})",
         lend.fight,
+        after_text(COMPANION_LENT_AFTER_A_CALL_MS),
         if written {
             "written 1"
         } else {
@@ -226,7 +227,11 @@ pub(crate) fn keep_companion_off(build: &VerifiedBuild, guest_in_session: bool) 
     let turned_on_by = if report.turned_on_by.is_empty() {
         "nobody".to_owned()
     } else {
-        report.turned_on_by.join(", ")
+        format!(
+            "{} ({} ticks found active outside a lend, each turned off at once)",
+            report.turned_on_by.join(", "),
+            report.turned_on_by.len()
+        )
     };
     let lent = report
         .lent
@@ -316,16 +321,25 @@ fn boss_signs_text(memory: &InProcessMemory, group: Option<u16>) -> String {
 
 fn lend_text(why: &CompanionLendReason) -> String {
     match why {
-        CompanionLendReason::Scene => {
-            format!("the event scene and the {COMPANION_LENT_AFTER_A_SCENE_MS} ms after it")
-        }
+        CompanionLendReason::Scene => format!(
+            "the event scene{}",
+            after_text(COMPANION_LENT_AFTER_A_SCENE_MS)
+        ),
         CompanionLendReason::Call(name) => {
-            format!("{name} and the {COMPANION_LENT_AFTER_A_CALL_MS} ms after it")
+            format!("{name}{}", after_text(COMPANION_LENT_AFTER_A_CALL_MS))
         }
         CompanionLendReason::ScriptMode(by) => format!(
-            "her script mode (the scripts drive her; last script function {by}) and the \
-             {COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS} ms after it"
+            "her script mode (the scripts drive her; last script function {by}){}",
+            after_text(COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS)
         ),
+    }
+}
+
+fn after_text(ms: u64) -> String {
+    if ms == 0 {
+        " (off again the tick it ends)".to_owned()
+    } else {
+        format!(" and the {ms} ms after it")
     }
 }
 

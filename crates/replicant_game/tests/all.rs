@@ -177,6 +177,8 @@ mod kaine_companion_off_everywhere;
 mod kaine_companion_off_fallback;
 #[path = "kaine_door_state.rs"]
 mod kaine_door_state;
+#[path = "kaine_feet_drive.rs"]
+mod kaine_feet_drive;
 #[path = "kaine_feet_line.rs"]
 mod kaine_feet_line;
 #[path = "kaine_hit_power.rs"]

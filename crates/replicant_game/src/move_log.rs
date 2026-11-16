@@ -1,4 +1,5 @@
 mod feet;
+mod feet_drive;
 mod input;
 mod line;
 mod names;
@@ -10,7 +11,11 @@ mod speed_cap_report;
 mod trigger;
 mod window;
 
-pub use feet::{FeetReading, format_feet_second, read_feet};
+pub use feet::{FeetReading, FeetSecond, format_feet_second, read_feet, write_feet_speed};
+pub use feet_drive::{
+    FeetDriveReading, FeetDriveStep, FeetDriveTally, feet_drive_step, house_pace_in_play,
+    run_loop_speed_for,
+};
 pub use input::{input_block_getter, read_move_axis, read_move_keys};
 pub use line::{MoveLineContext, format_move_line};
 pub use names::{action_set_for_seed, state_name_for_rva};
@@ -48,6 +53,13 @@ pub const SPEED_CAP_THRESHOLD: f32 = 0.05;
 pub const SPEED_CAP_HOUSE_VALUE_MIN: f32 = 0.005;
 pub const SPEED_CAP_LIFTED_VALUE: f32 = 0.5;
 pub const SPEED_CAP_REPORT_WINDOW_AFTER_LOW_MS: u64 = 1_000;
+pub const RUN_LOOP_MOTION_NAME: &str = "KAINE015_run_lp";
+pub const RUN_LOOP_FULL_SPEED_GROUND_UNITS_PER_SECOND: f32 = 6.0;
+pub const INDOOR_FEET_MOVING_STEP_PER_SECOND: f32 = 1.0;
+pub const INDOOR_FEET_LEAST_MOTION_SPEED: f32 = 0.3;
+pub const INDOOR_FEET_MOST_MOTION_SPEED: f32 = 1.0;
+pub const INDOOR_FEET_SPEED_TOLERANCE: f32 = 0.02;
+pub const INDOOR_FEET_PLAY_BLEND_SECONDS: f32 = 0.2;
 pub const STATE_ACTION_MOVE_RVA: u32 = 0xC9_3E98;
 pub const STATE_161F0_OFFSET: u64 = 0x1_61F0;
 pub const APPLIED_STEP_OFFSET: u64 = 0x1A0;
