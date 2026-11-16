@@ -2,7 +2,8 @@ use std::cell::Cell;
 
 use replicant_game::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, ChoiceFollowInput, ChoiceFollower,
-    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS, LineSteps, MirrorAction, MirrorInput,
+    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS,
+    HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS, LineSteps, MirrorAction, MirrorInput,
     OWN_ENDED_TALK_NOT_MIRRORED_MS, PartnerTalkMemory, PartnerTalkMirror, TALK_JOIN_RANGE_UNITS,
     TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK, TALK_TABLE_SCAN_CHUNK_SLOTS,
     TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET, TALK_WINDOW_RVA,
@@ -674,7 +675,7 @@ fn a_copy_opened_within_the_wait_after_the_host_left_closes_at_once() {
 }
 
 #[test]
-fn a_copy_opened_after_the_wait_runs_by_its_own_buttons() {
+fn a_copy_opened_long_after_the_host_left_runs_by_its_own_buttons() {
     let mut mirror = PartnerTalkMirror::new();
     let host = host_that_ended_talk_at(1057, 1000);
     assert_eq!(
@@ -682,9 +683,24 @@ fn a_copy_opened_after_the_wait_runs_by_its_own_buttons() {
             &mut mirror,
             &host,
             Some(line(1057, 0)),
-            1001 + FOLLOW_HOST_TALK_WAIT_MS
+            1001 + HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS
         ),
         Some(MirrorAction::FollowStarted(1057))
+    );
+}
+
+#[test]
+fn a_copy_opened_a_little_after_the_wait_still_closes_at_once() {
+    let mut mirror = PartnerTalkMirror::new();
+    let host = host_that_ended_talk_at(1056, 19_484);
+    assert_eq!(
+        guest_tick(&mut mirror, &host, Some(line(1056, 0)), 21_754),
+        Some(MirrorAction::FinishOwnTalk(1056))
+    );
+    assert!(!mirror.holds_own_talk());
+    assert_eq!(
+        guest_tick(&mut mirror, &host, Some(line(1056, 0)), 23_754),
+        None
     );
 }
 
