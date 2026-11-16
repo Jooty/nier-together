@@ -63,8 +63,7 @@ fn last_line_before<'a>(lines: &[&'a str], companion: Companion, at_ms: u64) -> 
     lines
         .iter()
         .copied()
-        .filter(|line| companion_of(line) == companion && ms_of(line) <= at_ms)
-        .last()
+        .rfind(|line| companion_of(line) == companion && ms_of(line) <= at_ms)
 }
 
 fn host_shares(companion: Companion, at_ms: u64) -> bool {
