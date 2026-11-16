@@ -207,7 +207,10 @@ impl GuestEngine {
                         self.ran.push(name);
                         self.running_ticks = 1;
                     }
-                    GuestPop::RunPartnerCall | GuestPop::RunEarlierEntry | GuestPop::Outside => {
+                    GuestPop::RunPartnerCall
+                    | GuestPop::RunEarlierEntry
+                    | GuestPop::RunMusicInOwnScene
+                    | GuestPop::Outside => {
                         self.ran_outside.push(name.clone());
                         self.ran.push(name);
                         self.running_ticks = 1;

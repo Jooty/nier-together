@@ -1,5 +1,6 @@
 use crate::script_functions::{
-    FUNCTIONS_CALLED_ONLY_FROM_LOCAL_STATE, MODAL_UI_FUNCTIONS, SCRIPT_FUNCTIONS,
+    FUNCTIONS_CALLED_ONLY_FROM_LOCAL_STATE, MODAL_UI_FUNCTIONS, MUSIC_ONLY_FUNCTIONS,
+    SCRIPT_FUNCTIONS,
 };
 use crate::shared_sequence::is_led_by_the_host;
 use crate::story_calls::is_event_id_name;
@@ -52,4 +53,10 @@ pub fn is_callee_of(phase: &str, callee: &str, caller: &str) -> bool {
 pub fn shows_modal_ui(phase: &str, name: &str) -> bool {
     script_function(phase, name).is_some_and(|function| function.shows_modal_ui)
         || MODAL_UI_FUNCTIONS.binary_search(&(phase, name)).is_ok()
+}
+
+/// A function whose every native is music, a no-op print, a flag read or a callback removal
+/// (docs `scripts/music_only_functions.py`): it can never load, clear or release a scene.
+pub fn is_music_only(phase: &str, name: &str) -> bool {
+    MUSIC_ONLY_FUNCTIONS.binary_search(&(phase, name)).is_ok()
 }

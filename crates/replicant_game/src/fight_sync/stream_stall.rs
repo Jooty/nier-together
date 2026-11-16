@@ -20,6 +20,8 @@ pub struct StreamStall<'a> {
     pub name: &'a str,
     pub waited_ms: u64,
     pub holder: Option<(&'a str, u64)>,
+    /// The entry waits for this game's own scene to end (`GuestNotice::EntryWaitsForOwnScene`).
+    pub held_by_own_scene: bool,
     pub last_yielding_native: Option<(&'static str, u64)>,
     pub radio: Option<RadioState>,
 }
@@ -79,6 +81,9 @@ impl StreamStallWatch {
 pub fn format_stream_stall(stall: &StreamStall<'_>) -> String {
     let holder = match stall.holder {
         Some((name, in_slot_ms)) => format!("{name} (in the slot {in_slot_ms} ms"),
+        None if stall.held_by_own_scene => {
+            "the hold for your game's own scene, until its end pops (in the slot ? ms".to_owned()
+        }
         None => "no known handler (in the slot ? ms".to_owned(),
     };
     let native = match stall.last_yielding_native {

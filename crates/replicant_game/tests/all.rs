@@ -129,6 +129,8 @@ mod far_guest_follow;
 mod fight_doors;
 #[path = "fight_entry_end.rs"]
 mod fight_entry_end;
+#[path = "fight_own_scene_music.rs"]
+mod fight_own_scene_music;
 #[path = "fight_player_traps.rs"]
 mod fight_player_traps;
 #[path = "fight_requests.rs"]

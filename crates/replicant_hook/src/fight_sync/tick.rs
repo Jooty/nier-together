@@ -362,10 +362,14 @@ fn guest_tick(build: &VerifiedBuild, here: Here, messages: Vec<Message>, restart
 }
 
 fn log_stream_stall(build: &VerifiedBuild) {
-    let stall = GUEST
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .stream_stall(net_clock_ms());
+    let (stall, held_by_own_scene) = {
+        let mut guest = GUEST.lock().unwrap_or_else(PoisonError::into_inner);
+        let stall = guest.stream_stall(net_clock_ms());
+        let held = stall
+            .as_ref()
+            .is_some_and(|(seq, ..)| guest.is_held_for_own_scene(*seq));
+        (stall, held)
+    };
     let Some((seq, name, waited_ms)) = stall else {
         return;
     };
@@ -377,6 +381,7 @@ fn log_stream_stall(build: &VerifiedBuild) {
         holder: holder
             .as_ref()
             .map(|(handler, in_slot_ms)| (handler.as_str(), *in_slot_ms)),
+        held_by_own_scene,
         last_yielding_native: last_yielding_native(),
         radio: read_radio_state(build),
     }));
@@ -508,6 +513,9 @@ fn send_guest_requests() {
                     OwnSceneRelease::SettleCapReached =>
                         "your scene's own end never popped, the settle cap let it go",
                 }
+            ),
+            GuestNotice::HostCopyOfOwnSceneMusicDropped { seq, name } => format!(
+                "fight stream: the host's {name} (seq {seq}) not run, your game ran its own in your scene"
             ),
         });
     }

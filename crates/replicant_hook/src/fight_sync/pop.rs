@@ -422,6 +422,12 @@ fn judge_guest_pop(
             ));
             FightPop::Hold
         }
+        GuestPop::RunMusicInOwnScene => {
+            log_line(&format!(
+                "fight stream: your game's {name} is music only and your scene plays, it runs here and the host's copy is dropped"
+            ));
+            FightPop::Outside
+        }
         GuestPop::HeldForHostCopy => {
             log_line(&format!(
                 "fight request: your player set off {name}, held until the host's copy pairs with it, else it goes to the host to run once"

@@ -286,6 +286,7 @@ fn the_stall_line_names_the_entry_its_holder_the_native_it_waits_in_and_the_radi
         name: "EID_0200_a0040g_02_Start",
         waited_ms: 5_001,
         holder: Some((SCENE_HANDLER, 11_000)),
+        held_by_own_scene: false,
         last_yielding_native: Some(("_StartRadio", 0)),
         radio: Some(radio),
     };
