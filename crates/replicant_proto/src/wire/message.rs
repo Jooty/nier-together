@@ -5,10 +5,10 @@ use nt_wire::{
 use serde::{Deserialize, Serialize};
 
 use crate::wire::{
-    AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved, BodyPackName,
-    BombBlast, BulletEffectPlay, BulletFlight, CallbackFired, CampaignCard, CartRide, CartRun,
-    ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk, DesyncDigest, DialogueUpdate,
-    DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone,
+    ActorCue, AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved,
+    BodyPackName, BombBlast, BulletEffectPlay, BulletFlight, CallbackFired, CampaignCard, CartRide,
+    CartRun, ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk, DesyncDigest,
+    DialogueUpdate, DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone,
     EnemyBulletFlight, EnemyCreation, EnemyDrop, EnemyGone, EnemyHit, EnemyIdList, EnemyKilled,
     EnemySnapshot, EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim,
     FightPromptCount, FightRadioWaitEnded, FightRequest, FightRequestAnswer, FightStreamEntry,
@@ -154,6 +154,7 @@ pub enum Message {
     WorldObjectBroken(WorldObjectBroken),
     GuestWatches(GuestWatches),
     TalkWindowSize(TalkWindowSize),
+    ActorCue(ActorCue),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -292,6 +293,7 @@ impl Message {
             Message::WorldObjectBroken(_) => "WorldObjectBroken",
             Message::GuestWatches(_) => "GuestWatches",
             Message::TalkWindowSize(_) => "TalkWindowSize",
+            Message::ActorCue(_) => "ActorCue",
         }
     }
 
@@ -422,6 +424,7 @@ impl Message {
                 | Message::WorldObjectBroken(_)
                 | Message::GuestWatches(_)
                 | Message::TalkWindowSize(_)
+                | Message::ActorCue(_)
         )
     }
 
@@ -538,6 +541,7 @@ impl Message {
             | Message::TalkWindowSize(_) => Ok(()),
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
+            Message::ActorCue(cue) => cue.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),
             Message::PartPickup(pickup) => pickup.validate(),
             Message::RuleRoomBreak(rule_break) => rule_break.validate(),

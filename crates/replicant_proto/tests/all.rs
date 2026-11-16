@@ -1,3 +1,5 @@
+#[path = "actor_cue_wire.rs"]
+mod actor_cue_wire;
 #[path = "attack_gauge_wire.rs"]
 mod attack_gauge_wire;
 #[path = "block_held_wire.rs"]

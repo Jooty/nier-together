@@ -1,3 +1,4 @@
+mod actor_cue;
 mod attack_gauge;
 mod block_held;
 mod block_moved;
@@ -64,6 +65,10 @@ mod tutorial_prompt;
 mod weapon_state;
 mod world_object;
 
+pub use actor_cue::{
+    ATTACHED_EFFECT_COLOUR_FLOATS, ATTACHED_EFFECT_STYLE_FLOATS, ActorCue, ActorCueKind,
+    AttachedEffect, MAX_ACTOR_CUE_ID, StoneHandler, StoneTurn,
+};
 pub use attack_gauge::{
     AttackGaugeAsk, AttackGaugeHit, AttackGaugeNode, AttackGaugeOpen, AttackGaugeState,
     MAX_ATTACK_GAUGE_HIT_DAMAGE, MAX_ATTACK_GAUGE_NODE_HP, MAX_ATTACK_GAUGE_NODES,
@@ -194,7 +199,7 @@ pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 77;
+pub const PROTOCOL_VERSION: u16 = 78;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;
