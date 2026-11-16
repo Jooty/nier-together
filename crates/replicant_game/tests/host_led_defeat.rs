@@ -304,3 +304,45 @@ fn no_defeat_scene_means_no_result_word() {
     memory.put_ui_scenes(&[PAUSE_MENU_SCENE_ID], false);
     assert_eq!(find_game_over_context(&memory).unwrap(), None);
 }
+
+#[test]
+fn a_host_pick_heard_before_the_guests_screen_opens_waits_one_frame_for_the_screens_reset_step() {
+    let mut guest = GuestDefeatFollow::new();
+    guest.hear(
+        HostDefeatScreen {
+            defeat: 3,
+            cursor: 0,
+            pick: Some(DefeatPick::Continue),
+        },
+        1_000,
+    );
+    assert_eq!(
+        guest.on_frame(screen(0, 0), true, 2_000).act,
+        GuestDefeatAct::ButtonsOff { show_cursor: None },
+        "the screen's first frame may come before its enter step zeroes the result word"
+    );
+    assert_eq!(
+        guest.on_frame(screen(0, 0), true, 2_016).act,
+        GuestDefeatAct::MakeHostsPick(DefeatPick::Continue)
+    );
+}
+
+#[test]
+fn a_relaunched_hosts_first_defeat_is_heard_after_the_guest_used_the_same_number_long_ago() {
+    let mut guest = GuestDefeatFollow::new();
+    let pick = HostDefeatScreen {
+        defeat: 1,
+        cursor: 0,
+        pick: Some(DefeatPick::Continue),
+    };
+    guest.hear(pick, 1_000);
+    guest.on_frame(screen(0, 0), true, 1_016);
+    guest.on_frame(screen(0, 0), true, 1_032);
+    assert!(guest.hear(pick, 1_100).is_empty());
+    guest.on_frame(screen(0, 0), true, 600_000);
+    assert!(!guest.hear(pick, 600_010).is_empty());
+    assert_eq!(
+        guest.on_frame(screen(0, 0), true, 600_016).act,
+        GuestDefeatAct::MakeHostsPick(DefeatPick::Continue)
+    );
+}

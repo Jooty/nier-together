@@ -3,6 +3,7 @@ use replicant_proto::{DefeatPick, HostDefeatScreen};
 use crate::host_led_defeat::{
     DEFEAT_SCREEN_FRAMES_APART_FOR_A_NEW_SCREEN_MS, GAME_OVER_SEQUENCE_CHOOSING_STATE,
     GUEST_DEFEAT_SCREEN_WAITS_FOR_THE_HOST_MS, GameOverScreen, HOST_DEFEAT_PICK_KEPT_FOR_MS,
+    USED_DEFEAT_FORGOTTEN_AFTER_MS,
     HOST_DEFEAT_SCREEN_NOTE_FRESH_MS, context_missing_line, guest_buttons_back_line,
     guest_led_line, guest_made_pick_line, guest_screen_opened_line, guest_waits_line,
     heard_pick_line, heard_screen_line, pick_dropped_line,
@@ -14,10 +15,17 @@ use crate::host_led_defeat::{
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GuestDefeatFollow {
     heard: Option<HeardNote>,
-    used_defeat: Option<u32>,
+    used_defeat: Option<UsedDefeat>,
+    first_frame_of_screen: bool,
     own_opened_ms: u64,
     last_frame_ms: Option<u64>,
     mode: Option<FollowMode>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct UsedDefeat {
+    defeat: u32,
+    at_ms: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +60,7 @@ impl GuestDefeatFollow {
         Self {
             heard: None,
             used_defeat: None,
+            first_frame_of_screen: false,
             own_opened_ms: 0,
             last_frame_ms: None,
             mode: None,
@@ -59,7 +68,7 @@ impl GuestDefeatFollow {
     }
 
     pub fn hear(&mut self, note: HostDefeatScreen, now_ms: u64) -> Vec<String> {
-        if self.used_defeat == Some(note.defeat) {
+        if self.used_defeat.is_some_and(|used| used.defeat == note.defeat) {
             return Vec::new();
         }
         let before = self.heard.map(|heard| heard.note);
@@ -85,7 +94,10 @@ impl GuestDefeatFollow {
         match heard.note.pick {
             Some(pick) if waited_ms > HOST_DEFEAT_PICK_KEPT_FOR_MS => {
                 self.heard = None;
-                self.used_defeat = Some(heard.note.defeat);
+                self.used_defeat = Some(UsedDefeat {
+                    defeat: heard.note.defeat,
+                    at_ms: now_ms,
+                });
                 vec![pick_dropped_line(heard.note.defeat, pick, waited_ms)]
             }
             _ => Vec::new(),
@@ -101,9 +113,15 @@ impl GuestDefeatFollow {
         now_ms: u64,
     ) -> GuestDefeatFrame {
         let mut lines = Vec::new();
-        if self.last_frame_ms.is_none_or(|last| {
+        self.first_frame_of_screen = self.last_frame_ms.is_none_or(|last| {
             now_ms.saturating_sub(last) > DEFEAT_SCREEN_FRAMES_APART_FOR_A_NEW_SCREEN_MS
-        }) {
+        });
+        if self.first_frame_of_screen {
+            if self.used_defeat.is_some_and(|used| {
+                now_ms.saturating_sub(used.at_ms) > USED_DEFEAT_FORGOTTEN_AFTER_MS
+            }) {
+                self.used_defeat = None;
+            }
             self.own_opened_ms = now_ms;
             self.mode = None;
             lines.push(guest_screen_opened_line(self.heard_host_note(now_ms)));
@@ -127,14 +145,17 @@ impl GuestDefeatFollow {
             if screen.state != GAME_OVER_SEQUENCE_CHOOSING_STATE {
                 return GuestDefeatAct::ButtonsOff { show_cursor: None };
             }
-            if !context_found {
+            if self.first_frame_of_screen || !context_found {
                 self.enter(FollowMode::PickWaits, lines, || {
                     context_missing_line(heard.note.defeat, pick)
                 });
                 return GuestDefeatAct::ButtonsOff { show_cursor: None };
             }
             self.heard = None;
-            self.used_defeat = Some(heard.note.defeat);
+            self.used_defeat = Some(UsedDefeat {
+                defeat: heard.note.defeat,
+                at_ms: now_ms,
+            });
             self.mode = None;
             lines.push(guest_made_pick_line(
                 heard.note.defeat,
