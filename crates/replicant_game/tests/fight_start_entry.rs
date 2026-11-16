@@ -14,6 +14,7 @@ const HERE: Option<u16> = Some(PHASE);
 const FIGHT_START: &str = "EID_1000_a0035_01_Start";
 const FIRST_FIGHT_POP: &str = "Reset_NotAttack_Timer_03";
 const SECOND_FIGHT_POP: &str = "EID_1000_a0035_01_End";
+const OWN_SCENE_END: &str = "EID_1000_a0030_End";
 const STREAM_SLOT: u64 = 0x1_4130_2070;
 const OTHER_SLOT: u64 = 0x1_4130_2818;
 const TAPED_NATIVE_THE_START_READS: &str = "_GetUniqueActorMaxLife";
@@ -251,15 +252,27 @@ fn the_start_entry_waits_while_a_scene_of_the_guests_own_plays() {
         GuestPop::Hold
     );
     guest.set_own_scene_playing(false);
+    assert_eq!(guest.tick(SlotState::Idle, HERE, false, 16_000), None);
+    assert_eq!(
+        guest.pop(OWN_SCENE_END, PopSource::Queued, OTHER_SLOT, HERE, false),
+        GuestPop::Hold
+    );
     run_the_start_from_the_stream(&mut guest);
 }
 
 #[test]
-fn only_the_start_entry_waits_for_the_guests_own_scene() {
+fn the_entries_after_the_start_wait_for_the_guests_own_scene_too() {
     let mut guest = guest_in_the_hosts_fight();
     run_the_start_from_the_stream(&mut guest);
     guest.set_own_scene_playing(true);
-    assert_eq!(released(&mut guest, 100).as_deref(), Some(FIRST_FIGHT_POP));
+    assert_eq!(released(&mut guest, 100), None);
+    guest.set_own_scene_playing(false);
+    assert_eq!(released(&mut guest, 116), None);
+    assert_eq!(
+        guest.pop(OWN_SCENE_END, PopSource::Queued, OTHER_SLOT, HERE, false),
+        GuestPop::Hold
+    );
+    assert_eq!(released(&mut guest, 132).as_deref(), Some(FIRST_FIGHT_POP));
 }
 
 #[test]

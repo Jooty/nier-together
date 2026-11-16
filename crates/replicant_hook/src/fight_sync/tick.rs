@@ -3,7 +3,7 @@ use std::sync::PoisonError;
 use replicant_game::GameMemory;
 use replicant_game::fight_sync::{
     GuestArrival, GuestNotice, GuestOpen, GuestReceived, GuestRestart, HostRequestOut,
-    HostStreamOut, PHASE_SCRIPT_MANAGER_STATE_OFFSET, QUEUED_CALL_NAME_CAPACITY,
+    HostStreamOut, OwnSceneRelease, PHASE_SCRIPT_MANAGER_STATE_OFFSET, QUEUED_CALL_NAME_CAPACITY,
     QUEUED_CALL_NAME_OFFSET, QueueRefusal, QueuedCallNotice,
     REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE, RefusedRequestStep, RequestReceipt,
     SceneHoldChange, SlotState, StreamStall, format_stream_stall, is_our_queued_call,
@@ -491,6 +491,23 @@ fn send_guest_requests() {
             ),
             GuestNotice::NextWindowMessagesDropped { dropped } => format!(
                 "fight stream: {dropped} messages of the host's next fight came while it waited and were not kept"
+            ),
+            GuestNotice::EntryWaitsForOwnScene { seq, name } => format!(
+                "fight stream: the host's {name} (seq {seq}) waits while your game is in a scene, the scene's own end runs first"
+            ),
+            GuestNotice::EntryGoesAfterOwnScene {
+                seq,
+                name,
+                waited_ms,
+                since_scene_cleared_ms,
+                by,
+            } => format!(
+                "fight stream: the host's {name} (seq {seq}) goes after {waited_ms} ms, {since_scene_cleared_ms} ms after your scene's lock cleared, {}",
+                match by {
+                    OwnSceneRelease::OwnEndPopped => "your scene's own end popped first",
+                    OwnSceneRelease::SettleCapReached =>
+                        "your scene's own end never popped, the settle cap let it go",
+                }
             ),
         });
     }
