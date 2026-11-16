@@ -43,7 +43,6 @@ pub struct ActorCueMoment {
     pub nested: bool,
     /// The shot sync already draws a bullet's own effects.
     pub made_for_a_bullet: bool,
-    /// The cube glow this attach made is already relayed as a world effect.
     pub made_for_a_cube_glow: bool,
 }
 

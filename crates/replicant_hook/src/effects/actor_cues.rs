@@ -13,10 +13,10 @@ use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureStackBackTrace;
 use nt_hook::line_budget::LineBudget;
 use replicant_game::GameMemory;
 use replicant_game::effects::{
-    ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
-    ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds, actor_cue_goes_to_enemy_sync,
-    actor_cue_is_sent, actor_cue_replay_target, actor_cue_text, by_id_sound_cue,
-    read_actor_position, read_effect_transform, stack_holds_ai_step,
+    ActorCueCall, ActorCueMoment, AttachedCueEffect, AttachedCueEffects, CopyForCue, FirstCues,
+    MAX_ACTOR_CUES_PER_SECOND, ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds,
+    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
+    by_id_sound_cue, read_actor_position, read_effect_transform, stack_holds_ai_step,
 };
 use replicant_game::offsets::{
     ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA,
@@ -44,6 +44,8 @@ static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_REMOVE_ATTACHED: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_STOP_SOUND: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static SENT_LASTING_SOUNDS: LazyLock<Mutex<SentLastingSounds>> = LazyLock::new(Mutex::default);
+static SENT_ATTACHES: LazyLock<Mutex<AttachedCueEffects>> = LazyLock::new(Mutex::default);
+static REPLAYED_ATTACHES: LazyLock<Mutex<AttachedCueEffects>> = LazyLock::new(Mutex::default);
 static REPLAYED_LASTING_SOUNDS: LazyLock<Mutex<ReplayedLastingSounds>> =
     LazyLock::new(Mutex::default);
 static FIRST_SENT: LazyLock<Mutex<FirstCues>> = LazyLock::new(Mutex::default);
@@ -161,7 +163,7 @@ pub(super) fn note_attach(
         flags,
         extra,
     };
-    send(
+    let sent = send(
         ActorCue {
             actor: shared,
             id,
@@ -169,6 +171,17 @@ pub(super) fn note_attach(
         },
         ActorCueCall::AttachById,
     );
+    if sent {
+        SENT_ATTACHES
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .note_attached(AttachedCueEffect {
+                actor,
+                enemy: shared,
+                id,
+                bone,
+            });
+    }
 }
 
 /// From the create-by-id detour, after the game made effect `id` into `handle`.
@@ -299,6 +312,8 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
         }
     }
     keep_lasting_sounds(build, active);
+    send_removes_of_gone_actors(build);
+    remove_replays_from_unheld_copies(build, active);
     let now_ms = net_clock_ms();
     if now_ms.saturating_sub(LAST_SUMMARY_MS.load(Ordering::Relaxed))
         >= ACTOR_CUE_SUMMARY_INTERVAL_MS
@@ -328,10 +343,26 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
     let copy = replay_target(build, cue.actor);
     let outcome = match (cue.kind, copy) {
         (ActorCueKind::AttachEffect(attached), Some(copy)) => {
-            attach_on_copy(build, copy, cue.id, &attached).then_some("played")
+            let made = attach_on_copy(build, copy, cue.id, &attached);
+            if made {
+                REPLAYED_ATTACHES
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .note_attached(AttachedCueEffect {
+                        actor: copy,
+                        enemy: cue.actor,
+                        id: cue.id,
+                        bone: attached.bone,
+                    });
+            }
+            made.then_some("played")
         }
         (ActorCueKind::RemoveEffect { bone, all_matching }, Some(copy)) => {
             remove_on_copy(build, copy, cue.id, bone, all_matching);
+            REPLAYED_ATTACHES
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take_removed(copy, cue.id, bone);
             Some("played")
         }
         (ActorCueKind::PlaceEffect { transform }, Some(_)) => {
@@ -465,6 +496,72 @@ fn keep_lasting_sounds(build: &VerifiedBuild, active: bool) {
     }
 }
 
+fn send_removes_of_gone_actors(build: &VerifiedBuild) {
+    let gone = {
+        let mut sent = SENT_ATTACHES.lock().unwrap_or_else(PoisonError::into_inner);
+        if sent.is_empty() {
+            return;
+        }
+        let memory = InProcessMemory::new(build);
+        sent.take_gone(|actor, enemy| {
+            shared_actor_id(actor) == Some((EnemySyncRole::Host, enemy))
+                && actor_is_live(&memory, actor).unwrap_or(false)
+        })
+    };
+    if gone.is_empty() || !sending() {
+        return;
+    }
+    for effect in gone {
+        let sent = send(
+            ActorCue {
+                actor: effect.enemy,
+                id: effect.id,
+                kind: ActorCueKind::RemoveEffect {
+                    bone: i32::from(effect.bone),
+                    all_matching: true,
+                },
+            },
+            ActorCueCall::RemoveAttached,
+        );
+        log_line(&format!(
+            "actor cues: {} is gone or no longer shared here, removal of its effect {} (bone {}) sent {sent}",
+            enemy_id_text(effect.enemy),
+            effect.id,
+            effect.bone
+        ));
+    }
+}
+
+fn remove_replays_from_unheld_copies(build: &VerifiedBuild, active: bool) {
+    let gone = {
+        let mut replayed = REPLAYED_ATTACHES
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if replayed.is_empty() {
+            return;
+        }
+        replayed.take_gone(|copy, enemy| active && replay_target(build, enemy) == Some(copy))
+    };
+    let memory = InProcessMemory::new(build);
+    for effect in gone {
+        let live = actor_is_live(&memory, effect.actor).unwrap_or(false);
+        if live {
+            remove_on_copy(build, effect.actor, effect.id, i32::from(effect.bone), true);
+        }
+        log_line(&format!(
+            "actor cues: {}'s copy is no longer held here, its replayed effect {} (bone {}) {}",
+            enemy_id_text(effect.enemy),
+            effect.id,
+            effect.bone,
+            if live {
+                "removed"
+            } else {
+                "went with the copy"
+            }
+        ));
+    }
+}
+
 fn attach_on_copy(build: &VerifiedBuild, copy: u64, id: u32, attached: &AttachedEffect) -> bool {
     let function =
         (build.module_base() + u64::from(ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA)) as usize;
@@ -529,7 +626,7 @@ extern "system" fn remove_attached_detour(
     let removed = unsafe {
         core::mem::transmute::<*mut c_void, RemoveAttached>(original)(actor, id, bone, all_matching)
     };
-    if removed & 0xFF != 0 && sending() && !REPLAYING.with(Cell::get) {
+    if removed & 0xFF != 0 && !REPLAYING.with(Cell::get) {
         let actor = actor as usize as u64;
         let _ = panic::catch_unwind(|| note_remove(actor, id, bone, all_matching != 0));
     }
@@ -537,10 +634,17 @@ extern "system" fn remove_attached_detour(
 }
 
 fn note_remove(actor: u64, id: i32, bone: i32, all_matching: bool) {
-    let Some((_, shared)) = hosted_shared(actor) else {
+    let shared = {
+        let mut sent = SENT_ATTACHES.lock().unwrap_or_else(PoisonError::into_inner);
+        if sent.is_empty() {
+            return;
+        }
+        sent.take_removed(actor, id.cast_unsigned(), bone)
+    };
+    let Some(shared) = shared else {
         return;
     };
-    if !actor_cue_is_sent(moment(false, false)) {
+    if !sending() {
         return;
     }
     send(

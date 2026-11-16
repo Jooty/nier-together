@@ -10,6 +10,8 @@ mod armed_host_led_stretch;
 mod arrival;
 #[path = "arrive_in_state.rs"]
 mod arrive_in_state;
+#[path = "attached_cue_effects.rs"]
+mod attached_cue_effects;
 #[path = "attack_gauge.rs"]
 mod attack_gauge;
 #[path = "attack_gauge_opening_hit.rs"]

@@ -1,5 +1,6 @@
 mod actor_cue;
 mod anchor_offset;
+mod attached_cue_effects;
 mod capture;
 mod falloff;
 mod hit_spark;
@@ -22,6 +23,10 @@ pub use actor_cue::{
     stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
 pub use anchor_offset::{match_anchor_offset, read_anchor_offset};
+pub use attached_cue_effects::{
+    AttachedCueEffect, AttachedCueEffects, MAX_ATTACHED_CUE_EFFECTS,
+    REMOVE_ATTACHED_ANY_BONE_AT_OR_BELOW,
+};
 pub use capture::{
     CapturedEffect, EffectCall, WORLD_EFFECT_SENT_PREFIX, build_effect_call, read_effect,
     read_sound, read_world_effect,
