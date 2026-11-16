@@ -7,6 +7,7 @@ use crate::dummy_hits::{
 use crate::script_functions::{
     DEBUG_PRINT_TEXT_ARG_INDEX, TRACE_ARROW, TRACE_CALL_SUFFIX, is_called_only_from_local_state,
 };
+use crate::story_progress::STAGE_START_SCRIPT_FUNCTION;
 
 pub const fn debug_print_args_len() -> usize {
     native_text_args_len(DEBUG_PRINT_TEXT_ARG_INDEX)
@@ -29,10 +30,15 @@ pub fn traced_function_text(args: &[u8]) -> Option<String> {
 }
 
 pub fn traced_function_name(text: &str) -> Option<&str> {
-    // Two packs print "<pack> -> StartStage" with spaces around the arrow.
     let (after_arrow, has_arrow) = match text.rsplit_once(TRACE_ARROW) {
-        Some((_, name)) => (name.trim(), true),
+        Some((_, name)) => (name, true),
         None => (text, false),
+    };
+    // Two packs print "<pack> -> StartStage" with spaces around the arrow; of the 160 other debug
+    // prints with spaced arrows, none is a function trace, so only that name is read past a space.
+    let after_arrow = match after_arrow.trim() {
+        STAGE_START_SCRIPT_FUNCTION => STAGE_START_SCRIPT_FUNCTION,
+        _ => after_arrow,
     };
     let (name, has_call_suffix) = match after_arrow.strip_suffix(TRACE_CALL_SUFFIX) {
         Some(name) => (name, true),

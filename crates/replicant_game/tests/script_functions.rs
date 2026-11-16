@@ -417,6 +417,36 @@ fn the_two_packs_that_print_spaces_around_the_arrow_name_their_stage_start_too()
 }
 
 #[test]
+fn the_pack_whose_stage_start_is_printed_by_the_other_log_native_still_names_it() {
+    // The binding table points _DebugPrint and _SnowDebugLog at the same no-op stub, so the hook
+    // reads E_FOREST_FIELD_02's _SnowDebugLog print like any other.
+    assert_eq!(
+        traced_function_name("E_FOREST_FIELD_02->StartStage()"),
+        Some("StartStage")
+    );
+}
+
+#[test]
+fn a_spaced_arrow_names_only_the_stage_start_and_no_other_debug_print() {
+    for text in [
+        "A_DESERT_TOWN_01 -> Change_Bright_01",
+        "A_DESERT_TOWN_01 -> Play_ENV_01",
+        "A_CLIFF_VILLAGE_01 -> start",
+        "EventViewer -> EID_8000_a0010",
+        "A_MOUNT_ROBOT_01 -> snow_ResetTrapTitan",
+        "LIB_IsInPhaseFromSavePoint -> 1",
+        "DLC.h -> Game_Over",
+        "GM_OUT_Door_of_NierHouse_02 -> EID_0300_a0015g_Start -> Not PauseOff",
+    ] {
+        assert_eq!(
+            traced_function_name(text),
+            None,
+            "{text}: a spaced-arrow print that is not a stage start must not count as a function trace"
+        );
+    }
+}
+
+#[test]
 fn the_tag_is_read_before_the_text_and_a_non_text_tag_skips_the_call() {
     let tag_range = debug_print_tag_range();
     let text_range = debug_print_text_range();

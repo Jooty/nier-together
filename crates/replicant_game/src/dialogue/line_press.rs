@@ -74,7 +74,7 @@ pub struct LineSteps {
 pub struct LinePress {
     wanted: Option<Wanted>,
     /// The last wish the window was seen to show: asking for it again is nothing new.
-    settled: Option<(u32, u16, u16)>,
+    settled: Option<((u32, u16, u16), u64)>,
 }
 
 impl LineSteps {
@@ -128,17 +128,18 @@ impl LinePress {
         now_ms: u64,
     ) -> bool {
         let wish = (talk_id, line, step);
+        self.drop_settled_when_the_window_moved_on(reading);
         let same_wish = self
             .wanted
             .is_some_and(|wanted| (wanted.talk_id, wanted.line, wanted.step) == wish);
-        if same_wish || self.settled == Some(wish) {
+        if same_wish || self.settled.map(|(settled, _)| settled) == Some(wish) {
             return false;
         }
         let on_this_talk = reading.open && window_talk_id() == Some(talk_id);
         let already_shown =
             on_this_talk && (reading.line > line || (reading.line == line && reading.step >= step));
         if already_shown {
-            self.settled = Some(wish);
+            self.settled = Some((wish, reading.talk_address));
             return false;
         }
         // A switch the window has not made yet keeps its clock and count when the partner moves
@@ -158,6 +159,15 @@ impl LinePress {
         true
     }
 
+    fn drop_settled_when_the_window_moved_on(&mut self, reading: &TalkWindowReading) {
+        if self
+            .settled
+            .is_some_and(|(_, address)| !reading.open || reading.talk_address != address)
+        {
+            self.settled = None;
+        }
+    }
+
     pub fn clear(&mut self) {
         self.wanted = None;
         self.settled = None;
@@ -175,6 +185,7 @@ impl LinePress {
 
     /// Once per window update, before the game's own update runs.
     pub fn step(&mut self, reading: &TalkWindowReading, now_ms: u64) -> Option<PressStep> {
+        self.drop_settled_when_the_window_moved_on(reading);
         let wanted = self.wanted.as_mut()?;
         let (talk_id, line, presses) = (wanted.talk_id, wanted.line, wanted.presses);
         if !reading.open {
@@ -201,7 +212,7 @@ impl LinePress {
         }
         let behind_in_the_line = reading.line == line && reading.step < wanted.step;
         if wanted.on_this_talk && reading.line >= line && !behind_in_the_line {
-            self.settled = Some((talk_id, line, wanted.step));
+            self.settled = Some(((talk_id, line, wanted.step), reading.talk_address));
             self.wanted = None;
             return Some(PressStep::Reached {
                 talk_id,

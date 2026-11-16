@@ -535,3 +535,71 @@ fn a_stale_wish_gives_up_before_it_can_report_a_talk_change() {
         })
     );
 }
+
+#[test]
+fn a_reached_wish_is_forgotten_when_the_window_closes_or_goes_to_another_talk() {
+    let on_line_one = window(
+        FIRST_TALK_ADDRESS,
+        1,
+        2,
+        TALK_PLAYER_STATE_WAITS_FOR_A_PRESS,
+    );
+    let mut closed_between = LinePress::new();
+    assert!(!want(
+        &mut closed_between,
+        DREAM_FIRST_TALK,
+        1,
+        0,
+        &on_line_one,
+        HOST_ON_LINE_ONE_MS
+    ));
+    let closed = TalkWindowReading {
+        open: false,
+        ..on_line_one
+    };
+    assert_eq!(closed_between.step(&closed, HOST_ON_LINE_ONE_MS + 16), None);
+    let behind = window(
+        FIRST_TALK_ADDRESS,
+        0,
+        2,
+        TALK_PLAYER_STATE_WAITS_FOR_A_PRESS,
+    );
+    assert!(
+        want(
+            &mut closed_between,
+            DREAM_FIRST_TALK,
+            1,
+            0,
+            &behind,
+            HOST_ON_LINE_ONE_MS + 5_000
+        ),
+        "R1c: a settled wish outlived a window that closed with no wish open, so the same talk opening again never got its press"
+    );
+    let mut other_talk_between = LinePress::new();
+    assert!(!want(
+        &mut other_talk_between,
+        DREAM_FIRST_TALK,
+        1,
+        0,
+        &on_line_one,
+        HOST_ON_LINE_ONE_MS
+    ));
+    let second = window(
+        SECOND_TALK_ADDRESS,
+        0,
+        2,
+        TALK_PLAYER_STATE_WAITS_FOR_A_PRESS,
+    );
+    assert_eq!(
+        other_talk_between.step(&second, HOST_ON_LINE_ONE_MS + 16),
+        None
+    );
+    assert!(want(
+        &mut other_talk_between,
+        DREAM_FIRST_TALK,
+        1,
+        0,
+        &behind,
+        HOST_ON_LINE_ONE_MS + 5_000
+    ));
+}
