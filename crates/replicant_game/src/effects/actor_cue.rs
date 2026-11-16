@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use replicant_proto::{ActorCue, ActorCueKind, EnemyId, StoneHandler};
+use replicant_proto::{ActorCue, ActorCueKind, EnemyId, SHOT_SOUND_LEVELS, StoneHandler};
 
 use crate::GameMemory;
 use crate::offsets::{
@@ -27,6 +27,8 @@ pub enum ActorCueCall {
     RemoveAttached,
     CreateById,
     SoundById,
+    LastingSoundById,
+    StopSound,
     StoneHandler,
 }
 
@@ -66,6 +68,8 @@ impl ActorCueCall {
             ActorCueKind::RemoveEffect { .. } => Self::RemoveAttached,
             ActorCueKind::PlaceEffect { .. } => Self::CreateById,
             ActorCueKind::Sound { .. } => Self::SoundById,
+            ActorCueKind::LastingSound { .. } => Self::LastingSoundById,
+            ActorCueKind::StopSound { .. } => Self::StopSound,
             ActorCueKind::TurnedToStone(_) => Self::StoneHandler,
         }
     }
@@ -93,6 +97,25 @@ pub fn actor_cue_replay_target(copy: Option<CopyForCue>) -> Option<u64> {
 
 pub fn sound_caller_is_one_shot(caller_rva: u32) -> bool {
     SOUND_BY_ID_WRAPPER_BODY_RVAS.contains(&caller_rva)
+}
+
+/// What a by-id sound becomes: a one-shot sound when the game's one-shot wrapper played it,
+/// else a lasting sound named by the handle the game keeps for it (none without a handle).
+pub fn by_id_sound_cue(
+    caller_rva: u32,
+    position: [f32; 3],
+    levels: [f32; SHOT_SOUND_LEVELS],
+    handle: u64,
+) -> Option<ActorCueKind> {
+    if sound_caller_is_one_shot(caller_rva) {
+        Some(ActorCueKind::Sound { position, levels })
+    } else {
+        (handle != 0).then_some(ActorCueKind::LastingSound {
+            position,
+            levels,
+            handle,
+        })
+    }
 }
 
 pub fn state_machine_holds_stone(
@@ -170,6 +193,16 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
         ActorCueKind::Sound { position, .. } => format!(
             "sound {} played by {actor} at [{:.1}, {:.1}, {:.1}]",
             cue.id, position[0], position[1], position[2]
+        ),
+        ActorCueKind::LastingSound {
+            position, handle, ..
+        } => format!(
+            "lasting sound {} played by {actor} at [{:.1}, {:.1}, {:.1}] (host handle {handle:#x})",
+            cue.id, position[0], position[1], position[2]
+        ),
+        ActorCueKind::StopSound { handle } => format!(
+            "lasting sound {} of {actor} stopped (host handle {handle:#x})",
+            cue.id
         ),
         ActorCueKind::TurnedToStone(turn) => format!(
             "{actor} turned to stone by its {:?} handler (state bytes {:?})",

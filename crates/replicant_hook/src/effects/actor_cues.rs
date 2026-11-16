@@ -14,14 +14,15 @@ use nt_hook::line_budget::LineBudget;
 use replicant_game::GameMemory;
 use replicant_game::effects::{
     ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
-    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
-    read_effect_transform, sound_caller_is_one_shot, stack_holds_ai_step,
+    ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds, actor_cue_goes_to_enemy_sync,
+    actor_cue_is_sent, actor_cue_replay_target, actor_cue_text, by_id_sound_cue,
+    read_actor_position, read_effect_transform, stack_holds_ai_step,
 };
-use replicant_game::puppet::actor_is_live;
 use replicant_game::offsets::{
     ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA,
-    BULLET_CREATE_EFFECTS_RVA_RANGE,
+    BULLET_CREATE_EFFECTS_RVA_RANGE, SOUND_STOP_FUNCTION_RVA,
 };
+use replicant_game::puppet::actor_is_live;
 use replicant_proto::{
     ATTACHED_EFFECT_COLOUR_FLOATS, ATTACHED_EFFECT_STYLE_FLOATS, ActorCue, ActorCueKind,
     AttachedEffect, EnemyId, Message,
@@ -32,13 +33,19 @@ use crate::bullets::create_effect;
 use crate::diagnostics::log_line;
 use crate::effects::hooks::sending;
 use crate::enemies::{EnemySyncRole, enemy_id_text, is_held, shared_actor_id, shared_actor_of};
-use crate::enemy_bullets::{bullet_start_in_flight, command_in_flight, play_shot_sound};
+use crate::enemy_bullets::{
+    bullet_start_in_flight, command_in_flight, move_shot_sound, play_shot_sound, stop_shot_sound,
+};
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
 use crate::net::{self, net_clock_ms};
 
 static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_REMOVE_ATTACHED: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static ORIGINAL_STOP_SOUND: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static SENT_LASTING_SOUNDS: LazyLock<Mutex<SentLastingSounds>> = LazyLock::new(Mutex::default);
+static REPLAYED_LASTING_SOUNDS: LazyLock<Mutex<ReplayedLastingSounds>> =
+    LazyLock::new(Mutex::default);
 static FIRST_SENT: LazyLock<Mutex<FirstCues>> = LazyLock::new(Mutex::default);
 static FIRST_PLAYED: LazyLock<Mutex<FirstCues>> = LazyLock::new(Mutex::default);
 static SEND_WINDOW: Mutex<LineBudget> = Mutex::new(LineBudget::counting_from_zero());
@@ -58,6 +65,7 @@ thread_local! {
 }
 
 type RemoveAttached = unsafe extern "system" fn(*mut c_void, i32, i32, u8) -> u64;
+type StopSound = unsafe extern "system" fn(*mut c_void, *mut c_void, f32);
 type AttachEffectById = unsafe extern "system" fn(
     *mut c_void,
     u32,
@@ -86,6 +94,17 @@ pub(super) fn install(build: VerifiedBuild) {
             (build.module_base() + u64::from(ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA)) as usize,
             remove_attached_detour as *const () as *mut c_void,
             &ORIGINAL_REMOVE_ATTACHED,
+        )
+    };
+    #[expect(unsafe_code, reason = "hooks the stop-sound function by address")]
+    // SAFETY: the RVA starts CAudioMan::StopSound (audio manager, sound, fade) in the verified
+    // build, and the replacement matches it.
+    unsafe {
+        hook_address(
+            "CAudioMan::StopSound",
+            (build.module_base() + u64::from(SOUND_STOP_FUNCTION_RVA)) as usize,
+            stop_sound_detour as *const () as *mut c_void,
+            &ORIGINAL_STOP_SOUND,
         )
     };
 }
@@ -180,11 +199,15 @@ pub(super) fn note_create_by_id(handle: u32, id: u32, caller_rva: u32, nested: b
     );
 }
 
-/// From the play-sound-by-id detour, with the sound's position pointer and its two levels.
-pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2], caller_rva: u32) {
-    if !sound_caller_is_one_shot(caller_rva) {
-        return;
-    }
+/// From the play-sound-by-id detour, with the sound's position pointer, its two levels and the
+/// handle the game got for it.
+pub(super) fn note_sound_by_id(
+    id: u32,
+    position: u64,
+    levels: [f32; 2],
+    caller_rva: u32,
+    handle: u64,
+) {
     let actor = TICKING_ACTOR.with(Cell::get);
     if actor == 0 || position == 0 || REPLAYING.with(Cell::get) {
         return;
@@ -199,14 +222,66 @@ pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2], caller_
     let Some(position) = read_floats::<3>(&InProcessMemory::new(build), position) else {
         return;
     };
-    send(
-        ActorCue {
-            actor: shared,
-            id,
-            kind: ActorCueKind::Sound { position, levels },
-        },
-        ActorCueCall::SoundById,
-    );
+    let Some(kind) = by_id_sound_cue(caller_rva, position, levels, handle) else {
+        return;
+    };
+    let cue = ActorCue {
+        actor: shared,
+        id,
+        kind,
+    };
+    if send(cue, ActorCueCall::of_kind(&kind)) && matches!(kind, ActorCueKind::LastingSound { .. })
+    {
+        SENT_LASTING_SOUNDS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .note_sent(handle, shared, id);
+    }
+}
+
+#[expect(
+    unsafe_code,
+    reason = "calls the original stop-sound function through the trampoline MinHook built"
+)]
+extern "system" fn stop_sound_detour(manager: *mut c_void, sound: *mut c_void, fade: f32) {
+    let original = ORIGINAL_STOP_SOUND.load(Ordering::Acquire);
+    if original.is_null() {
+        return;
+    }
+    // SAFETY: the trampoline continues into the original function, which has this signature.
+    unsafe {
+        core::mem::transmute::<*mut c_void, StopSound>(original)(manager, sound, fade);
+    }
+    let sound = sound as usize as u64;
+    let _ = panic::catch_unwind(|| note_stop_sound(sound));
+}
+
+fn note_stop_sound(handle: u64) {
+    if handle == 0 {
+        return;
+    }
+    let stopped = {
+        let mut sent = SENT_LASTING_SOUNDS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if sent.is_empty() {
+            return;
+        }
+        sent.take_stopped(handle)
+    };
+    let Some((actor, id)) = stopped else {
+        return;
+    };
+    if sending() {
+        send(
+            ActorCue {
+                actor,
+                id,
+                kind: ActorCueKind::StopSound { handle },
+            },
+            ActorCueCall::StopSound,
+        );
+    }
 }
 
 pub(super) fn tick(build: &VerifiedBuild, active: bool) {
@@ -223,6 +298,7 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
             }
         }
     }
+    keep_lasting_sounds(build, active);
     let now_ms = net_clock_ms();
     if now_ms.saturating_sub(LAST_SUMMARY_MS.load(Ordering::Relaxed))
         >= ACTOR_CUE_SUMMARY_INTERVAL_MS
@@ -265,6 +341,18 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
         (ActorCueKind::Sound { position, levels }, Some(_)) => {
             play_shot_sound(build, cue.id, position, levels).map(|_| "played")
         }
+        (
+            ActorCueKind::LastingSound {
+                position,
+                levels,
+                handle,
+            },
+            Some(copy),
+        ) => play_lasting_sound(build, &cue, copy, position, levels, handle).then_some("played"),
+        (ActorCueKind::StopSound { handle }, _) => {
+            stop_lasting_sound(build, &cue, handle);
+            return;
+        }
         (ActorCueKind::TurnedToStone(_), _) => return,
         (_, None) => None,
     };
@@ -288,6 +376,92 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
             "actor cues: {} ({why})",
             actor_cue_text(&enemy_id_text(cue.actor), &cue)
         ));
+    }
+}
+
+fn play_lasting_sound(
+    build: &VerifiedBuild,
+    cue: &ActorCue,
+    copy: u64,
+    position: [f32; 3],
+    levels: [f32; 2],
+    sender_handle: u64,
+) -> bool {
+    let Some(own_handle) = play_shot_sound(build, cue.id, position, levels) else {
+        return false;
+    };
+    let copy_position = read_actor_position(&InProcessMemory::new(build), copy).unwrap_or(position);
+    let replaced = REPLAYED_LASTING_SOUNDS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .track(ReplayedLastingSound {
+            actor: cue.actor,
+            id: cue.id,
+            sender_handle,
+            own_handle,
+            offset_from_copy: core::array::from_fn(|axis| position[axis] - copy_position[axis]),
+        });
+    for own in replaced {
+        stop_shot_sound(build, own);
+    }
+    true
+}
+
+fn stop_lasting_sound(build: &VerifiedBuild, cue: &ActorCue, sender_handle: u64) {
+    let own = REPLAYED_LASTING_SOUNDS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_stopped(cue.actor, cue.id, sender_handle);
+    let Some(own) = own else {
+        return;
+    };
+    stop_shot_sound(build, own);
+    let first = FIRST_PLAYED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .is_first(cue.actor, ActorCueCall::StopSound, cue.id);
+    if first {
+        log_line(&format!(
+            "actor cues: {} (stopped the replay, own handle {own:#x})",
+            actor_cue_text(&enemy_id_text(cue.actor), cue)
+        ));
+    }
+}
+
+fn keep_lasting_sounds(build: &VerifiedBuild, active: bool) {
+    let mut replayed = REPLAYED_LASTING_SOUNDS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if replayed.playing().is_empty() {
+        return;
+    }
+    let unheld = replayed.take_unheld(|actor| active && replay_target(build, actor).is_some());
+    let playing: Vec<ReplayedLastingSound> = replayed.playing().to_vec();
+    drop(replayed);
+    for sound in unheld {
+        stop_shot_sound(build, sound.own_handle);
+        log_line(&format!(
+            "actor cues: lasting sound {} of {} stopped here, its copy is no longer held",
+            sound.id,
+            enemy_id_text(sound.actor)
+        ));
+    }
+    let memory = InProcessMemory::new(build);
+    for sound in playing {
+        let Some(copy) = shared_actor_of(sound.actor) else {
+            continue;
+        };
+        let Ok(copy_position) = read_actor_position(&memory, copy) else {
+            continue;
+        };
+        let position =
+            core::array::from_fn(|axis| copy_position[axis] + sound.offset_from_copy[axis]);
+        if !move_shot_sound(build, sound.own_handle, position) {
+            REPLAYED_LASTING_SOUNDS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .forget(sound.own_handle);
+        }
     }
 }
 
@@ -441,21 +615,23 @@ fn read_floats<const COUNT: usize>(memory: &InProcessMemory, address: u64) -> Op
     Some(values)
 }
 
-fn send(cue: ActorCue, call: ActorCueCall) {
+fn send(cue: ActorCue, call: ActorCueCall) -> bool {
     if cue.validate().is_err() {
-        return;
+        return false;
     }
-    let admitted = matches!(cue.kind, ActorCueKind::RemoveEffect { .. })
-        || SEND_WINDOW
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .admit(net_clock_ms(), SEND_WINDOW_MS, MAX_ACTOR_CUES_PER_SECOND);
+    let admitted = matches!(
+        cue.kind,
+        ActorCueKind::RemoveEffect { .. } | ActorCueKind::StopSound { .. }
+    ) || SEND_WINDOW
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .admit(net_clock_ms(), SEND_WINDOW_MS, MAX_ACTOR_CUES_PER_SECOND);
     if !admitted {
         REFUSED_BY_RATE_LIMIT.fetch_add(1, Ordering::Relaxed);
-        return;
+        return false;
     }
     let Some(net) = net::handle() else {
-        return;
+        return false;
     };
     let first = FIRST_SENT
         .lock()
@@ -469,4 +645,5 @@ fn send(cue: ActorCue, call: ActorCueCall) {
     }
     net.send_relayed(Message::ActorCue(cue));
     SENT.fetch_add(1, Ordering::Relaxed);
+    true
 }

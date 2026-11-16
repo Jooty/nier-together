@@ -4,6 +4,7 @@ mod capture;
 mod falloff;
 mod hit_spark;
 mod instance;
+mod lasting_cue_sounds;
 mod live_effects;
 mod look;
 mod name_tally;
@@ -16,8 +17,8 @@ mod world_trail;
 pub use actor_cue::{
     ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
     MAX_FIRST_ACTOR_CUES_LOGGED, STONE_HANDLERS, actor_cue_goes_to_enemy_sync, actor_cue_is_sent,
-    actor_cue_replay_target, actor_cue_text, actor_holds_stone, sound_caller_is_one_shot,
-    stack_holds_ai_step, state_machine_holds_stone, stone_handler_rva,
+    actor_cue_replay_target, actor_cue_text, actor_holds_stone, by_id_sound_cue,
+    sound_caller_is_one_shot, stack_holds_ai_step, state_machine_holds_stone, stone_handler_rva,
     stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
 pub use anchor_offset::{match_anchor_offset, read_anchor_offset};
@@ -31,6 +32,9 @@ pub use hit_spark::{
 };
 pub use instance::{
     effect_instance_address, effect_is_finished, finish_effect, read_effect_transform,
+};
+pub use lasting_cue_sounds::{
+    MAX_LASTING_CUE_SOUNDS, ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds,
 };
 pub use live_effects::LiveEffects;
 pub use look::{

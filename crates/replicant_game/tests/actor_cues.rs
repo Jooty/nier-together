@@ -1,3 +1,4 @@
+use crate::fake_memory::{FAKE_MODULE_BASE, FakeMemory};
 use replicant_game::effects::{
     ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, STONE_HANDLERS,
     actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
@@ -5,10 +6,9 @@ use replicant_game::effects::{
     stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
 use replicant_game::offsets::{
-    SOUND_BY_ID_WRAPPER_BODY_RVAS, STONE_STATE_MACHINE_CURRENT_STATE_OFFSET,
-    STATE_MACHINE_NEXT_STATE_OFFSET,
+    SOUND_BY_ID_WRAPPER_BODY_RVAS, STATE_MACHINE_NEXT_STATE_OFFSET,
+    STONE_STATE_MACHINE_CURRENT_STATE_OFFSET,
 };
-use crate::fake_memory::{FAKE_MODULE_BASE, FakeMemory};
 use replicant_proto::{ActorCue, ActorCueKind, AttachedEffect, EnemyId, StoneHandler};
 
 const ACTOR_TICK_PRE_UPDATE_RETURN_RVA: u32 = 0xE_027A;
@@ -194,7 +194,7 @@ fn a_cue_is_not_replayed_across_a_phase_with_no_copy() {
 }
 
 #[test]
-fn only_a_one_shot_sound_is_sent_because_its_stop_never_crosses() {
+fn a_one_shot_wrapper_sound_is_sent_as_a_sound_and_no_other_caller_is() {
     let wrapper = SOUND_BY_ID_WRAPPER_BODY_RVAS.start + 4;
     assert!(sound_caller_is_one_shot(wrapper));
     assert!(!sound_caller_is_one_shot(0x18_A472));
@@ -213,8 +213,14 @@ fn stoned_actor(slot: Option<u64>) -> FakeMemory {
         ACTOR + stone_state_machine_pointer_offset(StoneHandler::Leader),
         &MACHINE.to_le_bytes(),
     );
-    memory.put(MACHINE + STONE_STATE_MACHINE_CURRENT_STATE_OFFSET, &OTHER_STATE.to_le_bytes());
-    memory.put(MACHINE + STATE_MACHINE_NEXT_STATE_OFFSET, &0_u64.to_le_bytes());
+    memory.put(
+        MACHINE + STONE_STATE_MACHINE_CURRENT_STATE_OFFSET,
+        &OTHER_STATE.to_le_bytes(),
+    );
+    memory.put(
+        MACHINE + STATE_MACHINE_NEXT_STATE_OFFSET,
+        &0_u64.to_le_bytes(),
+    );
     memory.put(OTHER_STATE, &0x1234_u64.to_le_bytes());
     memory.put(STONE_STATE, &vtable.to_le_bytes());
     if let Some(slot) = slot {

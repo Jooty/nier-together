@@ -60,7 +60,7 @@ pub(crate) fn play_shot_sound(
 }
 
 /// Moves a lasting sound with its copy; `false` once the game no longer plays it.
-pub(super) fn move_shot_sound(build: &VerifiedBuild, sound: u64, position: [f32; 3]) -> bool {
+pub(crate) fn move_shot_sound(build: &VerifiedBuild, sound: u64, position: [f32; 3]) -> bool {
     if !sound_is_playing(build, sound) {
         return false;
     }
@@ -79,7 +79,7 @@ pub(super) fn move_shot_sound(build: &VerifiedBuild, sound: u64, position: [f32;
     true
 }
 
-pub(super) fn stop_shot_sound(build: &VerifiedBuild, sound: u64) {
+pub(crate) fn stop_shot_sound(build: &VerifiedBuild, sound: u64) {
     let Some(manager) = built_audio_manager(build) else {
         return;
     };

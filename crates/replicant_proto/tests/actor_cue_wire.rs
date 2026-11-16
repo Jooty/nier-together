@@ -40,6 +40,28 @@ fn shield_sound() -> ActorCue {
     }
 }
 
+fn emil_loop_sound() -> ActorCue {
+    ActorCue {
+        actor: emil(),
+        id: 56038,
+        kind: ActorCueKind::LastingSound {
+            position: [-4.13, 1.2, 0.54],
+            levels: [1.0, 0.0],
+            handle: 0x2_9F10_4C00,
+        },
+    }
+}
+
+fn emil_loop_sound_stop() -> ActorCue {
+    ActorCue {
+        actor: emil(),
+        id: 56038,
+        kind: ActorCueKind::StopSound {
+            handle: 0x2_9F10_4C00,
+        },
+    }
+}
+
 #[test]
 fn every_kind_round_trips_fits_a_message_and_is_relayed() {
     let mut transform = [0.0_f32; 12];
@@ -75,6 +97,8 @@ fn every_kind_round_trips_fits_a_message_and_is_relayed() {
             kind: ActorCueKind::PlaceEffect { transform },
             ..magic_array()
         },
+        emil_loop_sound(),
+        emil_loop_sound_stop(),
     ];
     for cue in cues {
         let message = Message::ActorCue(cue);
@@ -118,10 +142,25 @@ fn an_actor_cue_out_of_range_is_refused() {
             field: "actor cue id"
         })
     );
-    for bad in [bad_sound, bad_colour] {
+    let bad_lasting = ActorCue {
+        kind: ActorCueKind::LastingSound {
+            position: [0.0, f32::INFINITY, 0.0],
+            levels: [1.0, 0.0],
+            handle: 1,
+        },
+        ..emil_loop_sound()
+    };
+    for bad in [bad_sound, bad_colour, bad_lasting] {
         assert_eq!(
             bad.validate(),
             Err(WireError::OutOfRange { field: "actor cue" })
         );
     }
+}
+
+#[test]
+fn a_lasting_sound_stop_has_its_fixed_bytes() {
+    let bytes = encode(&Message::ActorCue(emil_loop_sound_stop())).unwrap();
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    assert_eq!(hex, "7fffff03feff03e6b503068098c1f829");
 }

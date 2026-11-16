@@ -37,6 +37,17 @@ pub enum ActorCueKind {
     },
     /// The actor's message handler turned it to stone; `id` is unused (0).
     TurnedToStone(StoneTurn),
+    /// A sound the game keeps playing until it stops it; `handle` is the host's own handle for
+    /// it, which names it in the later stop.
+    LastingSound {
+        position: [f32; 3],
+        levels: [f32; SHOT_SOUND_LEVELS],
+        handle: u64,
+    },
+    /// The host's game stopped the lasting sound it knows by `handle`.
+    StopSound {
+        handle: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -77,7 +88,9 @@ impl ActorCue {
                 .iter()
                 .chain(&attached.style)
                 .all(|value| value.is_finite() && value.abs() <= MAX_BULLET_STYLE_ABS),
-            ActorCueKind::RemoveEffect { .. } | ActorCueKind::TurnedToStone(_) => true,
+            ActorCueKind::RemoveEffect { .. }
+            | ActorCueKind::TurnedToStone(_)
+            | ActorCueKind::StopSound { .. } => true,
             ActorCueKind::PlaceEffect { transform } => {
                 transform.iter().enumerate().all(|(index, value)| {
                     let limit = if index % 4 == 3 {
@@ -88,7 +101,10 @@ impl ActorCue {
                     value.is_finite() && value.abs() <= limit
                 })
             }
-            ActorCueKind::Sound { position, levels } => {
+            ActorCueKind::Sound { position, levels }
+            | ActorCueKind::LastingSound {
+                position, levels, ..
+            } => {
                 position
                     .iter()
                     .all(|axis| axis.is_finite() && axis.abs() <= MAX_POSITION_ABS)

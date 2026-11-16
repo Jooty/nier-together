@@ -219,6 +219,8 @@ mod kaine_stats;
 mod kaine_swapped_level;
 #[path = "kill_guard.rs"]
 mod kill_guard;
+#[path = "lasting_cue_sounds.rs"]
+mod lasting_cue_sounds;
 #[path = "lift_rides.rs"]
 mod lift_rides;
 #[path = "line_press.rs"]

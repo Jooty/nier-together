@@ -15,7 +15,7 @@ pub use bullet_start::install as install_bullet_starts;
 pub(crate) use script_commands::command_in_flight;
 pub use script_commands::install as install_script_commands;
 pub(crate) use shot_cues::{note_effect_made, note_sound_made};
-pub(crate) use shot_sounds::play_shot_sound;
+pub(crate) use shot_sounds::{move_shot_sound, play_shot_sound, stop_shot_sound};
 pub use sprite_draw::install;
 pub use tick::tick;
 

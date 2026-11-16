@@ -178,9 +178,16 @@ extern "system" fn sound_by_id_detour(
     let position = position as usize;
     let _ = panic::catch_unwind(|| note_shot_sound(sound_id, position as u64, [fourth, fifth]));
     if sending() {
+        let handle = result as usize as u64;
         let _ = panic::catch_unwind(|| {
             let caller_rva = game_caller_rva();
-            actor_cues::note_sound_by_id(sound_id, position as u64, [fourth, fifth], caller_rva);
+            actor_cues::note_sound_by_id(
+                sound_id,
+                position as u64,
+                [fourth, fifth],
+                caller_rva,
+                handle,
+            );
         });
     }
     result
