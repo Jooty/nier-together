@@ -4,9 +4,9 @@ use replicant_game::offsets::{
     WEATHER_OFFSET_COUNTER_RVA, WIND_AREA_OFFSET, WIND_MANAGER_RVA,
 };
 use replicant_game::sky::{
-    APPLY_RETRY_MS, RecordAssembler, SkyBroadcast, SkyHold, SkyReading, ZONE_SETTLE_MS,
-    merge_record, read_asset_names, read_sky, read_table_record, split_record,
-    write_asset_pointers, write_table_record, write_weather_counters,
+    APPLY_RETRY_MS, RecordAssembler, SKY_APPLY_LIMIT_MS, SkyBroadcast, SkyHold, SkyOutcome,
+    SkyReading, ZONE_SETTLE_MS, merge_record, read_asset_names, read_sky, read_table_record,
+    split_record, write_asset_pointers, write_table_record, write_weather_counters,
 };
 
 use crate::fake_memory::FakeMemory;
@@ -86,16 +86,24 @@ fn the_host_sends_when_the_guest_joins() {
 }
 
 #[test]
-fn the_host_sends_a_change_once_with_its_blend() {
+fn the_host_sends_no_change_made_later_in_the_same_zone() {
     let mut host = SkyBroadcast::default();
     host.next(0, PHASE, &reading(5), Some(PHASE));
     assert!(host.next(50, PHASE, &reading(5), Some(PHASE)).is_none());
+    for (now, area) in [(100, 6), (150, 7), (10_000, 5)] {
+        assert!(host.next(now, PHASE, &reading(area), Some(PHASE)).is_none());
+    }
+}
+
+#[test]
+fn a_rejoin_makes_the_host_send_again() {
+    let mut host = SkyBroadcast::default();
+    host.next(0, PHASE, &reading(5), Some(PHASE));
+    assert!(host.next(1_000, PHASE, &reading(6), None).is_none());
     let sent = host
-        .next(100, PHASE, &reading(6), Some(PHASE))
+        .next(1_010, PHASE, &reading(6), Some(PHASE))
         .expect("sent");
-    assert_eq!(sent.reason, "host sky changed");
-    assert_eq!(sent.state.env_blend_seconds, 2.0);
-    assert!(host.next(150, PHASE, &reading(6), Some(PHASE)).is_none());
+    assert_eq!((sent.reason, sent.state.env_area), ("guest joined", 6));
 }
 
 #[test]
@@ -174,13 +182,80 @@ fn the_guest_applies_a_fresh_host_sky_with_the_host_blend() {
 }
 
 #[test]
-fn the_guest_overrides_its_own_script_with_an_instant_change() {
+fn a_guest_whose_own_script_changes_the_area_after_the_apply_keeps_its_own_area() {
     let mut guest = SkyHold::default();
     guest.receive(host_state(8, 2.5));
-    guest.step(0, PHASE, &reading(0));
+    assert_eq!(guest.step(0, PHASE, &reading(0)).env, Some((8, 2.5)));
     assert!(guest.step(10, PHASE, &reading(8)).is_empty());
-    let apply = guest.step(20, PHASE, &reading(4));
-    assert_eq!(apply.env, Some((8, 0.0)));
+    assert_eq!(
+        guest.take_outcome(),
+        Some(SkyOutcome {
+            phase: PHASE,
+            timed_out: false
+        })
+    );
+    for now in [20, 300, 5_000] {
+        assert!(guest.step(now, PHASE, &reading(4)).is_empty());
+    }
+    assert_eq!(guest.take_outcome(), None);
+}
+
+#[test]
+fn a_new_zone_load_or_a_rejoin_applies_the_host_sky_again() {
+    let mut guest = SkyHold::default();
+    guest.receive(host_state(8, 0.0));
+    guest.step(0, PHASE, &reading(8));
+    assert!(guest.take_outcome().is_some());
+    assert!(guest.step(100, PHASE, &reading(4)).is_empty());
+    guest.receive(host_state(9, 0.0));
+    assert_eq!(guest.step(200, PHASE, &reading(4)).env, Some((9, 0.0)));
+}
+
+#[test]
+fn the_guest_retries_until_the_apply_has_taken_then_stops() {
+    let mut guest = SkyHold::default();
+    guest.receive(host_state(8, 0.0));
+    assert!(guest.step(0, PHASE, &reading(0)).env.is_some());
+    assert!(guest.step(100, PHASE, &reading(0)).is_empty());
+    assert!(guest.step(APPLY_RETRY_MS, PHASE, &reading(0)).env.is_some());
+    assert_eq!(guest.take_outcome(), None);
+    assert!(
+        guest
+            .step(APPLY_RETRY_MS + 10, PHASE, &reading(8))
+            .is_empty()
+    );
+    assert_eq!(
+        guest.take_outcome(),
+        Some(SkyOutcome {
+            phase: PHASE,
+            timed_out: false
+        })
+    );
+    assert!(guest.step(5_000, PHASE, &reading(0)).is_empty());
+}
+
+#[test]
+fn the_guest_gives_up_after_the_limit_and_says_so() {
+    let mut guest = SkyHold::default();
+    guest.receive(host_state(8, 0.0));
+    assert!(guest.step(0, PHASE, &reading(0)).env.is_some());
+    assert!(
+        guest
+            .step(SKY_APPLY_LIMIT_MS, PHASE, &reading(0))
+            .is_empty()
+    );
+    assert_eq!(
+        guest.take_outcome(),
+        Some(SkyOutcome {
+            phase: PHASE,
+            timed_out: true
+        })
+    );
+    assert!(
+        guest
+            .step(SKY_APPLY_LIMIT_MS + 1_000, PHASE, &reading(0))
+            .is_empty()
+    );
 }
 
 #[test]

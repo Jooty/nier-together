@@ -3,8 +3,8 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Instant;
 
 use replicant_game::sky::{
-    RecordAssembler, SkyBroadcast, SkyHold, merge_record, read_asset_names, read_sky,
-    read_table_record, split_record, write_asset_pointers, write_table_record,
+    RecordAssembler, SKY_APPLY_LIMIT_MS, SkyBroadcast, SkyHold, merge_record, read_asset_names,
+    read_sky, read_table_record, split_record, write_asset_pointers, write_table_record,
     write_weather_counters,
 };
 use replicant_game::{PhaseEntry, Replicant};
@@ -20,11 +20,19 @@ static SYNC: LazyLock<Mutex<SkySync>> = LazyLock::new(|| Mutex::new(SkySync::def
 static LEAKED_NAMES: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Mutex::default);
 static EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
 
+struct PendingRecord {
+    phase: u16,
+    area: i32,
+    bytes: Vec<u8>,
+}
+
 #[derive(Default)]
 struct SkySync {
     broadcast: SkyBroadcast,
     hold: SkyHold,
     assembler: RecordAssembler,
+    pending_record: Option<PendingRecord>,
+    pending_assets: Option<SkyAssets>,
     was_host: Option<bool>,
 }
 
@@ -44,6 +52,8 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
         sync.broadcast.reset();
         sync.hold.reset();
         sync.assembler = RecordAssembler::default();
+        sync.pending_record = None;
+        sync.pending_assets = None;
         sync.was_host = None;
         return;
     };
@@ -51,6 +61,8 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
     if sync.was_host != Some(is_host) {
         sync.broadcast.reset();
         sync.hold.reset();
+        sync.pending_record = None;
+        sync.pending_assets = None;
         sync.was_host = Some(is_host);
     }
     let game = Replicant::new(InProcessMemory::new(build));
@@ -108,14 +120,16 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
     for message in incoming {
         if let Message::SkyRecord(chunk) = &message
             && let Some(host_record) = sync.assembler.receive(chunk)
-            && chunk.phase == phase
         {
-            apply_host_record(build, game.memory(), chunk.area, &host_record);
+            sync.pending_record = Some(PendingRecord {
+                phase: chunk.phase,
+                area: chunk.area,
+                bytes: host_record,
+            });
         }
-        if let Message::SkyAssets(assets) = &message
-            && assets.phase == phase
-        {
-            apply_host_assets(build, assets);
+        if let Message::SkyAssets(assets) = message {
+            sync.pending_assets = Some(assets);
+            continue;
         }
         if let Message::Sky(state) = message {
             log_line(&format!(
@@ -127,10 +141,49 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
                 state.weather_offset,
                 reading.env_area,
             ));
+            sync.pending_record = None;
+            sync.pending_assets = None;
             sync.hold.receive(state);
         }
     }
+    if reading.is_settled() {
+        let mut set_area = false;
+        if sync
+            .pending_record
+            .as_ref()
+            .is_some_and(|pending| pending.phase == phase)
+            && let Some(pending) = sync.pending_record.take()
+        {
+            apply_host_record(build, game.memory(), pending.area, &pending.bytes);
+            set_area = true;
+        }
+        if sync
+            .pending_assets
+            .as_ref()
+            .is_some_and(|pending| pending.phase == phase)
+            && let Some(assets) = sync.pending_assets.take()
+        {
+            apply_host_assets(build, &assets);
+            set_area = true;
+        }
+        if set_area {
+            sync.hold.note_area_set_outside_the_hold();
+        }
+    }
     let apply = sync.hold.step(now_ms, phase, &reading);
+    if let Some(outcome) = sync.hold.take_outcome() {
+        if outcome.timed_out {
+            log_line(&format!(
+                "sky: the host's sky for {} did not fully take within {SKY_APPLY_LIMIT_MS} ms, giving up; your game runs its own areas from here",
+                outcome.phase
+            ));
+        } else {
+            log_line(&format!(
+                "sky: the host's sky for {} applied once, your game runs its own areas from here",
+                outcome.phase
+            ));
+        }
+    }
     if apply.is_empty() {
         return;
     }
