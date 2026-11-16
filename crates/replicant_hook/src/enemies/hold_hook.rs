@@ -19,6 +19,7 @@ use replicant_game::offsets::{
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::effects::with_ticking_actor;
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
 
@@ -200,8 +201,9 @@ extern "system" fn actor_tick_detour(actor: *mut c_void, delta_seconds: f32) -> 
         .then(|| read_slide(actor as u64))
         .flatten();
     // SAFETY: the trampoline continues into the original tick, which has this exact signature.
-    let alive =
-        unsafe { core::mem::transmute::<*mut c_void, ActorTick>(original)(actor, delta_seconds) };
+    let alive = with_ticking_actor(actor as u64, || unsafe {
+        core::mem::transmute::<*mut c_void, ActorTick>(original)(actor, delta_seconds)
+    });
     if tick == CopyTick::StoppedDead {
         let before_cut = read_slide(actor as u64);
         let _ = panic::catch_unwind(|| {

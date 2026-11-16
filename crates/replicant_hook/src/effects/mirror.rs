@@ -12,6 +12,7 @@ use replicant_proto::{EffectLook, EffectPlay, Message};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::effects::actor_cues;
 use crate::effects::calls::{
     PlayedEffect, align_anchor_offset, distance_to_listener, move_world_effect, play_effect,
     play_sound, spawn_world_effect,
@@ -233,6 +234,7 @@ pub fn tick(build: &VerifiedBuild) {
     };
     let active = net.view().partner_in_play();
     set_sending(active && !crate::story_watch::this_game_is_watching());
+    actor_cues::tick(build, active);
     if active {
         send_ended_effects(build);
     }

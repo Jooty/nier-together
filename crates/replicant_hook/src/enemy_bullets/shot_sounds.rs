@@ -31,7 +31,7 @@ struct AlignedPoint([f32; 4]);
 
 /// Plays sound `id` at `position` as a bullet script command does; the game's handle for it,
 /// which a lasting sound needs to be moved and stopped.
-pub(super) fn play_shot_sound(
+pub(crate) fn play_shot_sound(
     build: &VerifiedBuild,
     id: u32,
     position: [f32; 3],

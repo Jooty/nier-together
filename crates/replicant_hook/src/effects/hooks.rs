@@ -41,7 +41,7 @@ use crate::diagnostics::log_line;
 use crate::effects::report::{
     REFUSED_BY_RATE_LIMIT, SENT_EFFECTS, SENT_SOUNDS, SENT_STOPS, UNREADABLE, count, log_limited,
 };
-use crate::effects::sound_probe;
+use crate::effects::{actor_cues, sound_probe};
 use crate::enemies::applying_remote;
 use crate::game_hooks::hook_address;
 use crate::kaine::{
@@ -212,6 +212,7 @@ pub fn install(build: VerifiedBuild) {
         )
     };
     sound_probe::install(build);
+    actor_cues::install(build);
 }
 
 /// Runs `call` as a nested effect call: an effect spawned by name inside it belongs to an
@@ -292,6 +293,10 @@ fn effect_is_sent_as_actor_effect(source: EffectSource) -> bool {
 
 fn actor_effect_is_sent_directly(actor: u64) -> bool {
     source_in_play(actor).is_some_and(|(_, source)| effect_is_sent_as_actor_effect(source))
+}
+
+pub(super) fn sending() -> bool {
+    SENDING.load(Ordering::Relaxed)
 }
 
 pub(super) fn set_sending(sending: bool) {
@@ -477,8 +482,10 @@ extern "system" fn spawn_by_name_detour(
         });
     }
     let cube_glow = panic::catch_unwind(|| note_cube_effect(name)).unwrap_or(false);
-    let due = (spawn_is_sent(outermost, hit_related_spawn()) || cube_glow)
-        && SENDING.load(Ordering::Relaxed);
+    let due = SENDING.load(Ordering::Relaxed)
+        && (spawn_is_sent(outermost, hit_related_spawn())
+            || cube_glow
+            || panic::catch_unwind(|| actor_cues::spawn_is_actor_cue(outermost)).unwrap_or(false));
     if due && spawn_is_drawn_by_shot_sync(CREATE_BY_ID_CALLER_RVA.with(Cell::get)) {
         let _ = panic::catch_unwind(note_shot_slot_not_resent);
     } else if due {
@@ -530,6 +537,22 @@ extern "system" fn attach_effect_by_id_detour(
         )
     };
     ATTACHING_ACTOR.with(|cell| cell.set(was_attaching));
+    if result & 0xFF != 0 && SENDING.load(Ordering::Relaxed) {
+        let (actor, colour, scale) = (actor as usize, colour as usize, scale as usize);
+        let _ = panic::catch_unwind(|| {
+            actor_cues::note_attach(
+                actor as u64,
+                id,
+                bone,
+                unique,
+                colour as u64,
+                scale as u64,
+                a,
+                b,
+                c,
+            );
+        });
+    }
     result
 }
 
@@ -582,6 +605,8 @@ extern "system" fn create_by_id_detour(
         return handle;
     }
     let caller_rva = game_caller_rva();
+    let nested = NESTED_EFFECT_CALLS.with(|depth| depth.get() > 0)
+        || ATTACHING_ACTOR.with(|actor| actor.get() != 0);
     let was_caller = CREATE_BY_ID_CALLER_RVA.with(|cell| cell.replace(caller_rva));
     // SAFETY: the trampoline continues into the original function, which has this signature.
     let create = || unsafe {
@@ -597,6 +622,11 @@ extern "system" fn create_by_id_detour(
         // SAFETY: the game wrote the new handle through this out pointer just now.
         let made = unsafe { handle.read() };
         let _ = panic::catch_unwind(|| crate::enemy_bullets::note_effect_made(id, made));
+        if SENDING.load(Ordering::Relaxed) {
+            let _ = panic::catch_unwind(|| {
+                actor_cues::note_create_by_id(made, id, caller_rva, nested);
+            });
+        }
     }
     result
 }

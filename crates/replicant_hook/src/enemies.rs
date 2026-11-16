@@ -29,7 +29,7 @@ pub use counters::CombatCounts;
 pub(crate) use gauge_opening_replay::{OpeningReplayStep, replay_guest_opening_hit};
 pub(crate) use hold_hook::cut_copy_step_before_move;
 pub use install::install;
-pub use shared_actors::shared_enemy_actors;
+pub use shared_actors::{shared_actor_id, shared_actor_of, shared_enemy_actors};
 pub use status::{
     EnemySyncRole, EnemySyncStatus, enemy_id_text, enemy_sync_status, set_snap_enabled,
     snap_enabled,

@@ -1,3 +1,4 @@
+mod actor_cue;
 mod anchor_offset;
 mod capture;
 mod falloff;
@@ -12,6 +13,12 @@ mod source;
 mod voice_character;
 mod world_trail;
 
+pub use actor_cue::{
+    ActorCueCall, ActorCueMoment, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
+    MAX_FIRST_ACTOR_CUES_LOGGED, STONE_HANDLERS, actor_cue_is_sent, actor_cue_text,
+    stack_holds_ai_step, stone_handler_rva, stone_state_machine_pointer_offset,
+    stone_state_vtable_rva,
+};
 pub use anchor_offset::{match_anchor_offset, read_anchor_offset};
 pub use capture::{
     CapturedEffect, EffectCall, WORLD_EFFECT_SENT_PREFIX, build_effect_call, read_effect,

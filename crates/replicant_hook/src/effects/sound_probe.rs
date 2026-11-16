@@ -13,7 +13,8 @@ use replicant_game::{GameMemory, Replicant};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
-use crate::effects::hooks::{game_caller_rva, probe_window_open, source_in_play};
+use crate::effects::actor_cues;
+use crate::effects::hooks::{game_caller_rva, probe_window_open, sending, source_in_play};
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
@@ -176,6 +177,11 @@ extern "system" fn sound_by_id_detour(
     };
     let position = position as usize;
     let _ = panic::catch_unwind(|| note_shot_sound(sound_id, position as u64, [fourth, fifth]));
+    if sending() {
+        let _ = panic::catch_unwind(|| {
+            actor_cues::note_sound_by_id(sound_id, position as u64, [fourth, fifth]);
+        });
+    }
     result
 }
 

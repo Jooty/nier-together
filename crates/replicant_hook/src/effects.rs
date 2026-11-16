@@ -1,3 +1,4 @@
+mod actor_cues;
 mod calls;
 mod hooks;
 mod mirror;
@@ -5,6 +6,7 @@ mod report;
 mod sound_probe;
 mod voice;
 
+pub(crate) use actor_cues::with_ticking_actor;
 pub use hooks::install;
 pub(crate) use hooks::{begin_own_hit, end_own_hit};
 pub use mirror::tick;

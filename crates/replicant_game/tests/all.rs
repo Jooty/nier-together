@@ -1,5 +1,7 @@
 mod fake_memory;
 
+#[path = "actor_cues.rs"]
+mod actor_cues;
 #[path = "actor_model.rs"]
 mod actor_model;
 #[path = "armed_host_led_stretch.rs"]
