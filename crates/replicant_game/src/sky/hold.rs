@@ -1,6 +1,6 @@
 use replicant_proto::SkyState;
 
-use crate::sky::{APPLY_RETRY_MS, SkyReading};
+use crate::sky::{APPLY_RETRY_MS, SKY_APPLY_LIMIT_MS, SkyReading};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SkyApply {
@@ -9,12 +9,20 @@ pub struct SkyApply {
     pub wind: Option<(i32, f32)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SkyOutcome {
+    pub phase: u16,
+    pub timed_out: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct SkyHold {
     target: Option<SkyState>,
     fresh: bool,
     applied_before_resources_ready: bool,
     last_attempt_ms: Option<u64>,
+    started_ms: Option<u64>,
+    outcome: Option<SkyOutcome>,
 }
 
 impl SkyApply {
@@ -31,7 +39,20 @@ impl SkyHold {
     pub fn receive(&mut self, state: SkyState) {
         self.target = Some(state);
         self.fresh = true;
+        self.applied_before_resources_ready = false;
         self.last_attempt_ms = None;
+        self.started_ms = None;
+        self.outcome = None;
+    }
+
+    pub fn take_outcome(&mut self) -> Option<SkyOutcome> {
+        self.outcome.take()
+    }
+
+    pub fn note_area_set_outside_the_hold(&mut self) {
+        if self.target.is_some() {
+            self.applied_before_resources_ready = true;
+        }
     }
 
     pub fn step(&mut self, now_ms: u64, guest_phase: u16, reading: &SkyReading) -> SkyApply {
@@ -41,6 +62,7 @@ impl SkyHold {
         if target.phase != guest_phase || !reading.is_settled() {
             return SkyApply::default();
         }
+        let started_ms = *self.started_ms.get_or_insert(now_ms);
         let blend = if self.fresh {
             target.env_blend_seconds
         } else {
@@ -57,10 +79,18 @@ impl SkyHold {
             wind: (target.wind_area >= 0 && reading.wind_area != target.wind_area)
                 .then_some((target.wind_area, blend)),
         };
+        let timed_out = now_ms.saturating_sub(started_ms) >= SKY_APPLY_LIMIT_MS;
         if apply.is_empty() {
             self.fresh = false;
             self.last_attempt_ms = None;
+            if !self.applied_before_resources_ready || timed_out {
+                self.finish(target.phase, self.applied_before_resources_ready);
+            }
             return apply;
+        }
+        if timed_out {
+            self.finish(target.phase, true);
+            return SkyApply::default();
         }
         if !self.fresh
             && self
@@ -75,5 +105,10 @@ impl SkyHold {
             self.applied_before_resources_ready = env_mismatch && !reading.sky_resources_ready;
         }
         apply
+    }
+
+    fn finish(&mut self, phase: u16, timed_out: bool) {
+        self.target = None;
+        self.outcome = Some(SkyOutcome { phase, timed_out });
     }
 }
