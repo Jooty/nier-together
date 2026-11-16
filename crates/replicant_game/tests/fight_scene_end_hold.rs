@@ -137,6 +137,28 @@ fn the_hosts_scene_end_goes_at_the_cap_when_the_guests_own_end_never_pops() {
 }
 
 #[test]
+fn an_own_end_that_popped_while_the_scene_still_played_does_not_release_the_entry() {
+    let mut guest = guest_in_the_scene_the_stream_started();
+    guest.set_own_scene_playing(true);
+    assert_eq!(released(&mut guest, HOST_SCENE_END_QUEUED_MS), None);
+    assert_eq!(
+        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        GuestPop::Hold
+    );
+    guest.set_own_scene_playing(false);
+    assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS), None);
+    assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS + 500), None);
+    assert_eq!(
+        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        GuestPop::Hold
+    );
+    assert_eq!(
+        released(&mut guest, GUEST_SCENE_OVER_MS + 516).as_deref(),
+        Some(SCENE_END)
+    );
+}
+
+#[test]
 fn the_wait_for_the_guests_scene_is_logged_once_however_long_the_scene_lasts() {
     let mut guest = guest_in_the_scene_the_stream_started();
     guest.set_own_scene_playing(true);

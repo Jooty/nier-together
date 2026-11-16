@@ -954,6 +954,7 @@ impl GuestFightStream {
         }
         if self.own_scene_state == OwnSceneState::Playing {
             self.own_scene_state = OwnSceneState::ClearedAt(now_ms);
+            self.own_scene_end_popped = false;
         }
         let OwnSceneState::ClearedAt(cleared_ms) = self.own_scene_state else {
             return OwnSceneHold::NoScene;
