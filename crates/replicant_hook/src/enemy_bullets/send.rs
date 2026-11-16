@@ -77,11 +77,14 @@ pub(super) fn send_enemy_bullets(
             && sending.not_drawn_kinds.insert(kind)
         {
             log_line(&format!(
-                "enemy bullets: an ordinary bullet from enemy {} has no live effect, not sent: record effect ids {:?}, effect handles {:x?}, ground effect {}",
+                "enemy bullets: an ordinary bullet from enemy {} has no live effect, no flight sent: record effect ids {:?}, effect handles {:x?}, ground effect {}, start effect {} and start sound {} (sent as shot cues when it starts), lasting sound {}",
                 enemy_id_text(not_drawn.enemy),
                 not_drawn.record_effect_ids,
                 not_drawn.effect_handles,
-                not_drawn.ground_effect_id
+                not_drawn.ground_effect_id,
+                not_drawn.start_effect_id,
+                not_drawn.start_sound_id,
+                not_drawn.lasting_sound_id
             ));
         }
     }

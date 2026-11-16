@@ -36,6 +36,8 @@ mod breaker_body_hold;
 mod bullet_flights;
 #[path = "bullet_hits.rs"]
 mod bullet_hits;
+#[path = "bullet_starts.rs"]
+mod bullet_starts;
 #[path = "ca_gauge.rs"]
 mod ca_gauge;
 #[path = "callback_gate.rs"]

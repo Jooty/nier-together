@@ -15,8 +15,10 @@ use crate::offsets::{
     HANDLE_POOL_POINTERS_RVA, HANDLE_POOL_SLOT_COUNT, NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET,
     NORMAL_BULLET_EFFECT_HANDLES_OFFSET, NORMAL_BULLET_OWNER_HANDLE_OFFSET,
     NORMAL_BULLET_RECORD_EFFECT_IDS_OFFSET, NORMAL_BULLET_RECORD_POINTER_OFFSET,
-    NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET, NORMAL_BULLET_STATE_OFFSET,
-    NORMAL_BULLET_VTABLE_RVA, SCRIPT_BULLET_VTABLE_RVA, TRACE_BULLET_VTABLE_RVA,
+    NORMAL_BULLET_RECORD_START_EFFECT_ID_OFFSET, NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET,
+    NORMAL_BULLET_SETTINGS_LASTING_SOUND_ID_OFFSET, NORMAL_BULLET_SETTINGS_START_SOUND_ID_OFFSET,
+    NORMAL_BULLET_STATE_OFFSET, NORMAL_BULLET_VTABLE_RVA, SCRIPT_BULLET_VTABLE_RVA,
+    TRACE_BULLET_VTABLE_RVA,
 };
 use crate::puppet::actor_is_live;
 use replicant_proto::BULLET_EFFECT_SLOTS;
@@ -64,6 +66,9 @@ pub struct NotDrawnNormalBullet {
     pub record_effect_ids: [i32; BULLET_EFFECT_SLOTS],
     pub effect_handles: [u32; BULLET_EFFECT_SLOTS],
     pub ground_effect_id: i32,
+    pub start_effect_id: i32,
+    pub start_sound_id: i32,
+    pub lasting_sound_id: i32,
 }
 
 /// A running script bullet of a shared enemy that the scan counted as having no effect to copy.
@@ -204,6 +209,13 @@ pub fn read_not_drawn_normal_bullet<M: GameMemory>(
         .read_u64(actor + NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET)
         .ok()?;
     let mut record_effect_ids = [0_i32; BULLET_EFFECT_SLOTS];
+    let start_effect_id = if record == 0 {
+        0
+    } else {
+        memory
+            .read_i32(record + NORMAL_BULLET_RECORD_START_EFFECT_ID_OFFSET)
+            .ok()?
+    };
     let mut effect_handles = [0_u32; BULLET_EFFECT_SLOTS];
     for (index, (id, handle)) in
         (0_u64..).zip(record_effect_ids.iter_mut().zip(&mut effect_handles))
@@ -218,18 +230,21 @@ pub fn read_not_drawn_normal_bullet<M: GameMemory>(
             .ok()?
             .cast_unsigned();
     }
-    let ground_effect_id = if settings == 0 {
-        0
-    } else {
-        memory
-            .read_i32(settings + NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET)
-            .ok()?
+    let setting = |offset: u64| {
+        if settings == 0 {
+            Some(0)
+        } else {
+            memory.read_i32(settings + offset).ok()
+        }
     };
     Some(NotDrawnNormalBullet {
         enemy,
         record_effect_ids,
         effect_handles,
-        ground_effect_id,
+        ground_effect_id: setting(NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET)?,
+        start_effect_id,
+        start_sound_id: setting(NORMAL_BULLET_SETTINGS_START_SOUND_ID_OFFSET)?,
+        lasting_sound_id: setting(NORMAL_BULLET_SETTINGS_LASTING_SOUND_ID_OFFSET)?,
     })
 }
 

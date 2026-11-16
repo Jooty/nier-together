@@ -2,6 +2,7 @@
 //! through the game's sprite batch.
 
 mod board;
+mod bullet_start;
 mod command_cues;
 mod copy_motion;
 mod copy_motion_tally;
@@ -24,6 +25,7 @@ mod sprite_frames;
 mod uncopied;
 
 pub use board::{EnemyBulletBoard, EnemyBulletStep};
+pub use bullet_start::{BulletStartMade, bullet_start_cue_kind};
 pub use command_cues::{effect_cue_of_command, end_cue_of_command, sound_cue_of_command};
 pub use copy_motion::{CopyCorrection, CopyMotion};
 pub use copy_motion_tally::CopyMotionTally;

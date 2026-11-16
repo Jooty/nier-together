@@ -31,7 +31,7 @@ use crate::bullets::create_effect;
 use crate::diagnostics::log_line;
 use crate::effects::hooks::{game_caller_rva, sending};
 use crate::enemies::{EnemySyncRole, enemy_id_text, shared_actor_id, shared_actor_of};
-use crate::enemy_bullets::{command_in_flight, play_shot_sound};
+use crate::enemy_bullets::{bullet_start_in_flight, command_in_flight, play_shot_sound};
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
 use crate::net::{self, net_clock_ms};
@@ -155,8 +155,9 @@ pub(super) fn note_create_by_id(handle: u32, id: u32, caller_rva: u32, nested: b
     let Some((build, shared)) = hosted_shared(actor) else {
         return;
     };
-    let made_for_a_bullet =
-        BULLET_CREATE_EFFECTS_RVA_RANGE.contains(&caller_rva) || command_in_flight().is_some();
+    let made_for_a_bullet = BULLET_CREATE_EFFECTS_RVA_RANGE.contains(&caller_rva)
+        || command_in_flight().is_some()
+        || bullet_start_in_flight();
     if !actor_cue_is_sent(moment(nested, made_for_a_bullet)) {
         return;
     }
@@ -182,7 +183,8 @@ pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2]) {
     let Some((build, shared)) = hosted_shared(actor) else {
         return;
     };
-    if !actor_cue_is_sent(moment(false, command_in_flight().is_some())) {
+    let made_for_a_bullet = command_in_flight().is_some() || bullet_start_in_flight();
+    if !actor_cue_is_sent(moment(false, made_for_a_bullet)) {
         return;
     }
     let Some(position) = read_floats::<3>(&InProcessMemory::new(build), position) else {
