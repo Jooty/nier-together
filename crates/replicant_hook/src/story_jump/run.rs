@@ -1,10 +1,9 @@
 use replicant_game::marker::{UI_DIALOG_STATE_RVA, WorldFlags, read_world_flags};
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_jump::{
-    JumpStep, LEARN_MAGIC_NATIVE_RVA, PLAYER_UNIQUE_ACTOR_ID, SET_HAVE_WHITE_BOOK_NATIVE_RVA,
-    SET_ITEM_NUM_NATIVE_RVA, SET_MAGIC_SLOT_NATIVE_RVA, SET_PLAYER_MP_FULL_MODE_NATIVE_RVA,
-    SET_PLAYER_WEAPON_NATIVE_RVA, SET_TUTORIAL_NATIVE_RVA, SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA,
-    StoryJumpView, check_story_jump, destination, guest_reloads_in_place,
+    JumpStep, LEARN_MAGIC_NATIVE_RVA, SET_HAVE_WHITE_BOOK_NATIVE_RVA, SET_ITEM_NUM_NATIVE_RVA,
+    SET_MAGIC_SLOT_NATIVE_RVA, SET_PLAYER_MP_FULL_MODE_NATIVE_RVA, SET_PLAYER_WEAPON_NATIVE_RVA,
+    SET_TUTORIAL_NATIVE_RVA, StoryJumpView, check_story_jump, destination, guest_reloads_in_place,
     jump_waits_for_pause_menu, loadout_steps,
 };
 use replicant_game::{GameMemory, PhaseEntry, Replicant};
@@ -17,8 +16,10 @@ use crate::memory::InProcessMemory;
 use crate::net;
 use crate::stay_together::close_pause_menu;
 use crate::story_jump::arrival::{expect_arrival, tick_arrival};
-use crate::story_jump::level::{expect_level_after_jump, log_level, tick_level};
+use crate::story_jump::level::{expect_level_after_jump, tick_level};
 use crate::story_jump::natives::call_native;
+use crate::story_jump::restore_point::{expect_restore_point, tick_restore_point};
+use crate::story_jump::stat_level::raise_stat_level;
 use crate::story_jump::status::{GuestLoadouts, PendingJump, remember_outcome};
 use crate::story_progress::apply_change;
 
@@ -27,6 +28,7 @@ pub(crate) fn tick(build: &VerifiedBuild) {
     run_pending_jump(build);
     tick_level(build);
     tick_arrival(build);
+    tick_restore_point(build);
 }
 
 pub(crate) fn run_story_jump(build: &VerifiedBuild, point: StoryJumpPoint) -> Result<(), String> {
@@ -180,17 +182,13 @@ fn jump_as_host(build: &VerifiedBuild, point: StoryJumpPoint) -> Result<(), Stri
 
 fn apply_loadout(build: &VerifiedBuild, point: StoryJumpPoint) {
     for step in loadout_steps(point) {
-        if matches!(step, JumpStep::SetPlayerLevel { .. }) {
-            log_level(build, "before the level step");
-        }
         apply_step(build, step);
         log_line(&format!("story jump: {step:?}"));
-        if matches!(step, JumpStep::SetPlayerLevel { .. }) {
-            log_level(build, "after the level step");
-        }
     }
+    raise_stat_level(build, point);
     expect_level_after_jump(build, point);
     expect_arrival(build, point, local_is_host().unwrap_or(false));
+    expect_restore_point(build, point);
 }
 
 fn apply_step(build: &VerifiedBuild, step: JumpStep) {
@@ -220,11 +218,6 @@ fn apply_step(build: &VerifiedBuild, step: JumpStep) {
             call_native(build, SET_ITEM_NUM_NATIVE_RVA, &[id, count]);
         }
         JumpStep::EquipWeapon { id } => call_native(build, SET_PLAYER_WEAPON_NATIVE_RVA, &[id]),
-        JumpStep::SetPlayerLevel { level } => call_native(
-            build,
-            SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA,
-            &[PLAYER_UNIQUE_ACTOR_ID, level],
-        ),
         JumpStep::MpFullMode { on } => {
             call_native(build, SET_PLAYER_MP_FULL_MODE_NATIVE_RVA, &[i32::from(on)]);
         }

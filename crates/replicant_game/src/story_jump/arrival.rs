@@ -2,6 +2,7 @@ use replicant_proto::StoryJumpPoint;
 
 use crate::story_jump::LEVEL_CHECK_SETTLE_MS;
 
+pub const PLACEMENT_READ_BACK_AFTER_MS: u64 = 1000;
 const ARENA_HOST_POSITION: [f32; 3] = [-2.2, 146.8, -8.6];
 const ARENA_GUEST_SIDE_OFFSET_UNITS: f32 = 2.0;
 const JUNK_HEAP_FLOOR_B2_HOST_POSITION: [f32; 3] = [-76.5, 4.9, -124.0];
@@ -18,7 +19,7 @@ pub struct ArrivalSpot {
 
 pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
     match point {
-        StoryJumpPoint::AtShrineBoss => {
+        StoryJumpPoint::ShrineBoss2 => {
             let [x, y, z] = ARENA_HOST_POSITION;
             let side = if host {
                 0.0
@@ -27,7 +28,7 @@ pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
             };
             Some(ArrivalSpot { x: x + side, y, z })
         }
-        StoryJumpPoint::JunkHeapFloorB2 => {
+        StoryJumpPoint::JunkHeapB2 => {
             let [x, y, z] = JUNK_HEAP_FLOOR_B2_HOST_POSITION;
             let side = if host {
                 0.0
@@ -36,7 +37,7 @@ pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
             };
             Some(ArrivalSpot { x: x + side, y, z })
         }
-        StoryJumpPoint::AfterBossFight6 => {
+        StoryJumpPoint::AerieAfterBoss6 => {
             let [x, y, z] = AFTER_BOSS_FIGHT_6_HOST_POSITION;
             let side = if host {
                 0.0
