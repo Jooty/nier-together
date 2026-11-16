@@ -220,6 +220,18 @@ pub enum GuestNotice {
     NextWindowMessagesDropped {
         dropped: usize,
     },
+    /// The host's entry `seq` is next but this game's own event scene still plays: it waits for
+    /// the scene's own end, so a handler the host ran after its scene never runs inside this one.
+    EntryWaitsForOwnScene {
+        seq: u64,
+        name: String,
+    },
+    /// The entry that waited for this game's own scene goes now, `waited_ms` after it was held.
+    EntryGoesAfterOwnScene {
+        seq: u64,
+        name: String,
+        waited_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -313,6 +325,7 @@ pub struct GuestFightStream {
     start_entry: StartEntry,
     popped_and_ran_outside_window: HashSet<String>,
     own_scene_playing: bool,
+    entry_held_for_own_scene: Option<(u64, u64)>,
     earlier_queued: EarlierQueuedCalls,
     queued_waited_ms: u64,
     last_queue_check_ms: Option<u64>,
@@ -356,6 +369,7 @@ impl GuestFightStream {
             start_entry: StartEntry::new(),
             popped_and_ran_outside_window: HashSet::new(),
             own_scene_playing: false,
+            entry_held_for_own_scene: None,
             earlier_queued: EarlierQueuedCalls::new(),
             queued_waited_ms: 0,
             last_queue_check_ms: None,
@@ -883,7 +897,8 @@ impl GuestFightStream {
         }
     }
 
-    /// Whether this game's own event scene plays right now; the start entry waits for its end.
+    /// Whether this game's own event scene plays right now; no host entry after entry 0 runs
+    /// before its end, and the start entry waits for it too.
     pub fn set_own_scene_playing(&mut self, playing: bool) {
         self.own_scene_playing = playing;
     }
@@ -1274,11 +1289,17 @@ impl GuestFightStream {
         let own_scene_playing = self.own_scene_playing;
         let mut blocked = None;
         let mut gave_up = false;
+        let mut held_for_own_scene = None;
         let entry = self.replayer.tick_when(slot, |entry| {
             let seq = entry.seq;
             if seq == 0 && start_entry.is_expected(&entry.name) {
                 // Nothing of the host's start handler is taped, so its end is not waited for.
                 return start_entry.may_release(&entry.name, own_scene_playing);
+            }
+            if own_scene_playing && seq > 0 {
+                // Entry 0 opened the window, so it never follows a scene inside it.
+                held_for_own_scene = Some((seq, entry.name.clone()));
+                return false;
             }
             if window.is_some_and(|window| !window.entry_waits_for_host_end(&entry.name)) {
                 return true;
@@ -1297,6 +1318,7 @@ impl GuestFightStream {
             blocked = Some((seq, since_ms));
             false
         });
+        self.note_own_scene_hold(held_for_own_scene, entry.as_ref(), now_ms);
         let Some(entry) = entry else {
             if blocked.is_some() {
                 self.waiting_for_host_entry_end = blocked;
@@ -1320,6 +1342,37 @@ impl GuestFightStream {
             }
         }
         Some(entry)
+    }
+
+    fn note_own_scene_hold(
+        &mut self,
+        held: Option<(u64, String)>,
+        released: Option<&StreamEntry>,
+        now_ms: u64,
+    ) {
+        if let Some((seq, name)) = held {
+            if self
+                .entry_held_for_own_scene
+                .is_none_or(|(held_seq, _)| held_seq != seq)
+            {
+                self.entry_held_for_own_scene = Some((seq, now_ms));
+                self.notices
+                    .push(GuestNotice::EntryWaitsForOwnScene { seq, name });
+            }
+            return;
+        }
+        let Some(entry) = released else {
+            return;
+        };
+        if let Some((held_seq, since_ms)) = self.entry_held_for_own_scene.take()
+            && held_seq == entry.seq
+        {
+            self.notices.push(GuestNotice::EntryGoesAfterOwnScene {
+                seq: entry.seq,
+                name: entry.name.clone(),
+                waited_ms: now_ms.saturating_sub(since_ms),
+            });
+        }
     }
 
     fn count_own_copy(&mut self, name: &str) -> u32 {

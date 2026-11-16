@@ -255,11 +255,13 @@ fn the_start_entry_waits_while_a_scene_of_the_guests_own_plays() {
 }
 
 #[test]
-fn only_the_start_entry_waits_for_the_guests_own_scene() {
+fn the_entries_after_the_start_wait_for_the_guests_own_scene_too() {
     let mut guest = guest_in_the_hosts_fight();
     run_the_start_from_the_stream(&mut guest);
     guest.set_own_scene_playing(true);
-    assert_eq!(released(&mut guest, 100).as_deref(), Some(FIRST_FIGHT_POP));
+    assert_eq!(released(&mut guest, 100), None);
+    guest.set_own_scene_playing(false);
+    assert_eq!(released(&mut guest, 116).as_deref(), Some(FIRST_FIGHT_POP));
 }
 
 #[test]

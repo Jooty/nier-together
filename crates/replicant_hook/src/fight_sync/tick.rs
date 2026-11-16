@@ -492,6 +492,16 @@ fn send_guest_requests() {
             GuestNotice::NextWindowMessagesDropped { dropped } => format!(
                 "fight stream: {dropped} messages of the host's next fight came while it waited and were not kept"
             ),
+            GuestNotice::EntryWaitsForOwnScene { seq, name } => format!(
+                "fight stream: the host's {name} (seq {seq}) waits while your game is in a scene, the scene's own end runs first"
+            ),
+            GuestNotice::EntryGoesAfterOwnScene {
+                seq,
+                name,
+                waited_ms,
+            } => format!(
+                "fight stream: your scene ended, the host's {name} (seq {seq}) goes after {waited_ms} ms"
+            ),
         });
     }
     let Some(net) = net::handle() else {
