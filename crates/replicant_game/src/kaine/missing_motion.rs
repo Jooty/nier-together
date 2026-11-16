@@ -1,11 +1,12 @@
 use crate::puppet::body_info;
 use replicant_proto::PartnerBody;
 
-pub const PLAYER_MOTION_PACK_PREFIXES: [&str; 2] = ["NIER013", "KAINE015"];
-pub const MOTION_SUFFIXES_HER_PACK_LACKS_WITH_THEIR_TWINS: [(&str, &str); 3] = [
+pub const PLAYER_MOTION_PACK_PREFIXES: [&str; 3] = ["NIER013", "NIER025", "KAINE015"];
+pub const MOTION_SUFFIXES_HER_PACK_LACKS_WITH_THEIR_TWINS: [(&str, &str); 4] = [
     ("bioRun_lp", "run_lp"),
     ("bioRun_ed", "run_ed"),
     ("jog_lp", "run_lp"),
+    ("_01_walk^lo_01", "run_lp"),
 ];
 pub const MOST_DISTINCT_MISSED_MOTION_NAMES_LOGGED: usize = 400;
 pub const MOST_MOTION_WORKS_WITH_A_LAST_MISS: usize = 16;

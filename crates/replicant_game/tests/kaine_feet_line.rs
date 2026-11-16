@@ -1,5 +1,6 @@
 use replicant_game::move_log::{
-    FeetDriveTally, FeetReading, FeetSecond, format_feet_second, read_feet, write_feet_speed,
+    FeetDriveTally, FeetReading, FeetSecond, body_speed_rate_address, format_feet_second,
+    read_body_speed_rate, read_feet, write_body_speed_rate,
 };
 
 use crate::fake_memory::FakeMemory;
@@ -59,12 +60,14 @@ fn a_free_slot_or_a_slot_past_the_count_has_no_feet() {
 }
 
 #[test]
-fn the_speed_write_lands_in_the_current_slot_of_the_body_layer() {
+fn the_body_speed_rate_the_drive_owns_is_rate_one_channel_zero_of_the_table() {
+    // 0x66DAE0 writes layer 0's rate into id 1; 0x6745A0 gives layer 0 the product of id 1
+    // (0x670A40); channel 0 of id 1 shows in no rates= dump of any run, so nothing else writes it
+    assert_eq!(body_speed_rate_address(ACTOR), ACTOR + 0x6_01E0 + 0x60);
     let mut memory = memory_with_slot(1, 226, 3.0, 39, 1.0);
-    assert!(write_feet_speed(&mut memory, ACTOR, 0.5));
-    assert_eq!(read_feet(&memory, ACTOR).map(|feet| feet.speed), Some(0.5));
-    let mut no_slot = memory_with_slot(0, -1, 0.0, 0, 1.0);
-    assert!(!write_feet_speed(&mut no_slot, ACTOR, 0.5));
+    memory.put(body_speed_rate_address(ACTOR), &1.0_f32.to_le_bytes());
+    assert!(write_body_speed_rate(&mut memory, ACTOR, 0.48));
+    assert_eq!(read_body_speed_rate(&memory, ACTOR), Some(0.48));
 }
 
 #[test]
@@ -80,14 +83,18 @@ fn the_feet_line_names_the_motion_the_drive_and_the_last_miss() {
             name: Some("KAINE015_walk_ed_1"),
             reading: Some(reading),
             step_per_second: Some(2.54),
+            body_speed_rate: Some(0.48),
+            pace_per_second: Some(2.87),
+            aim_per_second: 2.9,
             drive: FeetDriveTally {
                 plays: 1,
-                speed_holds: 3
+                rate_writes: 3
             },
             last_missed: Some("NIER025_jog_lp"),
         }),
         "indoor feet: her body plays KAINE015_walk_ed_1 (index 420) at frame 12.5 of 171, motion speed 1.00, step 2.54/s; \
-         the drive played KAINE015_run_lp 1 times and held its speed 3 times; \
+         her body speed rate 1:0 0.48 (her run loop's pace 2.87/s against the host's 2.90/s), 5:2 left as the game holds it; \
+         the drive played KAINE015_run_lp 1 times and wrote the rate 3 times; \
          the game last asked her body for NIER025_jog_lp and missed"
     );
     assert_eq!(
@@ -95,10 +102,14 @@ fn the_feet_line_names_the_motion_the_drive_and_the_last_miss() {
             name: None,
             reading: None,
             step_per_second: None,
+            body_speed_rate: None,
+            pace_per_second: None,
+            aim_per_second: 2.9,
             drive: FeetDriveTally::default(),
             last_missed: None,
         }),
-        "indoor feet: her body plays no motion, step ?/s; the drive did nothing; \
-         no motion the game asked her body for was missing"
+        "indoor feet: her body plays no motion, step ?/s; \
+         her body speed rate 1:0 ? (her run loop's pace ?/s against the host's 2.90/s), 5:2 left as the game holds it; \
+         the drive did nothing; no motion the game asked her body for was missing"
     );
 }

@@ -14,7 +14,6 @@ pub struct SpeedCapSecond {
     pub phase: u32,
     pub swapped_body: bool,
     pub cap: Option<f32>,
-    pub lifts_this_phase: u32,
     pub step_per_second: Option<f32>,
     pub ground_speed: Option<f32>,
     pub state_rva: Option<u32>,
@@ -46,10 +45,9 @@ pub fn format_speed_cap_second(second: &SpeedCapSecond) -> String {
         "own body"
     };
     format!(
-        "indoor walk: {body}, phase {}: {SPEED_CAP_RATE_ID}:{SPEED_CAP_RATE_CHANNEL} {} ({} lifts this phase), step {}/s at ground speed {}, state {state}",
+        "indoor walk: {body}, phase {}: {SPEED_CAP_RATE_ID}:{SPEED_CAP_RATE_CHANNEL} {}, step {}/s at ground speed {}, state {state}",
         second.phase,
         number(second.cap),
-        second.lifts_this_phase,
         number(second.step_per_second),
         number(second.ground_speed),
     )

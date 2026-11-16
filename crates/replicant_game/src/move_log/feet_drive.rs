@@ -1,8 +1,7 @@
 use crate::move_log::{
-    INDOOR_FEET_LEAST_MOTION_SPEED, INDOOR_FEET_MOST_MOTION_SPEED,
-    INDOOR_FEET_MOVING_STEP_PER_SECOND, INDOOR_FEET_SPEED_TOLERANCE,
-    RUN_LOOP_FULL_SPEED_GROUND_UNITS_PER_SECOND, RUN_LOOP_MOTION_NAME, SPEED_CAP_LIFTED_VALUE,
-    STATE_ACTION_MOVE_RVA, is_house_speed_cap_value,
+    BODY_SPEED_RATE_WRITE_TOLERANCE, GAMES_OWN_BODY_SPEED_RATE, HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE,
+    FALLBACK_INDOOR_PACE_PER_SECOND, INDOOR_FEET_MOVING_GROUND_SPEED, PaceFeedback, RUN_LOOP_MOTION_NAME, STATE_ACTION_MOVE_RVA,
+    is_house_speed_cap_value,
 };
 
 /// One tick of the swapped body as the indoor feet drive sees it.
@@ -11,43 +10,53 @@ pub struct FeetDriveReading<'a> {
     pub kaine_swapped: bool,
     pub state_rva: Option<u32>,
     pub speed_cap: f32,
-    pub lifts_this_phase: u32,
     pub event_scene: bool,
     pub talk: bool,
     pub control_masked: bool,
     pub step_per_second: Option<f32>,
     pub ground_speed: f32,
     pub body_motion: Option<&'a str>,
-    pub body_motion_speed: Option<f32>,
+    pub host_pace_per_second: Option<f32>,
 }
 
+/// What the drive wants this tick: her run loop played under her, and the body speed rate entry
+/// it owns (the game's own 1.0 whenever the drive is not walking her).
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FeetDriveStep {
-    Leave,
-    /// Her body is moving on the house pace without her run loop under it: play the loop at `speed`.
-    PlayRunLoop {
-        speed: f32,
-    },
-    /// Her run loop plays but at a speed that does not match the pace: write `speed`.
-    HoldSpeed {
-        speed: f32,
-    },
+pub struct FeetDriveStep {
+    pub play_run_loop: bool,
+    pub body_speed_rate: f32,
 }
 
 /// What the drive did since the last line, for the once-a-second feet line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FeetDriveTally {
     pub plays: u32,
-    pub speed_holds: u32,
+    pub rate_writes: u32,
+}
+
+/// Her walk indoors: the game holds rate 5:2 at the house value, so, as for the first body, only
+/// the motion's own root travel moves her; the drive puts her run loop under her and scales it.
+#[derive(Debug, Default)]
+pub struct FeetDrive {
+    house_pace_ticks: u32,
+    pace: PaceFeedback,
+    last_written_rate: Option<f32>,
+}
+
+impl FeetDriveStep {
+    pub const LEAVE: Self = Self {
+        play_run_loop: false,
+        body_speed_rate: GAMES_OWN_BODY_SPEED_RATE,
+    };
 }
 
 impl FeetDriveTally {
-    pub fn count(&mut self, step: FeetDriveStep) {
-        match step {
-            FeetDriveStep::PlayRunLoop { .. } => self.plays += 1,
-            FeetDriveStep::HoldSpeed { .. } => self.speed_holds += 1,
-            FeetDriveStep::Leave => {}
-        }
+    pub fn count_play(&mut self) {
+        self.plays += 1;
+    }
+
+    pub fn count_rate_write(&mut self) {
+        self.rate_writes += 1;
     }
 
     pub fn take(&mut self) -> Self {
@@ -55,12 +64,72 @@ impl FeetDriveTally {
     }
 }
 
-/// The run loop's speed that puts its stride at `ground_speed`: the loop at 1.0 is her full run.
-pub fn run_loop_speed_for(ground_speed: f32) -> f32 {
-    (ground_speed / RUN_LOOP_FULL_SPEED_GROUND_UNITS_PER_SECOND).clamp(
-        INDOOR_FEET_LEAST_MOTION_SPEED,
-        INDOOR_FEET_MOST_MOTION_SPEED,
-    )
+impl FeetDrive {
+    pub fn tick(&mut self, reading: &FeetDriveReading<'_>) -> FeetDriveStep {
+        if !house_pace_in_play(reading) {
+            if !(reading.kaine_swapped && is_house_speed_cap_value(reading.speed_cap)) {
+                self.house_pace_ticks = 0;
+            }
+            return FeetDriveStep::LEAVE;
+        }
+        self.house_pace_ticks = self.house_pace_ticks.saturating_add(1);
+        if self.house_pace_ticks < HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE {
+            return FeetDriveStep::LEAVE;
+        }
+        self.pace
+            .retarget(reading.host_pace_per_second.unwrap_or(FALLBACK_INDOOR_PACE_PER_SECOND));
+        let stick_held = reading.ground_speed >= INDOOR_FEET_MOVING_GROUND_SPEED;
+        let run_loop_plays = reading
+            .body_motion
+            .is_some_and(|name| name.eq_ignore_ascii_case(RUN_LOOP_MOTION_NAME));
+        if run_loop_plays {
+            let rate = match reading.step_per_second {
+                Some(step) if stick_held => self.pace.observe(step),
+                _ => self.pace.rate(),
+            };
+            return FeetDriveStep {
+                play_run_loop: false,
+                body_speed_rate: rate,
+            };
+        }
+        if stick_held {
+            return FeetDriveStep {
+                play_run_loop: true,
+                body_speed_rate: self.pace.rate(),
+            };
+        }
+        FeetDriveStep::LEAVE
+    }
+
+    pub fn holds_a_rate_of_ours(&self, entry: Option<f32>) -> bool {
+        match (entry, self.last_written_rate) {
+            (Some(entry), Some(written)) => rates_match(entry, written),
+            _ => false,
+        }
+    }
+
+    pub fn rate_to_write(&mut self, entry: Option<f32>, step: FeetDriveStep) -> Option<f32> {
+        let entry = entry?;
+        if step.body_speed_rate == GAMES_OWN_BODY_SPEED_RATE {
+            let restore = self.holds_a_rate_of_ours(Some(entry))
+                && !rates_match(entry, GAMES_OWN_BODY_SPEED_RATE);
+            self.last_written_rate = None;
+            return restore.then_some(GAMES_OWN_BODY_SPEED_RATE);
+        }
+        if rates_match(entry, step.body_speed_rate) {
+            return None;
+        }
+        self.last_written_rate = Some(step.body_speed_rate);
+        Some(step.body_speed_rate)
+    }
+
+    pub fn pace(&self) -> &PaceFeedback {
+        &self.pace
+    }
+}
+
+fn rates_match(left: f32, right: f32) -> bool {
+    (left - right).abs() <= BODY_SPEED_RATE_WRITE_TOLERANCE
 }
 
 pub fn house_pace_in_play(reading: &FeetDriveReading<'_>) -> bool {
@@ -69,32 +138,5 @@ pub fn house_pace_in_play(reading: &FeetDriveReading<'_>) -> bool {
         && !reading.talk
         && !reading.control_masked
         && reading.state_rva == Some(STATE_ACTION_MOVE_RVA)
-        && reading.lifts_this_phase > 0
-        && (is_house_speed_cap_value(reading.speed_cap)
-            || (reading.speed_cap - SPEED_CAP_LIFTED_VALUE).abs() < f32::EPSILON)
-}
-
-pub fn feet_drive_step(reading: &FeetDriveReading<'_>) -> FeetDriveStep {
-    if !house_pace_in_play(reading) {
-        return FeetDriveStep::Leave;
-    }
-    let moving = reading
-        .step_per_second
-        .is_some_and(|step| step >= INDOOR_FEET_MOVING_STEP_PER_SECOND);
-    if !moving {
-        return FeetDriveStep::Leave;
-    }
-    let speed = run_loop_speed_for(reading.ground_speed);
-    let run_loop_plays = reading
-        .body_motion
-        .is_some_and(|name| name.eq_ignore_ascii_case(RUN_LOOP_MOTION_NAME));
-    if !run_loop_plays {
-        return FeetDriveStep::PlayRunLoop { speed };
-    }
-    match reading.body_motion_speed {
-        Some(current) if (current - speed).abs() <= INDOOR_FEET_SPEED_TOLERANCE => {
-            FeetDriveStep::Leave
-        }
-        _ => FeetDriveStep::HoldSpeed { speed },
-    }
+        && is_house_speed_cap_value(reading.speed_cap)
 }
