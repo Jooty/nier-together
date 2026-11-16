@@ -4,7 +4,9 @@ use crate::dummy_hits::{
     native_arg_tag_range, native_arg_text_range, native_text_arg, native_text_args_len,
     native_text_from_parts,
 };
-use crate::script_functions::{DEBUG_PRINT_TEXT_ARG_INDEX, TRACE_ARROW, TRACE_CALL_SUFFIX};
+use crate::script_functions::{
+    DEBUG_PRINT_TEXT_ARG_INDEX, TRACE_ARROW, TRACE_CALL_SUFFIX, is_called_only_from_local_state,
+};
 
 pub const fn debug_print_args_len() -> usize {
     native_text_args_len(DEBUG_PRINT_TEXT_ARG_INDEX)
@@ -40,4 +42,12 @@ pub fn traced_function_name(text: &str) -> Option<&str> {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
     (is_name && (has_arrow || has_call_suffix)).then_some(name)
+}
+
+/// A function another function calls directly (a door's, never popped) that prints only its
+/// bare name: the print counts as its trace when it is one of the phase's functions this game's
+/// partner cannot reach on its own, so the partner is sent it.
+pub fn traced_bare_unreachable_function<'a>(phase_label: &str, text: &'a str) -> Option<&'a str> {
+    let name = text.trim();
+    is_called_only_from_local_state(phase_label, name).then_some(name)
 }

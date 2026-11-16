@@ -9,7 +9,7 @@ use replicant_game::dialogue::{
     WATCHER_HOLD_MASK, WatcherHold, WatcherHoldAction, WatcherHoldInput, find_talk_id,
     host_answer_fits, leader_for_own_talk, own_talk_started, put_may_show_flag_back,
     read_choice_prompt, read_talk_cursor, read_talk_window_screen, story_talk_menu_close_text,
-    within_talk_range,
+    talk_command_came_from_a_story_step, within_talk_range,
 };
 use replicant_game::marker::{WorldFlags, read_world_flags};
 use replicant_game::readiness::{classify, read_play_checks};
@@ -94,7 +94,9 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
         && crate::dialogue::set_talk::set_talk_opens_the_window_now());
     let own_window_open = window_open && (started_own_talk || !MIRRORING.load(Ordering::Acquire));
     if OWN_TALK_WINDOW_WAS_OPEN.swap(own_window_open, Ordering::Relaxed) != own_window_open {
-        let by_player_command = own_window_open && crate::cutscene_skip::take_player_talk_command();
+        let by_player_command = own_window_open
+            && crate::cutscene_skip::take_player_talk_command()
+            && !step_made_the_talk_command();
         OWN_TALK_STARTED_BY_PLAYER_COMMAND.store(by_player_command, Ordering::Release);
         log_line(&format!(
             "dialogue: your talk window {} (own talk started: {started_own_talk})",
@@ -199,7 +201,8 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
         apply(build, action);
     }
     FOLLOWING_HOST_TALK.store(
-        own_talk.is_some() && mirror.holds_own_talk(),
+        own_talk.is_some()
+            && (mirror.holds_own_talk() || crate::dialogue::choices::answer_is_armed()),
         Ordering::Release,
     );
     crate::dialogue::choice_hover::share_own_hover(net, memory, own_talk, view.partner_in_play());
@@ -234,6 +237,22 @@ pub fn tick_dialogue(build: &VerifiedBuild) {
             taken_over,
         });
     apply_hold(build, hold_action, view.partner_name());
+}
+
+fn step_made_the_talk_command() -> bool {
+    let last_pop = crate::game_hooks::last_pop();
+    let from_step = talk_command_came_from_a_story_step(
+        last_pop
+            .as_ref()
+            .map(|(call, at_ms)| (call.as_str(), *at_ms)),
+        net_clock_ms(),
+    );
+    if from_step && let Some((call, _)) = &last_pop {
+        log_line(&format!(
+            "dialogue: the talk command came from the story step {call}, the talk is the step's"
+        ));
+    }
+    from_step
 }
 
 fn report_what_is_on_screen(build: &VerifiedBuild, talk_id: Option<u32>, mirrored: bool) {
@@ -359,7 +378,10 @@ fn note_partner_story_talk(
     if *noted == Some(story.talk_id) {
         return;
     }
-    let opened = matches!(action, Some(MirrorAction::Open(line)) if line.talk_id == story.talk_id);
+    let opened = matches!(
+        action,
+        Some(MirrorAction::Open(line) | MirrorAction::SwitchTalk(line)) if line.talk_id == story.talk_id
+    );
     let shown = if opened {
         "it opens in your talk window and follows the host's lines".to_owned()
     } else if let Some(own) = own_talk {
@@ -433,6 +455,22 @@ fn follow_host_answer(
                 crate::dialogue::choices::arm_answer(choice);
             }
         }
+        Some(ChoiceStep::TakeKept(choice)) => {
+            log_line(&format!(
+                "choice: your game opened its own copy of prompt {} line {} after the host answered it, the host's answer {} is taken here and you are not asked",
+                choice.talk_id, choice.line, choice.index
+            ));
+            if host_answer_fits(memory, &choice) {
+                crate::dialogue::choices::arm_answer(choice);
+            } else {
+                follower.forget();
+                gave_up = true;
+                log_line(&format!(
+                    "choice: answer {} of talk {} is not an option of your prompt, your buttons are back",
+                    choice.index, choice.talk_id
+                ));
+            }
+        }
         Some(ChoiceStep::GiveUp(choice)) => {
             crate::dialogue::choices::disarm_answer();
             gave_up = true;
@@ -460,7 +498,7 @@ fn release_hold_without_link(build: &VerifiedBuild) {
     CHOICE_FOLLOW
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .forget();
+        .forget_all();
     crate::dialogue::choices::disarm_answer();
     crate::dialogue::choice_hover::forget_hovers();
     PARTNER_TALK
@@ -658,6 +696,20 @@ fn apply(build: &VerifiedBuild, action: MirrorAction) {
                 line.line,
                 if opened {
                     "opened, the on-screen line follows"
+                } else {
+                    "the game refused"
+                }
+            ));
+        }
+        MirrorAction::SwitchTalk(line) => {
+            begin_talk();
+            let opened = open_mirror(build, line);
+            log_line(&format!(
+                "dialogue: mirror goes on to talk {} at line {} in the open window ({})",
+                line.talk_id,
+                line.line,
+                if opened {
+                    "as the host's window did, no opening animation"
                 } else {
                     "the game refused"
                 }

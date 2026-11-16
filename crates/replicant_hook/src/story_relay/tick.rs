@@ -2,7 +2,9 @@ use std::sync::PoisonError;
 
 use replicant_game::callback_gate::ParkedKind;
 use replicant_game::counted_talks::counted_talk_callback;
-use replicant_game::host_led_stretch::host_run_not_replayed_line;
+use replicant_game::host_led_stretch::{
+    host_run_not_replayed_line, host_run_replayed_line, host_run_replays_on_the_watching_guest,
+};
 use replicant_game::readiness::{classify, read_play_checks};
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_calls::{SceneScope, StoryCallKind, is_event_callback_name, name_hash};
@@ -88,8 +90,11 @@ pub fn tick(build: &VerifiedBuild) {
         if matches!(kind, Arrived::Run) {
             crate::host_led_stretch::note_hosts_step(call.phase, &call.function);
             if let Some(stretch) = crate::host_led_stretch::host_runs_are_not_replayed(call.phase) {
-                log_line(&host_run_not_replayed_line(stretch, &call.function));
-                continue;
+                if !host_run_replays_on_the_watching_guest(&call.function) {
+                    log_line(&host_run_not_replayed_line(stretch, &call.function));
+                    continue;
+                }
+                log_line(&host_run_replayed_line(stretch, &call.function));
             }
         }
         let function_hash = name_hash(&call.function);

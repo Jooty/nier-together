@@ -375,6 +375,8 @@ mod story_writes;
 mod stuck_menu_mask;
 #[path = "talk_guard.rs"]
 mod talk_guard;
+#[path = "talk_lines.rs"]
+mod talk_lines;
 #[path = "talk_on_screen.rs"]
 mod talk_on_screen;
 #[path = "talk_origin.rs"]

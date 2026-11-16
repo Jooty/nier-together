@@ -73,6 +73,13 @@ pub fn host_run_not_replayed_line(stretch: &HostLedStretch, function: &str) -> S
     )
 }
 
+pub fn host_run_replayed_line(stretch: &HostLedStretch, function: &str) -> String {
+    format!(
+        "host-led stretch: the host's story step {function} runs here too, so its actors and talks are in your game while you watch the host to {}",
+        stretch.last_step
+    )
+}
+
 fn end_reason(stretch: &HostLedStretch, end: StretchEnd) -> String {
     match end {
         StretchEnd::LastStep => format!("its last step {} ran", stretch.last_step),
