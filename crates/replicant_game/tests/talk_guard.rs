@@ -215,3 +215,28 @@ fn a_registered_talk_id_that_is_not_listed_passes() {
     registry.register_talk_id(ACTOR, 0, 1032);
     assert_eq!(registry.important_talk_id_of(ACTOR), None);
 }
+
+#[test]
+fn run_1116a_the_villager_talk_that_leads_into_the_home_dream_waits_for_a_partner_outside_the_house()
+ {
+    const VILLAGER: i32 = 1002;
+    const HOUSE_DOOR_TO_ROOM_UNITS: f32 = 71.5;
+    const FLOOR_BELOW_UNITS: f32 = 4.9;
+    // Run 1116a host 08:29:25.143: actor 1002 pressed with talk 1321 registered (1322 after a
+    // refusal); its end runs EID_1500_a0005_020_Select, the choice into the dream.
+    for talk_id in [1321, 1322] {
+        let mut registry = TalkRegistry::default();
+        registry.register_talk_id(VILLAGER, 0, talk_id);
+        assert_eq!(
+            registry.important_talk_id_of(VILLAGER),
+            Some((talk_id, "EID_1500_a0005_020"))
+        );
+    }
+    let outside = partner_at(HOUSE_DOOR_TO_ROOM_UNITS, PHASE, 0);
+    assert!(matches!(
+        verdict_with(true, true, Some(&outside)),
+        PressVerdict::Wait { .. }
+    ));
+    let inside = partner_at(FLOOR_BELOW_UNITS, PHASE, 0);
+    assert_eq!(verdict_with(true, true, Some(&inside)), PressVerdict::Allow);
+}
