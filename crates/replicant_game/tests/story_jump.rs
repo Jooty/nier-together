@@ -326,6 +326,8 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::SeafrontWithRedBag,
         StoryJumpPoint::ManorFront,
         StoryJumpPoint::ForestInside,
+        StoryJumpPoint::ManorEmilFollows,
+        StoryJumpPoint::ManorBeforeBossFight8,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -1039,4 +1041,59 @@ fn the_forest_jump_enters_the_forest_at_point_one_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::ForestInside, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::ForestInside, false).is_none());
+}
+
+#[test]
+fn the_emil_jump_is_the_manor_front_plus_the_scene_the_keys_and_emils_flag() {
+    let steps = loadout_steps(StoryJumpPoint::ManorEmilFollows);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [
+        499, 502, 503, 104, 522, 504, 505, 526, 516, 506, 507, 517, 508, 518, 523, 524, 509, 136,
+        515,
+    ] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [1311, 510, 511, 512, 513, 131, 106, 1433, 1434, 1435] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert!(snow.contains(&1050));
+    assert_eq!(counters.get(&100), Some(&255));
+    assert_eq!(counters.get(&101), Some(&255));
+    for id in [717, 256, 257, 258, 259] {
+        assert!(steps.contains(&JumpStep::SetItem { id, count: 1 }), "{id}");
+    }
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_emil_jump_enters_the_manor_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::ManorEmilFollows);
+    assert_eq!(name, "A_SOUTH_MANSION_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::ManorEmilFollows, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::ManorEmilFollows, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_8_jump_keeps_emil_and_leaves_the_fight_flags_unset() {
+    let steps = loadout_steps(StoryJumpPoint::ManorBeforeBossFight8);
+    let (flags, _, _) = final_story_state(steps.clone());
+    for id in [509, 136, 515, 1433, 1434, 1435] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [510, 511, 512, 106, 131] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_boss_fight_8_jump_enters_the_second_manor_area_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::ManorBeforeBossFight8);
+    assert_eq!(name, "A_SOUTH_MANSION_02");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::ManorBeforeBossFight8, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::ManorBeforeBossFight8, false).is_none());
 }

@@ -590,6 +590,48 @@ const VILLAGE_TO_FOREST_INSIDE_EXTRA_STEPS: [JumpStep; 11] = [
     },
 ];
 
+const MANOR_FRONT_TO_EMIL_FOLLOWS_EXTRA_STEPS: [JumpStep; 27] = [
+    JumpStep::ClearFlag { id: 1311 },
+    JumpStep::SetFlag { id: 502 },
+    JumpStep::SetFlag { id: 503 },
+    JumpStep::SetFlag { id: 104 },
+    JumpStep::SetFlag { id: 522 },
+    JumpStep::SetFlag { id: 504 },
+    JumpStep::SetFlag { id: 505 },
+    JumpStep::SetFlag { id: 526 },
+    JumpStep::SetFlag { id: 516 },
+    JumpStep::SetFlag { id: 506 },
+    JumpStep::SetFlag { id: 507 },
+    JumpStep::SetFlag { id: 517 },
+    JumpStep::SetFlag { id: 508 },
+    JumpStep::SetFlag { id: 518 },
+    JumpStep::SetFlag { id: 523 },
+    JumpStep::SetFlag { id: 524 },
+    JumpStep::SetFlag { id: 509 },
+    JumpStep::SetFlag { id: 136 },
+    JumpStep::SetFlag { id: 515 },
+    JumpStep::SetSnowFlag { id: 1050 },
+    JumpStep::SetItem { id: 717, count: 1 },
+    JumpStep::SetItem { id: 256, count: 1 },
+    JumpStep::SetItem { id: 257, count: 1 },
+    JumpStep::SetItem { id: 258, count: 1 },
+    JumpStep::SetItem { id: 259, count: 1 },
+    JumpStep::SetGameCounter {
+        id: 100,
+        value: 255,
+    },
+    JumpStep::SetGameCounter {
+        id: 101,
+        value: 255,
+    },
+];
+
+const EMIL_FOLLOWS_TO_BEFORE_BOSS_FIGHT_8_EXTRA_STEPS: [JumpStep; 3] = [
+    JumpStep::SetFlag { id: 1433 },
+    JumpStep::SetFlag { id: 1434 },
+    JumpStep::SetFlag { id: 1435 },
+];
+
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
 const AFTER_PROLOGUE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const AFTER_PROLOGUE_POINT: i32 = 8;
@@ -625,6 +667,10 @@ const SEAFRONT_WITH_RED_BAG_PHASE: &str = "A_SOUTH_FIELD_01";
 const SEAFRONT_WITH_RED_BAG_POINT: i32 = 3;
 const MANOR_FRONT_PHASE: &str = "A_SOUTH_FIELD_01";
 const MANOR_FRONT_POINT: i32 = 2;
+const MANOR_EMIL_FOLLOWS_PHASE: &str = "A_SOUTH_MANSION_01";
+const MANOR_EMIL_FOLLOWS_POINT: i32 = 1;
+const MANOR_BEFORE_BOSS_FIGHT_8_PHASE: &str = "A_SOUTH_MANSION_02";
+const MANOR_BEFORE_BOSS_FIGHT_8_POINT: i32 = 1;
 const FOREST_INSIDE_PHASE: &str = "C_FOREST_FIELD_01";
 const FOREST_INSIDE_POINT: i32 = 1;
 
@@ -775,6 +821,20 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::ManorEmilFollows => {
+            let mut steps = loadout_steps(StoryJumpPoint::ManorFront);
+            steps.pop();
+            steps.extend_from_slice(&MANOR_FRONT_TO_EMIL_FOLLOWS_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
+        StoryJumpPoint::ManorBeforeBossFight8 => {
+            let mut steps = loadout_steps(StoryJumpPoint::ManorEmilFollows);
+            steps.pop();
+            steps.extend_from_slice(&EMIL_FOLLOWS_TO_BEFORE_BOSS_FIGHT_8_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -805,5 +865,10 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
         }
         StoryJumpPoint::ManorFront => (MANOR_FRONT_PHASE, MANOR_FRONT_POINT),
         StoryJumpPoint::ForestInside => (FOREST_INSIDE_PHASE, FOREST_INSIDE_POINT),
+        StoryJumpPoint::ManorEmilFollows => (MANOR_EMIL_FOLLOWS_PHASE, MANOR_EMIL_FOLLOWS_POINT),
+        StoryJumpPoint::ManorBeforeBossFight8 => (
+            MANOR_BEFORE_BOSS_FIGHT_8_PHASE,
+            MANOR_BEFORE_BOSS_FIGHT_8_POINT,
+        ),
     }
 }
