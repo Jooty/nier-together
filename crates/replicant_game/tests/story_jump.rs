@@ -2,12 +2,14 @@ use replicant_game::PhaseEntry;
 use replicant_game::host_led_stretch::stretch_the_story_is_inside;
 use replicant_game::prologue_levels::PROLOGUE_PHASES;
 use replicant_game::story_jump::{
-    JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, PLACEMENT_READ_BACK_AFTER_MS,
-    PROLOGUE_END_PLAYER_LEVEL, RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS, StoryJumpRefusal,
-    StoryJumpView, arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
-    guest_reloads_in_place, item_shortfalls, jump_resets_prologue_level, jump_stat_level,
-    jump_waits_for_pause_menu, level_check_is_due, levels_to_raise, loadout_steps,
-    restore_point_is_due, shared_items_the_jump_gives,
+    ENTRY_SCRIPT_WAIT_GIVE_UP_MS, ITEM_AUDIT_AFTER_RESTORE_POINT_MS, JumpStep,
+    LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, PLACEMENT_READ_BACK_AFTER_MS,
+    PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT, PROLOGUE_END_PLAYER_LEVEL,
+    RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS, ReadBackStep, StoryJumpRefusal, StoryJumpView,
+    arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
+    guest_reloads_in_place, item_audit_is_due, item_shortfalls, jump_resets_prologue_level,
+    jump_stat_level, jump_waits_for_pause_menu, level_check_is_due, levels_to_raise, loadout_steps,
+    read_back_step, restore_point_is_due, shared_items_the_jump_gives, unreadable_items,
 };
 use replicant_proto::StoryJumpPoint;
 
@@ -1268,4 +1270,64 @@ fn a_later_set_to_zero_removes_the_item_from_the_wanted_list() {
             assert!(wanted.iter().all(|(held, _)| i32::from(*held) != id));
         }
     }
+}
+
+const ENTRY_SCRIPT_MOVE_UNITS: f32 = 4.5;
+
+#[test]
+fn a_placement_the_entry_script_moved_waits_for_control_then_is_placed_again() {
+    let left = PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT;
+    assert_eq!(
+        read_back_step(
+            ENTRY_SCRIPT_MOVE_UNITS,
+            false,
+            left,
+            PLACEMENT_READ_BACK_AFTER_MS
+        ),
+        ReadBackStep::WaitForControl
+    );
+    assert_eq!(
+        read_back_step(ENTRY_SCRIPT_MOVE_UNITS, true, left, 9_000),
+        ReadBackStep::PlaceAgain
+    );
+}
+
+#[test]
+fn a_placement_within_reach_arrives_at_once_even_while_a_script_runs() {
+    let left = PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT;
+    assert_eq!(
+        read_back_step(0.4, false, left, PLACEMENT_READ_BACK_AFTER_MS),
+        ReadBackStep::Arrived
+    );
+}
+
+#[test]
+fn a_placement_still_off_after_the_repeat_is_reported_as_missed() {
+    assert_eq!(
+        read_back_step(ENTRY_SCRIPT_MOVE_UNITS, true, 0, 2_000),
+        ReadBackStep::DidNotArrive
+    );
+    assert_eq!(
+        read_back_step(
+            ENTRY_SCRIPT_MOVE_UNITS,
+            false,
+            PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT,
+            ENTRY_SCRIPT_WAIT_GIVE_UP_MS + 1
+        ),
+        ReadBackStep::DidNotArrive
+    );
+}
+
+#[test]
+fn an_item_whose_count_cannot_be_read_is_reported_instead_of_skipped() {
+    let wanted = [(250, 1), (251, 1)];
+    let unreadable = unreadable_items(&wanted, |id| (id == 251).then_some(1));
+    assert_eq!(unreadable, vec![250]);
+    assert!(unreadable_items(&wanted, |_| Some(0)).is_empty());
+}
+
+#[test]
+fn the_items_are_checked_again_a_while_after_the_restore_point() {
+    assert!(!item_audit_is_due(ITEM_AUDIT_AFTER_RESTORE_POINT_MS - 1));
+    assert!(item_audit_is_due(ITEM_AUDIT_AFTER_RESTORE_POINT_MS));
 }
