@@ -76,6 +76,7 @@ pub fn install(build: VerifiedBuild) {
                 crate::attack_gauge::install(build);
                 crate::player_body::install(build);
                 crate::player_body::install_missing_motion_twins(build);
+                crate::kaine::install_ai_hold(build);
             }
             if veto_writes {
                 saves::install(build);

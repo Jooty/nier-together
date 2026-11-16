@@ -10,7 +10,7 @@ use replicant_game::kaine::{
     COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS, CompanionLendReason, CompanionOff,
     CompanionOffBossSigns, CompanionOffEvent, CompanionOffStep, CompanionOffTick,
     FUNCTIONS_THAT_DRIVE_HER_FROM_SCRIPTS, HUD_PARTNER_GAUGE_OFFSET,
-    PARTNER_GAUGE_ACTOR_HANDLE_OFFSET, StandInSide,
+    PARTNER_GAUGE_ACTOR_HANDLE_OFFSET, StandInSide, format_held_ticks,
 };
 use replicant_game::marker::read_world_flags;
 use replicant_game::offsets::{
@@ -23,6 +23,7 @@ use replicant_proto::StoryArray;
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::kaine::ai_hold::take_held_ticks;
 use crate::kaine::companion_rows_from_scripts;
 use crate::kaine::stand_in::session_side;
 use crate::memory::InProcessMemory;
@@ -108,6 +109,12 @@ pub(crate) fn companion_off_function_ran(build: &VerifiedBuild, name: &str) {
             "left as found"
         }
     ));
+}
+
+/// Whether the rule keeps her off as of the last ghost tick: a guest is in the session and the
+/// general rule or a fight window is on. Read at her update by the AI hold.
+pub(super) fn keeps_her_off() -> bool {
+    KEEPS_HER_OFF.load(Ordering::Relaxed)
 }
 
 /// The fight whose companion-off window is open on this game, if any.
@@ -245,8 +252,9 @@ pub(crate) fn keep_companion_off(build: &VerifiedBuild, guest_in_session: bool) 
     log_line(&format!(
         "companion off ({}): she is {state}, guest in session {guest_in_session}, active byte found {found} left {left}, \
          turned on since the last line by {turned_on_by}, lent to the game: {lent}, event scene {event_scene}, \
-         hits she landed {} (must be 0 unless lent), {}{}",
+         {}, hits she landed {} (must be 0), {}{}",
         report.fight,
+        format_held_ticks(take_held_ticks()),
         HITS_SHE_LANDED.swap(0, Ordering::Relaxed),
         gauge_text(&memory, actor),
         boss_signs_text(&memory, watched_group)

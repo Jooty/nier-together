@@ -1,3 +1,4 @@
+mod ai_hold;
 mod companion_off;
 mod hit_power;
 mod partner_hide;
@@ -8,6 +9,7 @@ mod spell_look;
 mod stand_in;
 mod stats;
 
+pub(crate) use ai_hold::install as install_ai_hold;
 pub(crate) use companion_off::{
     companion_off_function_ran, keep_companion_off, note_hit_for_companion_off,
     set_companion_off_everywhere,

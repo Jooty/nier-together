@@ -1,3 +1,4 @@
+mod ai_hold;
 mod box_moves;
 mod companion_drivers;
 mod companion_off;
@@ -25,6 +26,7 @@ mod stand_in_beats;
 mod stats;
 mod swapped_level;
 
+pub use ai_hold::{HerAiHoldReading, format_held_ticks, her_ai_is_held};
 pub use box_moves::{
     BODIES_WITHOUT_BOX_PUSH_OR_PULL_MOTIONS, SwappedBoxMoveNote, swapped_body_box_move_text,
     swapped_body_moves_boxes_without_motions,
