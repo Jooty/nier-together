@@ -25,7 +25,7 @@ pub(super) fn host_cut(build: &VerifiedBuild) -> Option<SceneCut> {
     host_scene_cut(loaded, &event, &audio)
 }
 
-pub(super) fn local_cut(build: &VerifiedBuild) -> LocalCut {
+pub(crate) fn local_cut(build: &VerifiedBuild) -> LocalCut {
     match read_cut(build) {
         Some((loaded, event, _)) => LocalCut {
             loaded,

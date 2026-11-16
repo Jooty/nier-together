@@ -349,6 +349,8 @@ mod scene_cover;
 mod scene_follow;
 #[path = "scene_follow_cut.rs"]
 mod scene_follow_cut;
+#[path = "scene_follow_stale_cut_load.rs"]
+mod scene_follow_stale_cut_load;
 #[path = "scene_gather.rs"]
 mod scene_gather;
 #[path = "scene_pull.rs"]

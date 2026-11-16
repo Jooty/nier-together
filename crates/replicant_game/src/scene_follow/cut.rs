@@ -10,6 +10,16 @@ pub struct LocalCut {
     pub event: Option<String>,
 }
 
+/// Why a scene follow's cut load that still waits for the script slot must not run any more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StaleCutLoad {
+    /// The cut it loads is loaded here now (this game's own scripts loaded it).
+    CutLoadedHere,
+    /// This game plays a scene: the load's first step frees the loaded cut and ends that scene
+    /// with no actor restore, leaving the actors it moved on freed motion data.
+    OwnSceneRuns,
+}
+
 /// The text of a fixed name buffer up to its NUL, when it is a short printable name.
 pub fn cut_name_from_buffer(buffer: &[u8]) -> Option<String> {
     let end = buffer.iter().position(|&byte| byte == 0)?;
@@ -50,4 +60,25 @@ pub fn cut_load_call(phase: u16, cut: &SceneCut) -> StoryCall {
         function: EVENT_CUT_LOAD_FUNCTION.to_owned(),
         args: vec![StoryCallArg::Text(cut.event.as_bytes().to_vec()), audio],
     }
+}
+
+/// Whether `call`, a cut load the scene follow handed to the relay queue, is stale now; none for
+/// any other call, and for a load whose cut is still missing outside a scene.
+pub fn stale_cut_load(
+    call: &StoryCall,
+    local: &LocalCut,
+    local_in_scene: bool,
+) -> Option<StaleCutLoad> {
+    if call.function != EVENT_CUT_LOAD_FUNCTION {
+        return None;
+    }
+    if local_in_scene {
+        return Some(StaleCutLoad::OwnSceneRuns);
+    }
+    let Some(StoryCallArg::Text(event)) = call.args.first() else {
+        return None;
+    };
+    let loaded_here =
+        local.loaded && local.event.as_deref().map(str::as_bytes) == Some(event.as_slice());
+    loaded_here.then_some(StaleCutLoad::CutLoadedHere)
 }

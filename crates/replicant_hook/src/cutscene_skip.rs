@@ -20,6 +20,7 @@ pub use callback_gate::{
     end_ran_here, hold_fired_callback, latest_partner_end, note_talk_command,
     take_player_talk_command,
 };
+pub(crate) use event_cut::local_cut;
 pub use event_cut::{drop_end_of_an_unplayed_start, note_no_cut_reveal, note_scene_start_popped};
 pub use hooks::install;
 pub(crate) use led_steps::{is_led_step_here, judge_led_step, runs_the_hosts_step_copy};
