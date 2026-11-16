@@ -53,6 +53,10 @@ pub(super) fn queue_cut_load(phase: u16, cut: &SceneCut, local: &LocalCut) -> bo
     accepted
 }
 
+pub(super) fn describe_local_cut(build: &VerifiedBuild) -> String {
+    describe_local(&local_cut(build))
+}
+
 pub(super) fn take_unplayed_start_ended() -> Option<u64> {
     UNPLAYED_START_ENDED_MS
         .lock()

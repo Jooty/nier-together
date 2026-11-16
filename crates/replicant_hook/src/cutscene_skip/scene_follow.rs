@@ -15,7 +15,7 @@ use replicant_proto::{Message, SceneCut, SceneFollow, StoryCall};
 use crate::build_gate::VerifiedBuild;
 use crate::cutscene_skip::callback_gate::run_queued_ends_through;
 use crate::cutscene_skip::event_cut::{
-    host_cut, local_cut, queue_cut_load, take_unplayed_start_ended,
+    describe_local_cut, host_cut, local_cut, queue_cut_load, take_unplayed_start_ended,
 };
 use crate::cutscene_skip::state::partner_in_cutscene;
 use crate::diagnostics::log_line;
@@ -289,7 +289,8 @@ fn guest_tick(
         ),
         FollowStep::GaveUp { waited_ms } => {
             log_line(&format!(
-                "scene follow: gave up after {waited_ms} ms, your game never entered the host's scene"
+                "scene follow: gave up after {waited_ms} ms, your game never entered the host's scene (your game has {} loaded)",
+                describe_local_cut(build)
             ));
         }
     }
@@ -320,6 +321,7 @@ fn start_following(
         "scene follow: the host entered a scene after {names:?}, your game gets {} ms to enter it",
         replicant_game::scene_follow::SCENE_FOLLOW_GRACE_MS
     ));
+    let no_callback_to_start = names.is_empty();
     watch.receive(names, now);
     if local_in_scene {
         return;
@@ -329,6 +331,11 @@ fn start_following(
         && queue_cut_load(follow.phase, &cut, &local)
     {
         watch.note_cut_load_queued();
+    }
+    if no_callback_to_start {
+        log_line(
+            "scene follow: the host's scene began with no event callback before it, nothing is started here: only your game's own scripts can start it",
+        );
     }
 }
 
