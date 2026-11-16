@@ -1,20 +1,21 @@
 use std::sync::{Mutex, PoisonError};
 
-use replicant_game::Replicant;
 use replicant_game::story_jump::{
     ArrivalSpot, LEVEL_CHECK_SETTLE_MS, PLACEMENT_READ_BACK_AFTER_MS,
-    SET_PLAYER_POSITION_NATIVE_RVA, arrival_is_due, arrival_spot,
+    PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT, ReadBackStep, SET_PLAYER_POSITION_NATIVE_RVA,
+    arrival_is_due, arrival_spot, read_back_step,
 };
+use replicant_game::{Position, Replicant};
 use replicant_proto::StoryJumpPoint;
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
+use crate::stay_together::game_says_free_to_act;
 use crate::story_jump::natives::{NativeArg, call_native_with};
 
 const ARRIVAL_GIVE_UP_MS: u64 = 60_000;
-const ARRIVED_WITHIN_UNITS: f32 = 1.5;
 
 static WAITING: Mutex<Option<Waiting>> = Mutex::new(None);
 
@@ -25,6 +26,7 @@ struct Waiting {
     phase_changed_ms: Option<u64>,
     field_was_left: bool,
     placed_ms: Option<u64>,
+    placements_left: u8,
 }
 
 pub(super) fn expect_arrival(build: &VerifiedBuild, point: StoryJumpPoint, host: bool) {
@@ -39,6 +41,7 @@ pub(super) fn expect_arrival(build: &VerifiedBuild, point: StoryJumpPoint, host:
         phase_changed_ms: None,
         field_was_left: false,
         placed_ms: None,
+        placements_left: PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT,
     });
 }
 
@@ -50,11 +53,41 @@ pub(super) fn tick_arrival(build: &VerifiedBuild) {
     let now = net_clock_ms();
     let game = Replicant::new(InProcessMemory::new(build));
     if let Some(placed_ms) = waiting.placed_ms {
-        if now.saturating_sub(placed_ms) >= PLACEMENT_READ_BACK_AFTER_MS {
-            let spot = waiting.spot;
+        if now.saturating_sub(placed_ms) < PLACEMENT_READ_BACK_AFTER_MS {
+            return;
+        }
+        let spot = waiting.spot;
+        let Ok(here) = game.position() else {
             *guard = None;
             drop(guard);
-            log_read_back(&game, spot);
+            log_line("story jump: the player position is unreadable after placing it");
+            return;
+        };
+        let distance = (here.x - spot.x).hypot(here.z - spot.z);
+        let free_to_act = game_says_free_to_act(build).unwrap_or(false);
+        let step = read_back_step(
+            distance,
+            free_to_act,
+            waiting.placements_left,
+            now.saturating_sub(placed_ms),
+        );
+        match step {
+            ReadBackStep::WaitForControl => {}
+            ReadBackStep::PlaceAgain => {
+                waiting.placements_left -= 1;
+                waiting.placed_ms = Some(now);
+                drop(guard);
+                log_line(&format!(
+                    "story jump: the floor's own script moved the player to {:.1}, {:.1}, {:.1}, placing again now that it is free",
+                    here.x, here.y, here.z
+                ));
+                place(build, &game, spot, &phase_name(&game));
+            }
+            ReadBackStep::Arrived | ReadBackStep::DidNotArrive => {
+                *guard = None;
+                drop(guard);
+                log_read_back(here, spot, step == ReadBackStep::Arrived);
+            }
         }
         return;
     }
@@ -107,17 +140,12 @@ fn place(build: &VerifiedBuild, game: &Replicant<InProcessMemory>, spot: Arrival
     ));
 }
 
-fn log_read_back(game: &Replicant<InProcessMemory>, spot: ArrivalSpot) {
-    let Ok(here) = game.position() else {
-        log_line("story jump: the player position is unreadable after placing it");
-        return;
-    };
-    let distance = (here.x - spot.x).hypot(here.z - spot.z);
-    let verdict = if distance <= ARRIVED_WITHIN_UNITS {
-        "arrived"
-    } else {
-        "did not arrive"
-    };
+fn phase_name(game: &Replicant<InProcessMemory>) -> String {
+    game.current_phase().unwrap_or_default()
+}
+
+fn log_read_back(here: Position, spot: ArrivalSpot, arrived: bool) {
+    let verdict = if arrived { "arrived" } else { "did not arrive" };
     log_line(&format!(
         "story jump: {verdict} (now at {:.1}, {:.1}, {:.1}, wanted {:.1}, {:.1}, {:.1})",
         here.x, here.y, here.z, spot.x, spot.y, spot.z

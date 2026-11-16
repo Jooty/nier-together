@@ -6,13 +6,20 @@ mod restore_point;
 mod stat_level;
 mod steps;
 
-pub use arrival::{ArrivalSpot, PLACEMENT_READ_BACK_AFTER_MS, arrival_is_due, arrival_spot};
+pub use arrival::{
+    ARRIVED_WITHIN_UNITS, ArrivalSpot, ENTRY_SCRIPT_WAIT_GIVE_UP_MS, PLACEMENT_READ_BACK_AFTER_MS,
+    PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT, ReadBackStep, arrival_is_due, arrival_spot,
+    read_back_step,
+};
 pub use gate::{
     StoryJumpRefusal, StoryJumpView, check_story_jump, guest_reloads_in_place,
     jump_waits_for_pause_menu,
 };
 pub use level::{LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, check_level, level_check_is_due};
-pub use lost_items::{ItemShortfall, item_shortfalls, shared_items_the_jump_gives};
+pub use lost_items::{
+    ITEM_AUDIT_AFTER_RESTORE_POINT_MS, ItemShortfall, item_audit_is_due, item_shortfalls,
+    shared_items_the_jump_gives, unreadable_items,
+};
 pub use restore_point::{RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS, restore_point_is_due};
 pub use stat_level::{
     PROLOGUE_END_PLAYER_LEVEL, jump_resets_prologue_level, jump_stat_level, levels_to_raise,

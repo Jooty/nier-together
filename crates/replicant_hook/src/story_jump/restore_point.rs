@@ -9,7 +9,7 @@ use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
-use crate::story_jump::lost_items::give_back_lost_items;
+use crate::story_jump::lost_items::{give_back_lost_items, schedule_item_audit};
 
 const RESTORE_POINT_GIVE_UP_MS: u64 = 60_000;
 
@@ -72,6 +72,7 @@ pub(super) fn tick_restore_point(build: &VerifiedBuild) {
     *guard = None;
     drop(guard);
     give_back_lost_items(build, &wanted_items);
+    schedule_item_audit(wanted_items);
     make_restore_point(build);
     log_line(&format!("story jump: restore point made ({phase_now})"));
 }
