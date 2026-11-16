@@ -1,6 +1,7 @@
 mod actor_model;
 mod error;
 mod invincibility;
+mod level_table;
 mod life_flags;
 mod local_pose;
 mod noclip;

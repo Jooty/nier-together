@@ -18,6 +18,7 @@ pub struct SwappedLevelStep {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SwappedBodyLevel {
     host: Option<PartnerLevel>,
+    trainer_floor: Option<PartnerLevel>,
     last_seen: Option<LocalLevel>,
     last_change_ms: Option<u64>,
     waits_for_a_host_report: bool,
@@ -27,10 +28,28 @@ impl SwappedBodyLevel {
     pub fn host_reported(&mut self, level: PartnerLevel) {
         self.host = Some(level);
         self.waits_for_a_host_report = false;
+        if self
+            .trainer_floor
+            .is_some_and(|floor| level.experience >= floor.experience)
+        {
+            self.trainer_floor = None;
+        }
     }
 
     pub fn host(&self) -> Option<PartnerLevel> {
-        self.host
+        match (self.host, self.trainer_floor) {
+            (Some(host), Some(floor)) if floor.experience > host.experience => Some(floor),
+            (Some(host), _) => Some(host),
+            (None, floor) => floor,
+        }
+    }
+
+    pub fn raised_by_the_trainer(&mut self, after: LocalLevel) {
+        self.trainer_floor = Some(PartnerLevel {
+            level: after.level,
+            experience: after.experience,
+        });
+        self.last_seen = Some(after);
     }
 
     pub fn step(&mut self, now_ms: u64, her: LocalLevel) -> SwappedLevelStep {
@@ -42,10 +61,11 @@ impl SwappedBodyLevel {
             // A script that takes levels away runs here before the host's report of it arrives.
             if her.experience < seen.experience || her.level < seen.level {
                 self.waits_for_a_host_report = true;
+                self.trainer_floor = None;
             }
         }
         self.last_seen = Some(her);
-        let Some(host) = self.host else {
+        let Some(host) = self.host() else {
             return step;
         };
         let settled = self

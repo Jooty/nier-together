@@ -21,7 +21,7 @@ use crate::net;
 use crate::player_body::real_body;
 
 static CATCH_UP: LazyLock<Mutex<LevelCatchUp>> = LazyLock::new(Mutex::default);
-static SWAPPED_LEVEL: LazyLock<Mutex<SwappedBodyLevel>> = LazyLock::new(Mutex::default);
+pub(super) static SWAPPED_LEVEL: LazyLock<Mutex<SwappedBodyLevel>> = LazyLock::new(Mutex::default);
 static LAST_SENT_WEAPON: Mutex<Option<ReferenceWeapon>> = Mutex::new(None);
 static EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
 
@@ -65,8 +65,7 @@ pub fn tick(build: &VerifiedBuild) {
         return;
     };
     let now_ms = u64::try_from(EPOCH.elapsed().as_millis()).unwrap_or(u64::MAX);
-    let wears_the_swapped_body =
-        real_body().is_some_and(|real| real.by_swap && real.body == PartnerBody::SeedKaineE);
+    let wears_the_swapped_body = wears_the_swapped_body();
     let local = LocalLevel { level, experience };
     if wears_the_swapped_body {
         // Her level only ever follows the host's, so the host is never sent hers to catch up to.
@@ -99,6 +98,10 @@ pub fn tick(build: &VerifiedBuild) {
         "prologue levels: caught up +{gain} experience (local level {level} exp {experience}, partner level {} exp {}, local level now {after})",
         partner.level, partner.experience
     ));
+}
+
+pub(super) fn wears_the_swapped_body() -> bool {
+    real_body().is_some_and(|real| real.by_swap && real.body == PartnerBody::SeedKaineE)
 }
 
 fn keep_her_level_at_the_hosts(
@@ -155,7 +158,7 @@ fn cap_current_health_and_magic(game: &mut Replicant<InProcessMemory>) {
     unsafe_code,
     reason = "calls the game's own experience adder at its verified address"
 )]
-fn add_experience_through_game(build: &VerifiedBuild, amount: i32) {
+pub(super) fn add_experience_through_game(build: &VerifiedBuild, amount: i32) {
     let player_param = (build.module_base() + u64::from(PLAYER_PARAM_ARRAY_RVA)) as usize;
     let function =
         (build.module_base() + u64::from(PLAYER_PARAM_ADD_EXPERIENCE_FUNCTION_RVA)) as usize;

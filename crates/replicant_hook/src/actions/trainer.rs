@@ -32,6 +32,7 @@ pub(super) fn run_trainer_action(build: &VerifiedBuild, action: Action) -> Resul
         Action::ChangePhase { .. }
         | Action::StoryJump(_)
         | Action::BringGuestHere
-        | Action::GoToGuest => Ok(()),
+        | Action::GoToGuest
+        | Action::LevelUp => Ok(()),
     }
 }

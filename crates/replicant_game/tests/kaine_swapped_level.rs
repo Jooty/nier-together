@@ -172,3 +172,62 @@ fn every_change_is_one_line_with_from_to_and_why() {
         "swapped body level: 43 (exp 1849380) -> 21 (exp 308230), host 21 (exp 308230): above the host's, brought down to it"
     );
 }
+
+#[test]
+fn a_level_the_trainer_raised_her_to_is_not_brought_down_to_the_hosts() {
+    let mut level = SwappedBodyLevel::default();
+    level.host_reported(PROLOGUE_HOST);
+    level.raised_by_the_trainer(her(30, 900_000));
+    for now in [0, CATCH_UP_SETTLE_MS, 20 * CATCH_UP_SETTLE_MS] {
+        assert_eq!(level.step(now, her(30, 900_000)).change, None);
+    }
+}
+
+#[test]
+fn the_trainer_raise_is_not_reported_as_a_change_by_her_own_game() {
+    let mut level = SwappedBodyLevel::default();
+    level.host_reported(PROLOGUE_HOST);
+    level.step(0, reached(PROLOGUE_HOST));
+    level.raised_by_the_trainer(her(22, 330_000));
+    assert_eq!(
+        level.step(CATCH_UP_SETTLE_MS, her(22, 330_000)),
+        SwappedLevelStep::default()
+    );
+}
+
+#[test]
+fn the_host_passing_the_trainer_raise_hands_her_back_to_the_hosts_level() {
+    let mut level = SwappedBodyLevel::default();
+    level.host_reported(PROLOGUE_HOST);
+    level.raised_by_the_trainer(her(22, 330_000));
+    level.host_reported(PartnerLevel {
+        level: 23,
+        experience: 340_000,
+    });
+    assert_eq!(
+        level.step(0, her(22, 330_000)).change,
+        Some(SwappedLevelChange::Raise { gain: 10_000 })
+    );
+}
+
+#[test]
+fn a_script_taking_levels_away_drops_the_trainer_raise() {
+    let mut level = SwappedBodyLevel::default();
+    level.host_reported(HOST_AFTER_THE_JUMP);
+    level.raised_by_the_trainer(her(30, 900_000));
+    level.step(0, her(0, 0));
+    assert_eq!(level.host(), Some(HOST_AFTER_THE_JUMP));
+}
+
+#[test]
+fn a_trainer_raise_before_any_host_report_is_the_target() {
+    let mut level = SwappedBodyLevel::default();
+    level.raised_by_the_trainer(her(5, 500));
+    assert_eq!(
+        level.host(),
+        Some(PartnerLevel {
+            level: 5,
+            experience: 500
+        })
+    );
+}
