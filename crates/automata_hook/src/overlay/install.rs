@@ -78,6 +78,7 @@ fn make_menu(gate: &Result<VerifiedBuild, GateError>) -> AutomataMenu {
     AutomataMenu::new(variant, BUILD_COMMIT)
         .with_save_status(save_redirect_status)
         .with_start_status(start_driver::status_line)
+        .with_start_index_of_record(start_driver::start_index_of_record)
         .with_story_status(story_gate_status)
         .with_partner_body_status(partner_driver::body_status_line)
         .with_co_op_status(co_op_status)

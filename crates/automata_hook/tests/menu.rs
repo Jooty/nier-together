@@ -38,9 +38,7 @@ fn every_shared_section_is_present_in_order() {
 #[test]
 fn a_section_with_nothing_says_so() {
     assert!(empty_note_of(SectionKind::Teleport).is_some_and(|note| note.contains("no areas")));
-    assert!(
-        empty_note_of(SectionKind::StoryJump).is_some_and(|note| note.contains("no story jumps"))
-    );
+    assert_eq!(empty_note_of(SectionKind::StoryJump), None);
     assert!(empty_note_of(SectionKind::Fixes).is_some_and(|note| note.contains("no fix")));
     assert!(empty_note_of(SectionKind::CoOp).is_some_and(|note| note.contains("no other player")));
 }
@@ -132,7 +130,7 @@ fn the_empty_sections_are_the_bodies_of_the_model() {
                 assert!(current.is_none());
                 assert!(areas.is_empty());
             }
-            SectionBody::StoryJump(jumps) => assert!(jumps.is_empty()),
+            SectionBody::StoryJump(jumps) => assert_eq!(jumps.len(), 14),
             SectionBody::Fixes(fixes) => assert!(fixes.is_empty()),
             SectionBody::CoOp(status) => assert!(status.players.is_empty()),
             SectionBody::SettingsAndLogs { panels, .. } => assert!(panels.is_empty()),
@@ -145,7 +143,6 @@ fn actions_that_need_content_are_refused_in_plain_words() {
     let menu = menu();
     assert_eq!(menu.go_to_partner(), Err("no partner yet".to_owned()));
     assert_eq!(menu.bring_partner(), Err("no partner yet".to_owned()));
-    assert_eq!(menu.run_story_jump(0), Err("no story jumps yet".to_owned()));
     assert_eq!(menu.run_fix(0), FixOutcome::Refused("no fixes".to_owned()));
 }
 
@@ -364,4 +361,30 @@ fn free_roam_offers_a_go_to_entry_per_other_player_and_the_campaign_none() {
     assert_eq!(fixes[1].label, "Go to Cy");
     assert_eq!(fixes[1].id, GO_TO_PLAYER_FIX_ID_BASE + 3);
     assert_eq!(free_roam.run_fix(fixes[1].id), FixOutcome::Done);
+}
+
+#[test]
+fn the_story_jump_section_lists_the_open_points_in_id_order_with_not_ready_marked() {
+    let jumps = menu().story_jumps();
+    let ids: Vec<u32> = jumps.iter().map(|jump| jump.id).collect();
+    assert_eq!(ids, (1..=14).map(|n| n * 10).collect::<Vec<_>>());
+    assert_eq!(jumps[0].label, "Factory, flight start");
+    assert_eq!(jumps[1].label, "Factory, second flight (not ready)");
+}
+
+#[test]
+fn a_not_ready_story_jump_is_refused_and_a_chapter_row_names_its_start_index() {
+    let menu = menu().with_start_index_of_record(|record| Some(record + 10));
+    assert!(
+        menu.run_story_jump(20)
+            .is_err_and(|text| text.starts_with("not ready"))
+    );
+    let text = menu.run_story_jump(140).unwrap();
+    assert!(text.contains("start index 18"), "{text}");
+    assert!(menu.run_story_jump(999).is_err());
+}
+
+#[test]
+fn a_chapter_row_without_a_read_table_is_refused() {
+    assert!(menu().run_story_jump(120).is_err());
 }

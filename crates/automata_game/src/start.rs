@@ -10,7 +10,7 @@ mod start_machine;
 mod start_plan;
 mod start_readings;
 
-pub use candidates::{Candidate, candidates};
+pub use candidates::{Candidate, candidates, start_index_of_record};
 pub use chapter_record::ChapterRecord;
 pub use chapter_table::{ChapterTableHeader, parse_records};
 pub use flag_names::{
