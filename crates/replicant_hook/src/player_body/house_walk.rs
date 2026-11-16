@@ -122,9 +122,13 @@ pub fn lift_house_speed_cap(
     }));
     if kaine_swapped {
         let last_missed = last_missed_motion_on(actor + PLAYABLE_ACTOR_MOTION_WORK_OFFSET);
+        // read again after the drive: the line names what her body plays now, not what it played
+        let feet_now = read_feet(&memory, actor);
+        let name_now =
+            feet_now.and_then(|feet| motion_name(&memory, actor, feet.index).ok().flatten());
         log_line(&format_feet_second(&FeetSecond {
-            name: name.as_deref(),
-            reading: read_feet(&memory, actor),
+            name: name_now.as_deref(),
+            reading: feet_now,
             step_per_second: sample.applied_step_per_second,
             drive: tally.take(),
             last_missed: last_missed.as_deref(),
