@@ -9,12 +9,9 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
-use replicant_game::effects::{
-    STONE_HANDLERS, stone_handler_rva, stone_state_machine_pointer_offset, stone_state_vtable_rva,
-};
+use replicant_game::effects::{STONE_HANDLERS, actor_holds_stone, stone_handler_rva};
 use replicant_game::offsets::{
-    AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET, STATE_MACHINE_NEXT_STATE_OFFSET,
-    STONE_MESSAGE_ID, STONE_STATE_BYTES_OFFSET,
+    AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET, STONE_MESSAGE_ID, STONE_STATE_BYTES_OFFSET,
 };
 use replicant_proto::{ActorCue, ActorCueKind, Message, StoneHandler, StoneTurn};
 
@@ -95,7 +92,7 @@ pub(super) fn turn_copy(build: &VerifiedBuild, copy: u64, turn: StoneTurn) -> bo
             record.0.as_ptr(),
         );
     }
-    next_state_is_stone(&memory, copy, turn.handler)
+    actor_holds_stone(&memory, copy, turn.handler)
 }
 
 fn handler_name(handler: StoneHandler) -> &'static str {
@@ -136,21 +133,26 @@ fn run_handler(index: usize, global: *mut c_void, actor: *mut c_void, record: *c
         return 1;
     }
     let (actor_address, record_address) = (actor as usize as u64, record as usize as u64);
-    let before = panic::catch_unwind(|| read_before(actor_address, record_address))
+    let handler = STONE_HANDLERS[index];
+    let before = panic::catch_unwind(|| read_before(actor_address, record_address, handler))
         .ok()
         .flatten();
     // SAFETY: the trampoline continues into the original handler, which has this signature.
     let handled = unsafe {
         core::mem::transmute::<*mut c_void, StoneMessageHandler>(original)(global, actor, record)
     };
-    if let Some(state_bytes) = before {
-        let handler = STONE_HANDLERS[index];
-        let _ = panic::catch_unwind(|| after_stone_message(handler, actor_address, state_bytes));
+    if let Some(before) = before {
+        let _ = panic::catch_unwind(|| after_stone_message(handler, actor_address, before));
     }
     handled
 }
 
-fn read_before(actor: u64, record: u64) -> Option<[u8; 2]> {
+struct StoneBefore {
+    state_bytes: [u8; 2],
+    was_stone: bool,
+}
+
+fn read_before(actor: u64, record: u64, handler: StoneHandler) -> Option<StoneBefore> {
     let memory = InProcessMemory::new(HOOKED_BUILD.get()?);
     let id = memory
         .read_i32(record + AI_MESSAGE_RECORD_ID_OFFSET as u64)
@@ -158,17 +160,22 @@ fn read_before(actor: u64, record: u64) -> Option<[u8; 2]> {
     if id != STONE_MESSAGE_ID {
         return None;
     }
-    memory
+    let state_bytes = memory
         .read_array::<2>(actor + STONE_STATE_BYTES_OFFSET)
-        .ok()
+        .ok()?;
+    Some(StoneBefore {
+        state_bytes,
+        was_stone: actor_holds_stone(&memory, actor, handler),
+    })
 }
 
-fn after_stone_message(handler: StoneHandler, actor: u64, state_bytes: [u8; 2]) {
+fn after_stone_message(handler: StoneHandler, actor: u64, before: StoneBefore) {
     let Some(build) = HOOKED_BUILD.get() else {
         return;
     };
     let memory = InProcessMemory::new(build);
-    let turned = next_state_is_stone(&memory, actor, handler);
+    let state_bytes = before.state_bytes;
+    let turned = !before.was_stone && actor_holds_stone(&memory, actor, handler);
     let shared = shared_actor_id(actor);
     let first = {
         let mut logged = LOGGED_ACTORS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -201,20 +208,4 @@ fn after_stone_message(handler: StoneHandler, actor: u64, state_bytes: [u8; 2]) 
         net.send_relayed(Message::ActorCue(cue));
         log_line(&format!("stone: {name} turned to stone, sent to the guest"));
     }
-}
-
-fn next_state_is_stone(memory: &InProcessMemory, actor: u64, handler: StoneHandler) -> bool {
-    let stone_vtable = memory.module_base() + u64::from(stone_state_vtable_rva(handler));
-    memory
-        .read_u64(actor + stone_state_machine_pointer_offset(handler))
-        .ok()
-        .filter(|machine| *machine != 0)
-        .and_then(|machine| {
-            memory
-                .read_u64(machine + STATE_MACHINE_NEXT_STATE_OFFSET)
-                .ok()
-        })
-        .filter(|state| *state != 0)
-        .and_then(|state| memory.read_u64(state).ok())
-        == Some(stone_vtable)
 }

@@ -1,8 +1,14 @@
 use replicant_game::effects::{
-    ActorCueCall, ActorCueMoment, FirstCues, STONE_HANDLERS, actor_cue_goes_to_enemy_sync,
-    actor_cue_is_sent, actor_cue_text, stack_holds_ai_step, stone_handler_rva,
+    ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, STONE_HANDLERS,
+    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
+    actor_holds_stone, sound_caller_is_one_shot, stack_holds_ai_step, stone_handler_rva,
     stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
+use replicant_game::offsets::{
+    SOUND_BY_ID_WRAPPER_BODY_RVAS, STONE_STATE_MACHINE_CURRENT_STATE_OFFSET,
+    STATE_MACHINE_NEXT_STATE_OFFSET,
+};
+use crate::fake_memory::{FAKE_MODULE_BASE, FakeMemory};
 use replicant_proto::{ActorCue, ActorCueKind, AttachedEffect, EnemyId, StoneHandler};
 
 const ACTOR_TICK_PRE_UPDATE_RETURN_RVA: u32 = 0xE_027A;
@@ -17,6 +23,7 @@ fn in_a_shared_actors_ai_step() -> ActorCueMoment {
         in_ai_step: true,
         nested: false,
         made_for_a_bullet: false,
+        made_for_a_cube_glow: false,
     }
 }
 
@@ -53,6 +60,10 @@ fn what_a_held_copy_also_makes_or_the_shot_sync_draws_is_not_sent() {
         },
         ActorCueMoment {
             made_for_a_bullet: true,
+            ..in_a_shared_actors_ai_step()
+        },
+        ActorCueMoment {
+            made_for_a_cube_glow: true,
             ..in_a_shared_actors_ai_step()
         },
     ];
@@ -149,4 +160,83 @@ fn a_stone_turn_goes_to_the_enemy_sync_and_effects_stay_with_the_effects() {
     };
     assert!(actor_cue_goes_to_enemy_sync(&stone));
     assert!(!actor_cue_goes_to_enemy_sync(&sound));
+}
+
+const COPY: u64 = 0x5000_0000;
+
+fn copy(held: bool, live: bool) -> Option<CopyForCue> {
+    Some(CopyForCue {
+        actor: COPY,
+        held,
+        live,
+    })
+}
+
+#[test]
+fn a_cue_is_replayed_on_a_held_live_copy() {
+    assert_eq!(actor_cue_replay_target(copy(true, true)), Some(COPY));
+}
+
+#[test]
+fn a_cue_is_not_replayed_on_a_copy_that_runs_its_own_steps() {
+    // Kaine lent to a script, a villager in a talk, a dying stone copy released to its own death.
+    assert_eq!(actor_cue_replay_target(copy(false, true)), None);
+}
+
+#[test]
+fn a_cue_is_not_replayed_on_a_copy_the_game_already_freed() {
+    assert_eq!(actor_cue_replay_target(copy(true, false)), None);
+}
+
+#[test]
+fn a_cue_is_not_replayed_across_a_phase_with_no_copy() {
+    assert_eq!(actor_cue_replay_target(None), None);
+}
+
+#[test]
+fn only_a_one_shot_sound_is_sent_because_its_stop_never_crosses() {
+    let wrapper = SOUND_BY_ID_WRAPPER_BODY_RVAS.start + 4;
+    assert!(sound_caller_is_one_shot(wrapper));
+    assert!(!sound_caller_is_one_shot(0x18_A472));
+    assert!(!sound_caller_is_one_shot(SOUND_BY_ID_WRAPPER_BODY_RVAS.end));
+}
+
+const ACTOR: u64 = 0x6000_0000;
+const MACHINE: u64 = 0x6100_0000;
+const STONE_STATE: u64 = 0x6200_0000;
+const OTHER_STATE: u64 = 0x6300_0000;
+
+fn stoned_actor(slot: Option<u64>) -> FakeMemory {
+    let mut memory = FakeMemory::new();
+    let vtable = FAKE_MODULE_BASE + u64::from(stone_state_vtable_rva(StoneHandler::Leader));
+    memory.put(
+        ACTOR + stone_state_machine_pointer_offset(StoneHandler::Leader),
+        &MACHINE.to_le_bytes(),
+    );
+    memory.put(MACHINE + STONE_STATE_MACHINE_CURRENT_STATE_OFFSET, &OTHER_STATE.to_le_bytes());
+    memory.put(MACHINE + STATE_MACHINE_NEXT_STATE_OFFSET, &0_u64.to_le_bytes());
+    memory.put(OTHER_STATE, &0x1234_u64.to_le_bytes());
+    memory.put(STONE_STATE, &vtable.to_le_bytes());
+    if let Some(slot) = slot {
+        memory.put(MACHINE + slot, &STONE_STATE.to_le_bytes());
+    }
+    memory
+}
+
+#[test]
+fn stone_in_the_current_state_slot_counts_as_stone() {
+    let memory = stoned_actor(Some(STONE_STATE_MACHINE_CURRENT_STATE_OFFSET));
+    assert!(actor_holds_stone(&memory, ACTOR, StoneHandler::Leader));
+}
+
+#[test]
+fn stone_in_the_next_state_slot_counts_as_stone() {
+    let memory = stoned_actor(Some(STATE_MACHINE_NEXT_STATE_OFFSET));
+    assert!(actor_holds_stone(&memory, ACTOR, StoneHandler::Leader));
+}
+
+#[test]
+fn an_actor_with_no_stone_in_either_slot_is_not_stone() {
+    let memory = stoned_actor(None);
+    assert!(!actor_holds_stone(&memory, ACTOR, StoneHandler::Leader));
 }

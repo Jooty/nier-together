@@ -154,7 +154,7 @@ fn cut_own_step(actor: u64, may_fall: bool) {
     *longest = longest.max(cut);
 }
 
-fn is_held(actor: u64) -> bool {
+pub(crate) fn is_held(actor: u64) -> bool {
     let listed = HELD_ENEMIES
         .lock()
         .unwrap_or_else(PoisonError::into_inner)

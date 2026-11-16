@@ -2,11 +2,14 @@ use std::collections::HashSet;
 
 use replicant_proto::{ActorCue, ActorCueKind, EnemyId, StoneHandler};
 
+use crate::GameMemory;
 use crate::offsets::{
     ACTOR_TICK_AI_STEP_RETURN_RVAS, GRAPPLE_STATE_MACHINE_POINTER_OFFSET,
     GRAPPLE_STONE_HANDLER_FUNCTION_RVA, GRAPPLE_STONE_STATE_VTABLE_RVA,
     LEADER_AND_SWORD_STATE_MACHINE_POINTER_OFFSET, LEADER_STONE_HANDLER_FUNCTION_RVA,
-    LEADER_STONE_STATE_VTABLE_RVA, SWORD_STONE_HANDLER_FUNCTION_RVA, SWORD_STONE_STATE_VTABLE_RVA,
+    LEADER_STONE_STATE_VTABLE_RVA, SOUND_BY_ID_WRAPPER_BODY_RVAS, STATE_MACHINE_NEXT_STATE_OFFSET,
+    STONE_STATE_MACHINE_CURRENT_STATE_OFFSET, SWORD_STONE_HANDLER_FUNCTION_RVA,
+    SWORD_STONE_STATE_VTABLE_RVA,
 };
 
 pub const MAX_ACTOR_CUES_PER_SECOND: u32 = 60;
@@ -24,7 +27,6 @@ pub enum ActorCueCall {
     RemoveAttached,
     CreateById,
     SoundById,
-    SpawnByName,
     StoneHandler,
 }
 
@@ -39,6 +41,16 @@ pub struct ActorCueMoment {
     pub nested: bool,
     /// The shot sync already draws a bullet's own effects.
     pub made_for_a_bullet: bool,
+    /// The cube glow this attach made is already relayed as a world effect.
+    pub made_for_a_cube_glow: bool,
+}
+
+/// What the guest knows of the copy a host cue names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CopyForCue {
+    pub actor: u64,
+    pub held: bool,
+    pub live: bool,
 }
 
 /// Remembers which (actor, call, id) were logged, so each shows once.
@@ -71,6 +83,45 @@ pub fn actor_cue_is_sent(moment: ActorCueMoment) -> bool {
         && moment.in_ai_step
         && !moment.nested
         && !moment.made_for_a_bullet
+        && !moment.made_for_a_cube_glow
+}
+
+pub fn actor_cue_replay_target(copy: Option<CopyForCue>) -> Option<u64> {
+    copy.filter(|copy| copy.held && copy.live)
+        .map(|copy| copy.actor)
+}
+
+pub fn sound_caller_is_one_shot(caller_rva: u32) -> bool {
+    SOUND_BY_ID_WRAPPER_BODY_RVAS.contains(&caller_rva)
+}
+
+pub fn state_machine_holds_stone(
+    memory: &impl GameMemory,
+    machine: u64,
+    stone_vtable: u64,
+) -> bool {
+    [
+        STONE_STATE_MACHINE_CURRENT_STATE_OFFSET,
+        STATE_MACHINE_NEXT_STATE_OFFSET,
+    ]
+    .into_iter()
+    .any(|slot| {
+        memory
+            .read_u64(machine + slot)
+            .ok()
+            .filter(|state| *state != 0)
+            .and_then(|state| memory.read_u64(state).ok())
+            == Some(stone_vtable)
+    })
+}
+
+pub fn actor_holds_stone(memory: &impl GameMemory, actor: u64, handler: StoneHandler) -> bool {
+    let stone_vtable = memory.module_base() + u64::from(stone_state_vtable_rva(handler));
+    memory
+        .read_u64(actor + stone_state_machine_pointer_offset(handler))
+        .ok()
+        .filter(|machine| *machine != 0)
+        .is_some_and(|machine| state_machine_holds_stone(memory, machine, stone_vtable))
 }
 
 pub fn stack_holds_ai_step(return_rvas: &[u32]) -> bool {

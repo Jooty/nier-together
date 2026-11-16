@@ -13,10 +13,11 @@ use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureStackBackTrace;
 use nt_hook::line_budget::LineBudget;
 use replicant_game::GameMemory;
 use replicant_game::effects::{
-    ActorCueCall, ActorCueMoment, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
-    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_text, read_effect_transform,
-    stack_holds_ai_step,
+    ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
+    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
+    read_effect_transform, sound_caller_is_one_shot, stack_holds_ai_step,
 };
+use replicant_game::puppet::actor_is_live;
 use replicant_game::offsets::{
     ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA,
     BULLET_CREATE_EFFECTS_RVA_RANGE,
@@ -29,8 +30,8 @@ use replicant_proto::{
 use crate::build_gate::VerifiedBuild;
 use crate::bullets::create_effect;
 use crate::diagnostics::log_line;
-use crate::effects::hooks::{game_caller_rva, sending};
-use crate::enemies::{EnemySyncRole, enemy_id_text, shared_actor_id, shared_actor_of};
+use crate::effects::hooks::sending;
+use crate::enemies::{EnemySyncRole, enemy_id_text, is_held, shared_actor_id, shared_actor_of};
 use crate::enemy_bullets::{bullet_start_in_flight, command_in_flight, play_shot_sound};
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
@@ -108,6 +109,7 @@ pub(super) fn note_attach(
     mode: u32,
     flags: u8,
     extra: u32,
+    relayed_as_cube_glow: bool,
 ) {
     if REPLAYING.with(Cell::get) {
         return;
@@ -115,7 +117,11 @@ pub(super) fn note_attach(
     let Some((build, shared)) = hosted_shared(actor) else {
         return;
     };
-    if !actor_cue_is_sent(moment(false, false)) {
+    let attach_moment = ActorCueMoment {
+        made_for_a_cube_glow: relayed_as_cube_glow,
+        ..moment(false, false)
+    };
+    if !actor_cue_is_sent(attach_moment) {
         return;
     }
     let memory = InProcessMemory::new(build);
@@ -175,7 +181,10 @@ pub(super) fn note_create_by_id(handle: u32, id: u32, caller_rva: u32, nested: b
 }
 
 /// From the play-sound-by-id detour, with the sound's position pointer and its two levels.
-pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2]) {
+pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2], caller_rva: u32) {
+    if !sound_caller_is_one_shot(caller_rva) {
+        return;
+    }
     let actor = TICKING_ACTOR.with(Cell::get);
     if actor == 0 || position == 0 || REPLAYING.with(Cell::get) {
         return;
@@ -198,33 +207,6 @@ pub(super) fn note_sound_by_id(id: u32, position: u64, levels: [f32; 2]) {
         },
         ActorCueCall::SoundById,
     );
-}
-
-/// True for an outermost by-name spawn inside a shared actor's own AI or state step on the
-/// host: it is sent as a world effect.
-pub(super) fn spawn_is_actor_cue(outermost: bool) -> bool {
-    let actor = TICKING_ACTOR.with(Cell::get);
-    if actor == 0 || !outermost {
-        return false;
-    }
-    let Some((_, shared)) = hosted_shared(actor) else {
-        return false;
-    };
-    let caller_rva = game_caller_rva();
-    let made_for_a_bullet = BULLET_CREATE_EFFECTS_RVA_RANGE.contains(&caller_rva);
-    let sent = actor_cue_is_sent(moment(false, made_for_a_bullet));
-    if sent
-        && FIRST_SENT
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .is_first(shared, ActorCueCall::SpawnByName, caller_rva)
-    {
-        log_line(&format!(
-            "actor cues: a by-name effect from {}'s own step (caller {caller_rva:#x}) is sent as a world effect",
-            enemy_id_text(shared)
-        ));
-    }
-    sent
 }
 
 pub(super) fn tick(build: &VerifiedBuild, active: bool) {
@@ -257,8 +239,17 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
     }
 }
 
+fn replay_target(build: &VerifiedBuild, id: EnemyId) -> Option<u64> {
+    let copy = shared_actor_of(id).map(|actor| CopyForCue {
+        actor,
+        held: is_held(actor),
+        live: actor_is_live(&InProcessMemory::new(build), actor).unwrap_or(false),
+    });
+    actor_cue_replay_target(copy)
+}
+
 fn play(build: &VerifiedBuild, cue: ActorCue) {
-    let copy = shared_actor_of(cue.actor);
+    let copy = replay_target(build, cue.actor);
     let outcome = match (cue.kind, copy) {
         (ActorCueKind::AttachEffect(attached), Some(copy)) => {
             attach_on_copy(build, copy, cue.id, &attached).then_some("played")
@@ -267,15 +258,15 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
             remove_on_copy(build, copy, cue.id, bone, all_matching);
             Some("played")
         }
-        (ActorCueKind::AttachEffect(_) | ActorCueKind::RemoveEffect { .. }, None) => None,
-        (ActorCueKind::PlaceEffect { transform }, _) => {
+        (ActorCueKind::PlaceEffect { transform }, Some(_)) => {
             let id = i32::try_from(cue.id).unwrap_or(i32::MAX);
             create_effect(build, id, &transform).map(|_| "played")
         }
-        (ActorCueKind::Sound { position, levels }, _) => {
+        (ActorCueKind::Sound { position, levels }, Some(_)) => {
             play_shot_sound(build, cue.id, position, levels).map(|_| "played")
         }
         (ActorCueKind::TurnedToStone(_), _) => return,
+        (_, None) => None,
     };
     let counter = if outcome.is_some() {
         &PLAYED
@@ -290,7 +281,7 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
     if first {
         let why = match (outcome, copy) {
             (Some(played), _) => played,
-            (None, None) => "not played, no copy here",
+            (None, None) => "not played, no live copy held here",
             (None, Some(_)) => "not played, the game refused it",
         };
         log_line(&format!(
@@ -407,6 +398,7 @@ fn moment(nested: bool, made_for_a_bullet: bool) -> ActorCueMoment {
         in_ai_step: stack_in_ai_step(),
         nested,
         made_for_a_bullet,
+        made_for_a_cube_glow: false,
     }
 }
 
@@ -453,10 +445,11 @@ fn send(cue: ActorCue, call: ActorCueCall) {
     if cue.validate().is_err() {
         return;
     }
-    let admitted = SEND_WINDOW
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .admit(net_clock_ms(), SEND_WINDOW_MS, MAX_ACTOR_CUES_PER_SECOND);
+    let admitted = matches!(cue.kind, ActorCueKind::RemoveEffect { .. })
+        || SEND_WINDOW
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .admit(net_clock_ms(), SEND_WINDOW_MS, MAX_ACTOR_CUES_PER_SECOND);
     if !admitted {
         REFUSED_BY_RATE_LIMIT.fetch_add(1, Ordering::Relaxed);
         return;

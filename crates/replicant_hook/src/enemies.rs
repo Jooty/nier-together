@@ -28,7 +28,7 @@ mod word_drop_hook;
 pub(crate) use combat_view::applying_remote;
 pub use counters::CombatCounts;
 pub(crate) use gauge_opening_replay::{OpeningReplayStep, replay_guest_opening_hit};
-pub(crate) use hold_hook::cut_copy_step_before_move;
+pub(crate) use hold_hook::{cut_copy_step_before_move, is_held};
 pub use install::install;
 pub use shared_actors::{shared_actor_id, shared_actor_of, shared_enemy_actors};
 pub use status::{
