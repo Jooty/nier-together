@@ -50,6 +50,28 @@ fn the_indoor_jog_has_her_run_loop_as_its_twin() {
 }
 
 #[test]
+fn the_young_brothers_indoor_jog_has_her_run_loop_as_its_twin() {
+    // run-1116a guest run2, 08:27:34.232: "kaine motions: the game asked her body for
+    // NIER025_jog_lp, her pack has none and no twin is set, nothing plays"
+    assert!(is_player_motion_name("NIER025_jog_lp"));
+    assert_eq!(
+        swapped_body_motion_twin("NIER025_jog_lp").as_deref(),
+        Some("KAINE015_run_lp")
+    );
+}
+
+#[test]
+fn the_floor_change_walk_has_her_run_loop_as_its_twin() {
+    // 08:27:39.353, the tick From_1F_to_2F_02 ran _SetUniqueActorScriptActionSetMotion(-1,
+    // '_01_walk^lo_01'): "her pack has none and no twin is set, nothing plays", so she stayed on
+    // the landing inside the trap for the way back
+    assert_eq!(
+        swapped_body_motion_twin("_01_walk^lo_01").as_deref(),
+        Some("KAINE015_run_lp")
+    );
+}
+
+#[test]
 fn the_twin_is_found_for_a_name_asked_without_the_pack_prefix() {
     assert_eq!(
         swapped_body_motion_twin("jog_lp").as_deref(),
