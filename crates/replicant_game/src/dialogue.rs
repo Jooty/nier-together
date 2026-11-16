@@ -35,7 +35,7 @@ pub use story_talk_menu_close::{
     StoryTalkMenuClose, story_talk_menu_close_text,
 };
 pub use talk_cursor::{TalkCursor, find_talk_id, read_talk_cursor};
-pub use talk_origin::{TalkOrigin, TalkOriginTracker};
+pub use talk_origin::{TalkOrigin, TalkOriginTracker, talk_command_came_from_a_story_step};
 pub use talker_name::{replace_player_name_tag, speaker_name_to_show};
 pub use tracker::DialogueTracker;
 pub use watcher_hold::{WatcherHold, WatcherHoldAction, WatcherHoldInput, own_talk_started};
@@ -106,6 +106,9 @@ pub const OWN_ENDED_TALK_NOT_MIRRORED_MS: u64 = 3000;
 pub const MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS: u64 = 600_000;
 pub const SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS: u64 = 1000;
 pub const CHAINED_TALK_KEEPS_THE_STORY_STEP_WITHIN_MS: u64 = 500;
+pub const STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS: u64 = 250;
+pub const HOST_ANSWER_KEPT_FOR_A_LATE_PROMPT_MS: u64 = 120_000;
+pub const HOST_ANSWERS_KEPT: usize = 8;
 pub const UI_DRAW_PASS_RVA: u32 = 0xC_C8F0;
 pub const TALK_JOIN_RANGE_UNITS: f32 = 15.0;
 pub const TALK_LEAVE_EXTRA_UNITS: f32 = 2.0;

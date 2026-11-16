@@ -1,11 +1,14 @@
 mod lines;
+mod replays;
 mod state;
 mod stretches;
 
 pub use lines::{
     armed_line, disarmed_line, door_refused_line, ended_line, first_step_refused_line,
-    host_run_not_replayed_line, started_line, window_size_mirrored_line, window_size_sent_line,
+    host_run_not_replayed_line, host_run_replayed_line, started_line, window_size_mirrored_line,
+    window_size_sent_line,
 };
+pub use replays::host_run_replays_on_the_watching_guest;
 pub use state::{HostLedStretchState, StretchChange, StretchEnd, StretchPlace};
 pub use stretches::{
     HOST_LED_STRETCHES, HostLedStretch, stretch_armed_by, stretch_starting_at,

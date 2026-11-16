@@ -1,6 +1,6 @@
 use crate::dialogue::{
     CHAINED_TALK_KEEPS_THE_STORY_STEP_WITHIN_MS, SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS,
-    STORY_CALLBACKS_THAT_FORCE_A_TALK,
+    STORY_CALLBACKS_THAT_FORCE_A_TALK, STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS,
 };
 use crate::own_ride::is_the_riders_own;
 use crate::story_calls::is_event_id_name;
@@ -199,6 +199,15 @@ impl TalkOriginTracker {
             other => other,
         }
     }
+}
+
+/// A story step that makes an NPC talk issues the same AI talk command a press does: a talk
+/// command right after a story step popped is that step's, not the player's.
+pub fn talk_command_came_from_a_story_step(last_pop: Option<(&str, u64)>, now_ms: u64) -> bool {
+    last_pop.is_some_and(|(call, popped_ms)| {
+        now_ms.saturating_sub(popped_ms) <= STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS
+            && is_story_step_call(call)
+    })
 }
 
 fn is_story_step_call(call: &str) -> bool {

@@ -208,18 +208,22 @@ fn a_window_the_game_closed_is_reopened_but_not_every_frame() {
 }
 
 #[test]
-fn a_different_talk_closes_first_then_opens_the_new_one() {
+fn a_different_talk_opens_in_the_window_that_is_still_open() {
     let mut mirror = PartnerTalkMirror::new();
     mirror.step(mirror_input(Some(line(42, 1)), 0));
     let next = MirrorInput {
         window_open: true,
         ..mirror_input(Some(line(7, 0)), 10)
     };
-    assert_eq!(mirror.step(next), Some(MirrorAction::Close));
     assert_eq!(
-        mirror.step(mirror_input(Some(line(7, 0)), 2000)),
-        Some(MirrorAction::Open(line(7, 0)))
+        mirror.step(next),
+        Some(MirrorAction::SwitchTalk(line(7, 0)))
     );
+    let next_line = MirrorInput {
+        window_open: true,
+        ..mirror_input(Some(line(7, 1)), 500)
+    };
+    assert_eq!(mirror.step(next_line), Some(MirrorAction::ShowLine(1)));
 }
 
 #[test]

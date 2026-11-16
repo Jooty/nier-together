@@ -11,6 +11,10 @@ use crate::dialogue::{
 pub enum MirrorAction {
     /// Open the window on `talk_id` and go straight to `line` (a late joiner starts mid-talk).
     Open(DialogueLine),
+    /// The talker went from one talk straight into the next in a window that stayed open: open
+    /// the next talk in the same open window, as the talker's own script does, so no opening
+    /// animation hides its first lines.
+    SwitchTalk(DialogueLine),
     /// Move the open mirrored window to this line.
     ShowLine(u16),
     Close,
@@ -43,16 +47,6 @@ pub enum TalkLeader {
     Either,
 }
 
-/// A talk the local player started with the talk command is theirs alone: it is never led by
-/// the partner. A copy a script opened (stream entry, relayed call, shared event) follows `base`.
-pub fn leader_for_own_talk(base: TalkLeader, started_by_player_command: bool) -> TalkLeader {
-    if started_by_player_command && base == TalkLeader::Partner {
-        TalkLeader::Local
-    } else {
-        base
-    }
-}
-
 /// One tick's view of the partner's talk and of this game.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MirrorInput {
@@ -82,6 +76,42 @@ pub struct PartnerTalkMemory {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HostLedScriptTalk {
     led: bool,
+}
+
+/// Follows the partner's talk in this game's own talk window, line by line.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PartnerTalkMirror {
+    shown: Option<DialogueLine>,
+    retry_open_at_ms: u64,
+    joined_own_talk: Option<u32>,
+    following: Option<FollowedTalk>,
+    last_own_talk: Option<u32>,
+    own_ended: Option<EndedTalk>,
+    mirrored: Vec<MirroredTalk>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MirroredTalk {
+    talk_id: u32,
+    at_ms: u64,
+    own_copy_finished: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct EndedTalk {
+    talk_id: u32,
+    at_ms: u64,
+    skip_told: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FollowedTalk {
+    talk_id: u32,
+    since_ms: u64,
+    host_seen_on_it: bool,
+    gave_up: bool,
+    finish_deferred_since_ms: Option<u64>,
+    answer_seen: bool,
 }
 
 impl HostLedScriptTalk {
@@ -217,42 +247,6 @@ impl PartnerTalkMemory {
     }
 }
 
-/// Follows the partner's talk in this game's own talk window, line by line.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PartnerTalkMirror {
-    shown: Option<DialogueLine>,
-    retry_open_at_ms: u64,
-    joined_own_talk: Option<u32>,
-    following: Option<FollowedTalk>,
-    last_own_talk: Option<u32>,
-    own_ended: Option<EndedTalk>,
-    mirrored: Vec<MirroredTalk>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct MirroredTalk {
-    talk_id: u32,
-    at_ms: u64,
-    own_copy_finished: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct EndedTalk {
-    talk_id: u32,
-    at_ms: u64,
-    skip_told: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FollowedTalk {
-    talk_id: u32,
-    since_ms: u64,
-    host_seen_on_it: bool,
-    gave_up: bool,
-    finish_deferred_since_ms: Option<u64>,
-    answer_seen: bool,
-}
-
 impl PartnerTalkMirror {
     pub const fn new() -> Self {
         Self {
@@ -280,7 +274,11 @@ impl PartnerTalkMirror {
             self.shown = None;
             self.last_own_talk = Some(own.talk_id);
             self.own_ended = None;
+            let host_still_on_it = input
+                .partner_line
+                .is_some_and(|partner| partner.talk_id == own.talk_id);
             if input.leader == TalkLeader::Partner
+                && !host_still_on_it
                 && let Some(talk_id) = self.finish_mirrored_own_copy(own.talk_id, input.now_ms)
             {
                 return Some(MirrorAction::FinishOwnTalk(talk_id));
@@ -338,7 +336,12 @@ impl PartnerTalkMirror {
                 self.shown = Some(line);
                 Some(MirrorAction::ShowLine(line.line))
             }
-            (Some(_), _) => {
+            (Some(_), Some(line)) => {
+                self.shown = Some(line);
+                self.remember_mirrored(line.talk_id, input.now_ms);
+                Some(MirrorAction::SwitchTalk(line))
+            }
+            (Some(_), None) => {
                 self.shown = None;
                 Some(MirrorAction::Close)
             }
@@ -505,4 +508,14 @@ pub fn within_talk_range(distance_units: f32, already_showing: bool) -> bool {
 /// Whether a talk line's tag callbacks may run on this machine. Only the talker runs them.
 pub fn talk_tags_run_here(mirroring: bool, mirror_action_running: bool) -> bool {
     !mirroring && !mirror_action_running
+}
+
+/// A talk the local player started with the talk command is theirs alone: it is never led by
+/// the partner. A copy a script opened (stream entry, relayed call, shared event) follows `base`.
+pub fn leader_for_own_talk(base: TalkLeader, started_by_player_command: bool) -> TalkLeader {
+    if started_by_player_command && base == TalkLeader::Partner {
+        TalkLeader::Local
+    } else {
+        base
+    }
 }
