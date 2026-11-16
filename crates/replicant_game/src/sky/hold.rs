@@ -1,6 +1,6 @@
 use replicant_proto::SkyState;
 
-use crate::sky::{APPLY_RETRY_MS, SKY_APPLY_LIMIT_MS, SkyReading};
+use crate::sky::{APPLY_RETRY_MS, SKY_APPLY_LIMIT_MS, SkyReading, ZONE_SETTLE_MS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SkyApply {
@@ -23,6 +23,9 @@ pub struct SkyHold {
     last_attempt_ms: Option<u64>,
     started_ms: Option<u64>,
     outcome: Option<SkyOutcome>,
+    last_received: Option<SkyState>,
+    zone_loads: Option<u32>,
+    quiet_until_ms: u64,
 }
 
 impl SkyApply {
@@ -38,11 +41,40 @@ impl SkyHold {
 
     pub fn receive(&mut self, state: SkyState) {
         self.target = Some(state);
+        self.last_received = Some(state);
         self.fresh = true;
         self.applied_before_resources_ready = false;
         self.last_attempt_ms = None;
         self.started_ms = None;
         self.outcome = None;
+    }
+
+    /// Counts a change of the guest's phase load count as a zone load: after the settle time the host's last sky for
+    /// this phase is applied once more. Returns whether a sky is armed again, so the caller re-applies its record too.
+    pub fn note_zone_loads(&mut self, now_ms: u64, guest_phase: u16, zone_loads: u32) -> bool {
+        let previous = self.zone_loads.replace(zone_loads);
+        if previous.is_none_or(|count| count == zone_loads) {
+            return false;
+        }
+        self.quiet_until_ms = now_ms + ZONE_SETTLE_MS;
+        let Some(state) = self
+            .target
+            .or(self.last_received)
+            .filter(|state| state.phase == guest_phase)
+        else {
+            return false;
+        };
+        self.target = Some(state);
+        self.fresh = true;
+        self.applied_before_resources_ready = false;
+        self.last_attempt_ms = None;
+        self.started_ms = None;
+        self.outcome = None;
+        true
+    }
+
+    pub fn waits_for_zone_settle(&self, now_ms: u64) -> bool {
+        now_ms < self.quiet_until_ms
     }
 
     pub fn take_outcome(&mut self) -> Option<SkyOutcome> {
@@ -59,7 +91,10 @@ impl SkyHold {
         let Some(target) = self.target else {
             return SkyApply::default();
         };
-        if target.phase != guest_phase || !reading.is_settled() {
+        if target.phase != guest_phase
+            || !reading.is_settled()
+            || self.waits_for_zone_settle(now_ms)
+        {
             return SkyApply::default();
         }
         let started_ms = *self.started_ms.get_or_insert(now_ms);
