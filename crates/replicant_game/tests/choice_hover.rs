@@ -68,6 +68,7 @@ fn prompt_line() -> DialogueLine {
     DialogueLine {
         talk_id: PROMPT_TALK,
         line: PROMPT_LINE,
+        step: 0,
     }
 }
 
@@ -216,6 +217,7 @@ fn a_hover_is_forgotten_when_the_partner_leaves_that_line() {
     partner.partner_moved_to(Some(DialogueLine {
         talk_id: PROMPT_TALK + 2,
         line: 0,
+        step: 0,
     }));
     assert_eq!(partner.on_prompt(Some(prompt_line()), 2), None);
     partner.receive(hover(1));
@@ -255,6 +257,7 @@ fn the_guests_own_buttons_move_a_marker_that_starts_on_the_hosts_option() {
     let next_prompt = DialogueLine {
         talk_id: PROMPT_TALK + 4,
         line: 0,
+        step: 0,
     };
     assert_eq!(marker.step(Some(next_prompt), 3, 9, 0), Some(2));
     assert_eq!(marker.step(None, 3, 0, 1), None);

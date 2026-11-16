@@ -9,11 +9,13 @@ fn a_dialogue_line_round_trips_and_is_relayed() {
         DialogueUpdate::Line(DialogueLine {
             talk_id: 1234,
             line: 3,
+            step: 0,
         }),
         DialogueUpdate::Ended,
         DialogueUpdate::StoryLine(DialogueLine {
             talk_id: 1226,
             line: 1,
+            step: 2,
         }),
     ] {
         let message = Message::Dialogue(update);
@@ -24,8 +26,13 @@ fn a_dialogue_line_round_trips_and_is_relayed() {
 
 #[test]
 fn a_talk_id_or_line_past_the_game_table_is_refused() {
-    let line =
-        |talk_id, line| Message::Dialogue(DialogueUpdate::Line(DialogueLine { talk_id, line }));
+    let line = |talk_id, line| {
+        Message::Dialogue(DialogueUpdate::Line(DialogueLine {
+            talk_id,
+            line,
+            step: 0,
+        }))
+    };
     assert_eq!(
         line(MAX_TALK_ID, MAX_DIALOGUE_LINE_INDEX).validate(),
         Ok(())
@@ -43,7 +50,11 @@ fn a_talk_id_or_line_past_the_game_table_is_refused() {
 #[test]
 fn a_story_line_past_the_game_table_is_refused() {
     let story = |talk_id, line| {
-        Message::Dialogue(DialogueUpdate::StoryLine(DialogueLine { talk_id, line }))
+        Message::Dialogue(DialogueUpdate::StoryLine(DialogueLine {
+            talk_id,
+            line,
+            step: 0,
+        }))
     };
     assert_eq!(
         story(MAX_TALK_ID, MAX_DIALOGUE_LINE_INDEX).validate(),
@@ -57,4 +68,22 @@ fn a_story_line_past_the_game_table_is_refused() {
         story(0, MAX_DIALOGUE_LINE_INDEX + 1).validate(),
         Err(WireError::OutOfRange { field: "line" })
     );
+}
+
+#[test]
+fn a_step_inside_a_line_rides_with_the_line_and_is_bounded() {
+    let step = |step| {
+        Message::Dialogue(DialogueUpdate::StoryLine(DialogueLine {
+            talk_id: 1423,
+            line: 0,
+            step,
+        }))
+    };
+    assert_eq!(step(MAX_DIALOGUE_LINE_INDEX).validate(), Ok(()));
+    assert_eq!(
+        step(MAX_DIALOGUE_LINE_INDEX + 1).validate(),
+        Err(WireError::OutOfRange { field: "step" })
+    );
+    let message = step(2);
+    assert_eq!(decode(&encode(&message).unwrap()).unwrap(), message);
 }

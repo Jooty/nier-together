@@ -1,6 +1,6 @@
 use replicant_game::dialogue::{
-    ChoiceFollowInput, ChoiceFollower, ChoiceStep, MirrorAction, MirrorInput, PartnerTalkMirror,
-    TalkLeader, talk_command_came_from_a_story_step,
+    ChoiceFollowInput, ChoiceFollower, ChoiceStep, LINE_PRESS_GIVES_UP_AFTER_MS, MirrorAction,
+    MirrorInput, PartnerTalkMirror, TalkLeader, talk_command_came_from_a_story_step,
 };
 use replicant_game::host_led_stretch::host_run_replays_on_the_watching_guest;
 use replicant_game::script_functions::{traced_bare_unreachable_function, traced_function_name};
@@ -29,7 +29,11 @@ const HOST_LINE_1_OF_1359_MS: u64 = 2_731_013;
 const MANOR: &str = "A_SOUTH_MANSION_01";
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
-    DialogueLine { talk_id, line }
+    DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    }
 }
 
 fn watching(partner_line: DialogueLine, window_open: bool, now_ms: u64) -> MirrorInput {
@@ -228,4 +232,88 @@ fn the_scene_start_a_door_calls_is_traced_from_its_bare_name() {
         None
     );
     assert_eq!(traced_function_name("EID_1100_a0050_01_Start"), None);
+}
+
+#[test]
+fn run_1115j_the_guests_own_copy_stays_led_while_its_presses_take_it_to_the_hosts_next_talk() {
+    const FIRST_DREAM_TALK: u32 = 1422;
+    const SECOND_DREAM_TALK: u32 = 1423;
+    const HOST_ON_LINE_ONE_MS: u64 = 6_500_156;
+    const HOST_ON_THE_NEXT_TALK_MS: u64 = 6_502_441;
+    let led = |own: DialogueLine, partner: DialogueLine, now_ms: u64| MirrorInput {
+        partner_line: Some(partner),
+        partner_ended_talk: None,
+        can_show: true,
+        window_open: true,
+        own_talk: Some(own),
+        leader: TalkLeader::Partner,
+        answer_open: false,
+        now_ms,
+    };
+    let mut mirror = PartnerTalkMirror::new();
+    assert_eq!(
+        mirror.step(led(
+            line(FIRST_DREAM_TALK, 0),
+            line(FIRST_DREAM_TALK, 0),
+            HOST_ON_LINE_ONE_MS - 16_000
+        )),
+        Some(MirrorAction::FollowStarted(FIRST_DREAM_TALK))
+    );
+    assert_eq!(
+        mirror.step(led(
+            line(FIRST_DREAM_TALK, 0),
+            line(FIRST_DREAM_TALK, 1),
+            HOST_ON_LINE_ONE_MS
+        )),
+        Some(MirrorAction::FollowLine(1))
+    );
+    assert_eq!(
+        mirror.step(led(
+            line(FIRST_DREAM_TALK, 1),
+            line(SECOND_DREAM_TALK, 0),
+            HOST_ON_THE_NEXT_TALK_MS
+        )),
+        Some(MirrorAction::ChainOwnTalk(line(SECOND_DREAM_TALK, 0)))
+    );
+    assert!(
+        mirror.holds_own_talk(),
+        "run 1115j 01:48:22.451: the copy's buttons must stay off, or the press that takes it on is never made"
+    );
+    assert_eq!(
+        mirror.step(led(
+            line(FIRST_DREAM_TALK, 1),
+            line(SECOND_DREAM_TALK, 0),
+            HOST_ON_THE_NEXT_TALK_MS + 16
+        )),
+        None
+    );
+    assert_eq!(
+        mirror.step(led(
+            line(SECOND_DREAM_TALK, 0),
+            line(SECOND_DREAM_TALK, 0),
+            HOST_ON_THE_NEXT_TALK_MS + 50
+        )),
+        Some(MirrorAction::FollowStarted(SECOND_DREAM_TALK))
+    );
+    let mut stuck = PartnerTalkMirror::new();
+    stuck.step(led(
+        line(FIRST_DREAM_TALK, 1),
+        line(FIRST_DREAM_TALK, 1),
+        HOST_ON_LINE_ONE_MS,
+    ));
+    stuck.step(led(
+        line(FIRST_DREAM_TALK, 1),
+        line(SECOND_DREAM_TALK, 0),
+        HOST_ON_THE_NEXT_TALK_MS,
+    ));
+    assert_eq!(
+        stuck.step(led(
+            line(FIRST_DREAM_TALK, 1),
+            line(SECOND_DREAM_TALK, 0),
+            HOST_ON_THE_NEXT_TALK_MS + LINE_PRESS_GIVES_UP_AFTER_MS
+        )),
+        Some(MirrorAction::ChainGaveUp(FIRST_DREAM_TALK)),
+        "a copy the presses never take on gets its buttons back"
+    );
+    assert!(!stuck.holds_own_talk());
 }

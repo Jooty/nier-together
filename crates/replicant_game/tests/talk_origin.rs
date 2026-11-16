@@ -36,7 +36,11 @@ const TEXT_SCENE_FIRST_TALK: u32 = 1422;
 const TEXT_SCENE_SECOND_TALK: u32 = 1423;
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
-    DialogueLine { talk_id, line }
+    DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    }
 }
 
 fn guest_tick(

@@ -3,12 +3,12 @@ use std::sync::{Mutex, PoisonError};
 
 use replicant_game::GameMemory;
 use replicant_game::dialogue::{
-    CONTROL_MASK_SET_SLOT_ZERO_RVA, GAME_STATE_RVA, LinePress, PressStep,
+    CONTROL_MASK_SET_SLOT_ZERO_RVA, GAME_STATE_RVA, LinePress, LineSteps, PressStep,
     TALK_DATA_LINE_COUNT_OFFSET, TALK_UPDATE_INPUT_BUTTON_PRESSED_BIT, TALK_UPDATE_INPUT_BYTES,
     TALK_UPDATE_INPUT_CONFIRM_OFFSET, TALK_UPDATE_INPUT_ENABLED_OFFSET, TALK_WINDOW_CLOSE_RVA,
     TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET,
-    TALK_WINDOW_MASK_BEFORE_OPEN_OFFSET, TALK_WINDOW_OPEN_RVA, TALK_WINDOW_PLAYER_OFFSET,
-    TALK_WINDOW_RVA, TalkWindowReading,
+    TALK_WINDOW_MASK_BEFORE_OPEN_OFFSET, TALK_WINDOW_OPEN_RVA, TALK_WINDOW_PAGE_OFFSET,
+    TALK_WINDOW_PLAYER_OFFSET, TALK_WINDOW_RVA, TalkWindowReading,
 };
 use replicant_proto::DialogueLine;
 
@@ -18,6 +18,7 @@ use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
 
 static LINE_PRESS: Mutex<LinePress> = Mutex::new(LinePress::new());
+static LINE_STEPS: Mutex<LineSteps> = Mutex::new(LineSteps::new());
 static TALK_TO_CHECK: Mutex<Option<DialogueLine>> = Mutex::new(None);
 static TALK_TO_OPEN: Mutex<Option<DialogueLine>> = Mutex::new(None);
 
@@ -68,9 +69,11 @@ pub(super) fn open_mirror(build: &VerifiedBuild, line: DialogueLine) -> bool {
     true
 }
 
-/// The talk window as the game's own update is about to see it.
+/// The talk window as the game's own update is about to see it; also counts the line's steps,
+/// so it is read once per frame, from the window's update.
 pub(super) fn read_talk_window(memory: &InProcessMemory) -> TalkWindowReading {
     let window = memory.module_base() + u64::from(TALK_WINDOW_RVA);
+    let open = memory.read_i32(window).is_ok_and(|state| state != 0);
     let talk_address = memory
         .read_u64(window + TALK_WINDOW_CURRENT_TALK_OFFSET)
         .unwrap_or(0);
@@ -83,42 +86,86 @@ pub(super) fn read_talk_window(memory: &InProcessMemory) -> TalkWindowReading {
             .and_then(|count| u16::try_from(count).ok())
             .unwrap_or(0)
     };
-    TalkWindowReading {
-        open: memory.read_i32(window).is_ok_and(|state| state != 0),
-        talk_address,
-        line: memory
-            .read_i32(window + TALK_WINDOW_CURRENT_LINE_OFFSET)
+    let small = |offset: u64| {
+        memory
+            .read_i32(window + offset)
             .ok()
-            .and_then(|line| u16::try_from(line).ok())
-            .unwrap_or(0),
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0)
+    };
+    let line = small(TALK_WINDOW_CURRENT_LINE_OFFSET);
+    let page = small(TALK_WINDOW_PAGE_OFFSET);
+    let player_state = memory
+        .read_i32(window + TALK_WINDOW_PLAYER_OFFSET)
+        .unwrap_or(0);
+    let mut steps = LINE_STEPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let step = if open {
+        steps.observe(talk_address, line, page, player_state)
+    } else {
+        steps.forget();
+        0
+    };
+    TalkWindowReading {
+        open,
+        talk_address,
+        line,
+        step,
         line_count,
-        player_state: memory
-            .read_i32(window + TALK_WINDOW_PLAYER_OFFSET)
-            .unwrap_or(0),
+        player_state,
     }
 }
 
-/// Asks for the partner's line: the window's update presses confirm, as the partner's own press
-/// did, until the window is there. `on_this_talk` when the window already holds that talk.
+/// The press count inside the line this window is on, as counted at the last update.
+pub(super) fn current_step(memory: &InProcessMemory) -> u16 {
+    let window = memory.module_base() + u64::from(TALK_WINDOW_RVA);
+    let small = |offset: u64| {
+        memory
+            .read_i32(window + offset)
+            .ok()
+            .and_then(|value| u16::try_from(value).ok())
+            .unwrap_or(0)
+    };
+    let talk_address = memory
+        .read_u64(window + TALK_WINDOW_CURRENT_TALK_OFFSET)
+        .unwrap_or(0);
+    let player_state = memory
+        .read_i32(window + TALK_WINDOW_PLAYER_OFFSET)
+        .unwrap_or(0);
+    LINE_STEPS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .observe(
+            talk_address,
+            small(TALK_WINDOW_CURRENT_LINE_OFFSET),
+            small(TALK_WINDOW_PAGE_OFFSET),
+            player_state,
+        )
+}
+
+/// Asks for the partner's line and step: the window's update presses confirm, as the partner's
+/// own presses did, until the window is there. `on_this_talk` when the window already holds that talk.
 pub(super) fn want_line(memory: &InProcessMemory, line: DialogueLine, on_this_talk: bool) {
     let reading = read_talk_window(memory);
     let mut press = LINE_PRESS.lock().unwrap_or_else(PoisonError::into_inner);
-    let already = press.wanted() == Some((line.talk_id, line.line));
+    let before = press.wanted();
     press.want(
         line.talk_id,
         line.line,
+        line.step,
         on_this_talk,
         reading.talk_address,
         net_clock_ms(),
     );
-    if already {
+    if press.wanted() == before {
         return;
     }
     log_line(&format!(
-        "dialogue: the partner is on line {} of talk {}, this window (on line {} of {}, player state {}) presses confirm in the game's own update until it is too{}",
+        "dialogue: the partner is on line {} step {} of talk {}, this window (on line {} step {} of {} lines, player state {}) presses confirm in the game's own update until it is too{}",
         line.line,
+        line.step,
         line.talk_id,
         reading.line,
+        reading.step,
         reading.line_count,
         reading.player_state,
         if on_this_talk {
@@ -139,14 +186,13 @@ pub(super) fn clear_wanted_line() {
 /// Runs on the game thread inside the window's update: writes the confirm press into `input` when
 /// the window is behind the wanted line. True when a press was written.
 pub(super) fn press_for_the_wanted_line(
-    build: &VerifiedBuild,
+    reading: &TalkWindowReading,
     input: &mut [u8; TALK_UPDATE_INPUT_BYTES],
 ) -> bool {
-    let reading = read_talk_window(&InProcessMemory::new(build));
     let step = LINE_PRESS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .step(&reading, net_clock_ms());
+        .step(reading, net_clock_ms());
     match step {
         Some(PressStep::Press) => {
             input[TALK_UPDATE_INPUT_ENABLED_OFFSET] = 1;
@@ -159,7 +205,8 @@ pub(super) fn press_for_the_wanted_line(
             presses,
         }) => {
             log_line(&format!(
-                "dialogue: this window reached line {line} of talk {talk_id} after {presses} confirm press(es) through the game's own update"
+                "dialogue: this window reached line {line} step {} of talk {talk_id} after {presses} confirm press(es) through the game's own update",
+                reading.step
             ));
             false
         }
@@ -168,8 +215,11 @@ pub(super) fn press_for_the_wanted_line(
             line,
             presses,
         }) => {
-            *TALK_TO_CHECK.lock().unwrap_or_else(PoisonError::into_inner) =
-                Some(DialogueLine { talk_id, line });
+            *TALK_TO_CHECK.lock().unwrap_or_else(PoisonError::into_inner) = Some(DialogueLine {
+                talk_id,
+                line,
+                step: 0,
+            });
             log_line(&format!(
                 "dialogue: this window went on to another talk after {presses} confirm press(es), checking it is talk {talk_id}"
             ));
@@ -180,8 +230,11 @@ pub(super) fn press_for_the_wanted_line(
             line,
             presses,
         }) => {
-            *TALK_TO_OPEN.lock().unwrap_or_else(PoisonError::into_inner) =
-                Some(DialogueLine { talk_id, line });
+            *TALK_TO_OPEN.lock().unwrap_or_else(PoisonError::into_inner) = Some(DialogueLine {
+                talk_id,
+                line,
+                step: 0,
+            });
             log_line(&format!(
                 "dialogue: {presses} confirm press(es) did not take this window on to talk {talk_id}, it is opened in the window instead"
             ));
@@ -193,8 +246,8 @@ pub(super) fn press_for_the_wanted_line(
             presses,
         }) => {
             log_line(&format!(
-                "dialogue: gave up pressing for line {line} of talk {talk_id} after {presses} press(es): the window is on line {} of {} with player state {}",
-                reading.line, reading.line_count, reading.player_state
+                "dialogue: gave up pressing for line {line} of talk {talk_id} after {presses} press(es): the window is on line {} step {} of {} lines with player state {}",
+                reading.line, reading.step, reading.line_count, reading.player_state
             ));
             false
         }

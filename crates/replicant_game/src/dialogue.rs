@@ -22,7 +22,7 @@ pub use choice_hover::{
     read_choice_prompt, write_highlighted_option,
 };
 pub use held_talk_start::{HeldTalkRelease, HeldTalkStart, HeldTalkStep};
-pub use line_press::{LinePress, PressStep, TalkWindowReading};
+pub use line_press::{LinePress, LineSteps, PressStep, TalkWindowReading};
 pub use mirror::{
     HostLedScriptTalk, MirrorAction, MirrorInput, PartnerTalkMemory, PartnerTalkMirror, TalkLeader,
     leader_for_own_talk, talk_tags_run_here, within_talk_range,
@@ -86,6 +86,8 @@ pub const TALK_UPDATE_INPUT_ENTER_LIST_OFFSET: usize = TALK_UPDATE_INPUT_VERTICA
 pub const TALK_UPDATE_INPUT_CONFIRM_OFFSET: usize = 0x28;
 pub const TALK_PLAYER_STATE_TYPING: i32 = 3;
 pub const TALK_PLAYER_STATE_WAITS_FOR_A_PRESS: i32 = 4;
+pub const TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK: i32 = 5;
+pub const TALK_WINDOW_PAGE_OFFSET: u64 = 0x46_31BC;
 pub const LINE_PRESS_OPENS_THE_TALK_AFTER_MS: u64 = 600;
 pub const LINE_PRESS_GIVES_UP_AFTER_MS: u64 = 3_000;
 pub const STORY_STEP_CALLS_WITHOUT_AN_EVENT_ID: [&str; 2] =
