@@ -16,6 +16,8 @@ use crate::fight_sync::{
     RadioWaitRelease, RadioWaitRun, Replayer, RequestCall, SlotState, StartEntry, StartStreamPop,
     StreamEntry, StreamStallWatch, TapeKey, TapeValue, TapedResult, counted_wait_ms,
 };
+use crate::script_functions::is_music_only;
+use crate::shared_events::phase_name;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GuestPop {
@@ -43,6 +45,9 @@ pub enum GuestPop {
     /// A copy of the host's start handler that pops after the start already ran here once in
     /// this window: not run again.
     StartAlreadyRan,
+    /// This game's own pop of a music-only function while its own scene holds the host's
+    /// entries: it runs here at the scene's time, and the host's copy of it is dropped.
+    RunMusicInOwnScene,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -236,6 +241,11 @@ pub enum GuestNotice {
         since_scene_cleared_ms: u64,
         by: OwnSceneRelease,
     },
+    /// The host's entry `seq` is a music-only function this game already ran in its own scene.
+    HostCopyOfOwnSceneMusicDropped {
+        seq: u64,
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -356,6 +366,7 @@ pub struct GuestFightStream {
     own_scene_state: OwnSceneState,
     own_scene_end_popped: bool,
     entry_held_for_own_scene: Option<(u64, u64)>,
+    music_run_in_own_scene: Vec<String>,
     earlier_queued: EarlierQueuedCalls,
     queued_waited_ms: u64,
     last_queue_check_ms: Option<u64>,
@@ -402,6 +413,7 @@ impl GuestFightStream {
             own_scene_state: OwnSceneState::NeverPlayed,
             own_scene_end_popped: false,
             entry_held_for_own_scene: None,
+            music_run_in_own_scene: Vec::new(),
             earlier_queued: EarlierQueuedCalls::new(),
             queued_waited_ms: 0,
             last_queue_check_ms: None,
@@ -678,6 +690,7 @@ impl GuestFightStream {
         self.replayer.drop_waiting();
         self.start_entry.forget();
         self.entry_held_for_own_scene = None;
+        self.music_run_in_own_scene.clear();
         self.keep_forgotten_calls();
         self.clear_tape();
         self.requests_unanswered.clear();
@@ -864,6 +877,9 @@ impl GuestFightStream {
             }
             PopVerdict::RunPlayerLocal => GuestPop::RunPlayerLocal,
             PopVerdict::Hold if registered_player_local => GuestPop::RunPlayerLocal,
+            PopVerdict::Hold if self.runs_as_own_scene_music(name, local_phase) => {
+                GuestPop::RunMusicInOwnScene
+            }
             PopVerdict::Hold => {
                 if self.count_own_copy(name) > self.host_copies_of(name) {
                     self.held_pops_unmatched.push(name.to_owned());
@@ -896,6 +912,9 @@ impl GuestFightStream {
         }
         if self.restart_wait != RestartWait::None {
             return GuestPop::Hold;
+        }
+        if self.runs_as_own_scene_music(name, local_phase) {
+            return GuestPop::RunMusicInOwnScene;
         }
         let copy_number = self.count_own_copy(name);
         if copy_number <= self.host_copies_of(name) {
@@ -949,6 +968,29 @@ impl GuestFightStream {
         if name.ends_with("_End") {
             self.own_scene_end_popped = true;
         }
+    }
+
+    fn runs_as_own_scene_music(&mut self, name: &str, local_phase: Option<u16>) -> bool {
+        let music = local_phase
+            .and_then(phase_name)
+            .is_some_and(|phase| is_music_only(phase, name));
+        if !music || !self.own_scene_holds_now() {
+            return false;
+        }
+        // Counted as an own copy, so the host's copy N pairs with it like any other.
+        self.count_own_copy(name);
+        self.music_run_in_own_scene.push(name.to_owned());
+        true
+    }
+
+    fn own_scene_holds_now(&self) -> bool {
+        if self.own_scene_playing || self.own_scene_state == OwnSceneState::Playing {
+            return true;
+        }
+        // As `own_scene_hold` says Settling, without its state change.
+        matches!(self.own_scene_state, OwnSceneState::ClearedAt(cleared_ms)
+            if !self.own_scene_end_popped
+                && self.last_tick_ms.saturating_sub(cleared_ms) < OWN_SCENE_SETTLE_CAP_MS)
     }
 
     fn own_scene_hold(&mut self, now_ms: u64) -> OwnSceneHold {
@@ -1095,6 +1137,12 @@ impl GuestFightStream {
             return Some((seq, name));
         }
         self.replayer.first_pending()
+    }
+
+    /// Whether entry `seq` waits only because this game's own scene holds it.
+    pub fn is_held_for_own_scene(&self, seq: u64) -> bool {
+        self.entry_held_for_own_scene
+            .is_some_and(|(held_seq, _)| held_seq == seq)
     }
 
     /// Once per tick after `tick`: the next host entry when it has waited past the stall limit,
@@ -1355,6 +1403,7 @@ impl GuestFightStream {
         self.held_pops_unmatched.clear();
         self.held_pops_logged.clear();
         self.entry_held_for_own_scene = None;
+        self.music_run_in_own_scene.clear();
     }
 
     fn release_after_host_entry_end(
@@ -1374,11 +1423,18 @@ impl GuestFightStream {
             OwnSceneHold::Playing | OwnSceneHold::Settling
         );
         let start_entry = &self.start_entry;
+        let music_run_here = &self.music_run_in_own_scene;
         let mut blocked = None;
         let mut gave_up = false;
         let mut held_for_own_scene = None;
+        let mut music_to_drop = None;
         let entry = self.replayer.tick_when(slot, |entry| {
             let seq = entry.seq;
+            if seq > 0 && music_run_here.contains(&entry.name) {
+                // Kept back so it is skipped below, once the tick has made it the next entry.
+                music_to_drop = Some((seq, entry.name.clone()));
+                return false;
+            }
             if seq == 0 && start_entry.is_expected(&entry.name) {
                 // Nothing of the host's start handler is taped, so its end is not waited for.
                 return start_entry.may_release(&entry.name, own_scene_holds);
@@ -1407,6 +1463,9 @@ impl GuestFightStream {
             false
         });
         self.note_own_scene_hold(held_for_own_scene, entry.as_ref(), now_ms, own_scene_hold);
+        if let Some((seq, name)) = music_to_drop {
+            self.drop_host_copy_of_own_scene_music(seq, name);
+        }
         let Some(entry) = entry else {
             if blocked.is_some() {
                 self.waiting_for_host_entry_end = blocked;
@@ -1471,6 +1530,27 @@ impl GuestFightStream {
                 by,
             });
         }
+    }
+
+    fn drop_host_copy_of_own_scene_music(&mut self, seq: u64, name: String) {
+        if !self.replayer.skip_pending_entry(seq) {
+            return;
+        }
+        if let Some(index) = self
+            .music_run_in_own_scene
+            .iter()
+            .position(|ran| *ran == name)
+        {
+            self.music_run_in_own_scene.remove(index);
+        }
+        if self
+            .entry_held_for_own_scene
+            .is_some_and(|(held_seq, _)| held_seq == seq)
+        {
+            self.entry_held_for_own_scene = None;
+        }
+        self.notices
+            .push(GuestNotice::HostCopyOfOwnSceneMusicDropped { seq, name });
     }
 
     fn count_own_copy(&mut self, name: &str) -> u32 {
