@@ -13,8 +13,9 @@ use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureStackBackTrace;
 use nt_hook::line_budget::LineBudget;
 use replicant_game::GameMemory;
 use replicant_game::effects::{
-    ActorCueCall, ActorCueMoment, FirstCues, MAX_ACTOR_CUES_PER_SECOND, actor_cue_is_sent,
-    actor_cue_text, read_effect_transform, stack_holds_ai_step,
+    ActorCueCall, ActorCueMoment, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
+    actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_text, read_effect_transform,
+    stack_holds_ai_step,
 };
 use replicant_game::offsets::{
     ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA,
@@ -229,7 +230,7 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
         return;
     };
     let arrived = net.take_relayed(|message| {
-        matches!(message, Message::ActorCue(cue) if !matches!(cue.kind, ActorCueKind::TurnedToStone(_)))
+        matches!(message, Message::ActorCue(cue) if !actor_cue_goes_to_enemy_sync(&cue.kind))
     });
     if active {
         for message in arrived {

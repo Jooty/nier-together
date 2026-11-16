@@ -21,6 +21,7 @@ mod install;
 mod shared_actors;
 mod spawn_hook;
 mod status;
+mod stone;
 mod sync;
 mod word_drop_hook;
 

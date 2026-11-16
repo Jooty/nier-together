@@ -7,7 +7,9 @@ use replicant_game::enemies::{
 };
 use replicant_game::offsets::{ACTOR_KIND_MASK_OFFSET, ACTOR_SPAWN_SERIAL_OFFSET};
 use replicant_game::puppet::actor_is_live;
-use replicant_proto::{EnemyCreation, EnemyDrop, EnemyId, EnemyKilled, EnemyWordDrop, PlayerHit};
+use replicant_proto::{
+    EnemyCreation, EnemyDrop, EnemyId, EnemyKilled, EnemyWordDrop, PlayerHit, StoneTurn,
+};
 
 use crate::enemies::counters::CombatCounts;
 use crate::memory::InProcessMemory;
@@ -25,6 +27,7 @@ pub(super) struct CombatState {
     pub(super) puppet_kind: Option<PuppetKind>,
     pub(super) killed_copies: HashSet<u64>,
     pub(super) pending_kills: Vec<(EnemyKilled, u64)>,
+    pub(super) pending_stones: Vec<(EnemyId, StoneTurn, u64)>,
     pub(super) pending_player_hits: Vec<PlayerHit>,
     pub(super) pending_drops: Vec<EnemyDrop>,
     pub(super) pending_word_drops: Vec<EnemyWordDrop>,

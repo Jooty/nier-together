@@ -1,7 +1,7 @@
 use replicant_game::effects::{
-    ActorCueCall, ActorCueMoment, FirstCues, STONE_HANDLERS, actor_cue_is_sent, actor_cue_text,
-    stack_holds_ai_step, stone_handler_rva, stone_state_machine_pointer_offset,
-    stone_state_vtable_rva,
+    ActorCueCall, ActorCueMoment, FirstCues, STONE_HANDLERS, actor_cue_goes_to_enemy_sync,
+    actor_cue_is_sent, actor_cue_text, stack_holds_ai_step, stone_handler_rva,
+    stone_state_machine_pointer_offset, stone_state_vtable_rva,
 };
 use replicant_proto::{ActorCue, ActorCueKind, AttachedEffect, EnemyId, StoneHandler};
 
@@ -135,4 +135,18 @@ fn an_attach_cue_reads_as_its_effect_and_actor() {
         "effect 458 attached to unique actor -2 (bone -1, unique false)"
     );
     assert_eq!(ActorCueCall::of_kind(&cue.kind), ActorCueCall::AttachById);
+}
+
+#[test]
+fn a_stone_turn_goes_to_the_enemy_sync_and_effects_stay_with_the_effects() {
+    let stone = ActorCueKind::TurnedToStone(replicant_proto::StoneTurn {
+        handler: StoneHandler::Leader,
+        state_bytes: [1, 0],
+    });
+    let sound = ActorCueKind::Sound {
+        position: [0.0; 3],
+        levels: [1.0, 0.0],
+    };
+    assert!(actor_cue_goes_to_enemy_sync(&stone));
+    assert!(!actor_cue_goes_to_enemy_sync(&sound));
 }

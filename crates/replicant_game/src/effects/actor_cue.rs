@@ -126,3 +126,8 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
         ),
     }
 }
+
+/// A stone turn changes the enemy's state, so the enemy sync takes it; the effects take the rest.
+pub fn actor_cue_goes_to_enemy_sync(kind: &ActorCueKind) -> bool {
+    matches!(kind, ActorCueKind::TurnedToStone(_))
+}

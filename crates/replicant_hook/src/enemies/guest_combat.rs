@@ -14,7 +14,9 @@ use replicant_game::offsets::{
     PLAYER_MESSAGE_DIRECT_HIT, PLAYER_MESSAGE_ENEMY_KILLED,
 };
 use replicant_game::puppet::actor_is_live;
-use replicant_proto::{EnemyGoneReason, EnemyId, EnemyKilled, Message, MotionState};
+use replicant_proto::{
+    ActorCue, ActorCueKind, EnemyGoneReason, EnemyId, EnemyKilled, Message, MotionState,
+};
 
 use crate::boss_messages::is_boss;
 use crate::diagnostics::log_line;
@@ -24,6 +26,7 @@ use crate::enemies::drop_hook::drop_at_actor;
 use crate::enemies::hold_hook::{
     release_held, set_ghosts, set_held, set_stopped_dead, take_own_steps_cut,
 };
+use crate::enemies::stone;
 use crate::enemies::sync::LocalView;
 use crate::enemies::word_drop_hook::word_drop_at_actor;
 use crate::enemies::{COPY_KILL_ATTEMPTS, EnemySyncRole, PENDING_KILL_MAX_AGE_MS, enemy_id_text};
@@ -44,6 +47,11 @@ pub(super) fn receive(combat: &mut CombatState, now_ms: u64, message: &Message) 
         Message::EnemyCreation(creation) => {
             combat.creations.insert(creation.id, creation.clone());
         }
+        Message::ActorCue(ActorCue {
+            actor,
+            kind: ActorCueKind::TurnedToStone(turn),
+            ..
+        }) => combat.pending_stones.push((*actor, *turn, now_ms)),
         Message::EnemyDrop(drop) => combat.pending_drops.push(*drop),
         Message::EnemyWordDrop(drop) => combat.pending_word_drops.push(*drop),
         Message::EnemyBodyGone(gone) => combat.pending_body_gone.push((gone.phase, gone.id)),
@@ -124,6 +132,7 @@ pub(super) fn step(
     set_held(held);
     hold_guest_only_copies(combat, local, &mut memory, now_ms, seen, samples, host_view);
     apply_player_hits(combat, local, now_ms, local_player);
+    apply_stones(combat, local, &mut memory, now_ms, local_player);
     apply_kills(combat, local, &mut memory, now_ms, local_player, puppet);
     apply_drops(combat, local, local_player);
     apply_word_drops(combat, local, local_player);
@@ -542,6 +551,74 @@ fn apply_kills(
             local_player,
             puppet,
         );
+    }
+}
+
+fn apply_stones(
+    combat: &mut CombatState,
+    local: &LocalView<'_>,
+    memory: &mut InProcessMemory,
+    now_ms: u64,
+    local_player: u64,
+) {
+    for (id, turn, received_at) in std::mem::take(&mut combat.pending_stones) {
+        if combat.ended_ids.contains(&id) {
+            log_line(&format!(
+                "stone: host turned {} to stone, but your copy had already died",
+                enemy_id_text(id)
+            ));
+            continue;
+        }
+        let Some(copy) = combat.actor_of(memory, id) else {
+            if now_ms.saturating_sub(received_at) < PENDING_KILL_MAX_AGE_MS {
+                combat.pending_stones.push((id, turn, received_at));
+            } else {
+                log_line(&format!(
+                    "stone: host turned {} to stone, no copy here",
+                    enemy_id_text(id)
+                ));
+            }
+            continue;
+        };
+        let turned = stone::turn_copy(local.build, copy, turn);
+        log_line(&format!(
+            "stone: host turned {} to stone ({:?} handler); your copy turned to stone {turned}{}",
+            enemy_id_text(id),
+            turn.handler,
+            if turned {
+                ", it now runs its own stone death"
+            } else {
+                ", the host's kill will end it as a normal death"
+            }
+        ));
+        if !turned {
+            continue;
+        }
+        // The copy's own stone state ends it, so the host's later kill must not hit it.
+        let paid = local_player != 0
+            && local.calls.send_actor_message(
+                memory,
+                local_player,
+                PLAYER_MESSAGE_ENEMY_KILLED,
+                copy,
+                0,
+            );
+        combat.killed_copies.insert(copy);
+        release_held(copy);
+        local.calls.set_survive_at_one_hp(memory, copy, false);
+        combat.counts.kills_applied += 1;
+        combat.ended_ids.insert(id);
+        combat.removal_causes.push((id, RemovalCause::KilledByHost));
+        let serial = memory
+            .read_i32(copy + ACTOR_SPAWN_SERIAL_OFFSET)
+            .unwrap_or_default();
+        combat.dying_bodies.insert(copy, (id, now_ms, serial));
+        if !paid {
+            log_line(&format!(
+                "stone: no kill credit for {} (no local player)",
+                enemy_id_text(id)
+            ));
+        }
     }
 }
 
