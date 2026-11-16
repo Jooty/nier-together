@@ -14,12 +14,22 @@ pub struct SkyBroadcast {
     guest_seen: bool,
     guest_phase: Option<u16>,
     host_phase: Option<u16>,
+    host_zone_loads: Option<u32>,
     quiet_until_ms: u64,
 }
 
 impl SkyBroadcast {
     pub fn reset(&mut self) {
         *self = Self::default();
+    }
+
+    /// Counts a change of the host's phase load count as a zone load, so a reload of the same phase sends again.
+    pub fn note_zone_loads(&mut self, now_ms: u64, zone_loads: u32) {
+        let previous = self.host_zone_loads.replace(zone_loads);
+        if previous.is_some_and(|count| count != zone_loads) {
+            self.pending_reason = Some("host zone loaded");
+            self.quiet_until_ms = now_ms + ZONE_SETTLE_MS;
+        }
     }
 
     pub fn next(

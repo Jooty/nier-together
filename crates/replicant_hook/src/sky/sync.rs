@@ -14,12 +14,14 @@ use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net;
+use crate::player_body::phase_load_count;
 use crate::sky::calls::SkyCalls;
 
 static SYNC: LazyLock<Mutex<SkySync>> = LazyLock::new(|| Mutex::new(SkySync::default()));
 static LEAKED_NAMES: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Mutex::default);
 static EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
 
+#[derive(Clone)]
 struct PendingRecord {
     phase: u16,
     area: i32,
@@ -33,6 +35,8 @@ struct SkySync {
     assembler: RecordAssembler,
     pending_record: Option<PendingRecord>,
     pending_assets: Option<SkyAssets>,
+    last_record: Option<PendingRecord>,
+    last_assets: Option<SkyAssets>,
     was_host: Option<bool>,
 }
 
@@ -41,12 +45,6 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
     let Some(net) = net::handle() else {
         return;
     };
-    let incoming = net.take_relayed(|message| {
-        matches!(
-            message,
-            Message::Sky(_) | Message::SkyRecord(_) | Message::SkyAssets(_)
-        )
-    });
     let view = net.view();
     let Some(remote) = view.partner_state().cloned() else {
         sync.broadcast.reset();
@@ -54,6 +52,8 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
         sync.assembler = RecordAssembler::default();
         sync.pending_record = None;
         sync.pending_assets = None;
+        sync.last_record = None;
+        sync.last_assets = None;
         sync.was_host = None;
         return;
     };
@@ -63,6 +63,8 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
         sync.hold.reset();
         sync.pending_record = None;
         sync.pending_assets = None;
+        sync.last_record = None;
+        sync.last_assets = None;
         sync.was_host = Some(is_host);
     }
     let game = Replicant::new(InProcessMemory::new(build));
@@ -78,7 +80,16 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
         return;
     };
     let now_ms = u64::try_from(EPOCH.elapsed().as_millis()).unwrap_or(u64::MAX);
+    // Taken only now: a sky message taken before the partner and the phase are known would be lost.
+    let incoming = net.take_relayed(|message| {
+        matches!(
+            message,
+            Message::Sky(_) | Message::SkyRecord(_) | Message::SkyAssets(_)
+        )
+    });
+    let zone_loads = phase_load_count();
     if is_host {
+        sync.broadcast.note_zone_loads(now_ms, zone_loads);
         let guest_phase = Some(remote.state.phase);
         if let Some(send) = sync.broadcast.next(now_ms, phase, &reading, guest_phase) {
             log_line(&format!(
@@ -117,17 +128,33 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
         }
         return;
     }
+    if sync.hold.note_zone_loads(now_ms, phase, zone_loads) {
+        sync.pending_record = sync
+            .last_record
+            .clone()
+            .filter(|record| record.phase == phase);
+        sync.pending_assets = sync
+            .last_assets
+            .clone()
+            .filter(|assets| assets.phase == phase);
+        log_line(&format!(
+            "sky: this game loaded phase {phase} again, the host's last sky is applied once more after the settle"
+        ));
+    }
     for message in incoming {
         if let Message::SkyRecord(chunk) = &message
             && let Some(host_record) = sync.assembler.receive(chunk)
         {
-            sync.pending_record = Some(PendingRecord {
+            let record = PendingRecord {
                 phase: chunk.phase,
                 area: chunk.area,
                 bytes: host_record,
-            });
+            };
+            sync.last_record = Some(record.clone());
+            sync.pending_record = Some(record);
         }
         if let Message::SkyAssets(assets) = message {
+            sync.last_assets = Some(assets.clone());
             sync.pending_assets = Some(assets);
             continue;
         }
@@ -143,10 +170,12 @@ pub fn tick_sky_sync(build: &VerifiedBuild) {
             ));
             sync.pending_record = None;
             sync.pending_assets = None;
+            sync.last_record = None;
+            sync.last_assets = None;
             sync.hold.receive(state);
         }
     }
-    if reading.is_settled() {
+    if reading.is_settled() && !sync.hold.waits_for_zone_settle(now_ms) {
         let mut set_area = false;
         if sync
             .pending_record

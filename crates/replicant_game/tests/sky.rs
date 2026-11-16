@@ -325,6 +325,105 @@ fn the_guest_reapplies_the_area_once_sky_resources_become_ready() {
     assert!(guest.step(900, PHASE, &reading(8)).is_empty());
 }
 
+#[test]
+fn the_host_sends_again_after_a_reload_of_the_same_phase() {
+    let mut host = SkyBroadcast::default();
+    host.note_zone_loads(0, 1);
+    let joined = host
+        .next(0, PHASE, &reading(30), Some(PHASE))
+        .expect("join send");
+    assert_eq!(joined.reason, "guest joined");
+    host.note_zone_loads(600, 2);
+    assert!(host.next(600, PHASE, &reading(30), Some(PHASE)).is_none());
+    let sent = host
+        .next(600 + ZONE_SETTLE_MS, PHASE, &reading(31), Some(PHASE))
+        .expect("sent after the reload settled");
+    assert_eq!((sent.reason, sent.state.env_area), ("host zone loaded", 31));
+    assert!(
+        host.next(700 + ZONE_SETTLE_MS, PHASE, &reading(32), Some(PHASE))
+            .is_none()
+    );
+}
+
+#[test]
+fn replay_a_lost_join_send_then_a_same_phase_jump_reload_on_both_sides() {
+    let mut host = SkyBroadcast::default();
+    let mut guest = SkyHold::default();
+    host.note_zone_loads(0, 1);
+    assert!(!guest.note_zone_loads(0, PHASE, 1));
+    assert!(host.next(0, PHASE, &reading(30), Some(PHASE)).is_some());
+    host.note_zone_loads(600, 2);
+    assert!(!guest.note_zone_loads(623, PHASE, 2));
+    let mut sent = None;
+    for now in (600..600 + 2 * ZONE_SETTLE_MS).step_by(16) {
+        sent = sent.or(host.next(now, PHASE, &reading(30), Some(PHASE)));
+    }
+    let sent = sent.expect("the host sends after its jump reload");
+    guest.receive(sent.state);
+    assert!(guest.step(1_360, PHASE, &reading(0)).is_empty());
+    assert_eq!(
+        guest.step(623 + ZONE_SETTLE_MS, PHASE, &reading(0)).env,
+        Some((30, 0.0))
+    );
+    assert!(
+        guest
+            .step(640 + ZONE_SETTLE_MS, PHASE, &reading(30))
+            .is_empty()
+    );
+    assert_eq!(
+        guest.take_outcome(),
+        Some(SkyOutcome {
+            phase: PHASE,
+            timed_out: false
+        })
+    );
+}
+
+#[test]
+fn a_host_sky_applied_just_before_the_guest_reloads_is_applied_again_after_it() {
+    let mut guest = SkyHold::default();
+    guest.note_zone_loads(0, PHASE, 1);
+    guest.receive(host_state(30, 0.0));
+    assert!(guest.step(10, PHASE, &reading(0)).env.is_some());
+    assert!(guest.step(20, PHASE, &reading(30)).is_empty());
+    assert!(guest.take_outcome().is_some());
+    assert!(guest.note_zone_loads(500, PHASE, 2));
+    assert!(guest.waits_for_zone_settle(600));
+    assert!(guest.step(600, PHASE, &reading(0)).is_empty());
+    assert_eq!(
+        guest.step(500 + ZONE_SETTLE_MS, PHASE, &reading(0)).env,
+        Some((30, 0.0))
+    );
+    assert!(
+        guest
+            .step(510 + ZONE_SETTLE_MS, PHASE, &reading(30))
+            .is_empty()
+    );
+    assert!(guest.take_outcome().is_some());
+    assert!(guest.step(5_000, PHASE, &reading(4)).is_empty());
+}
+
+#[test]
+fn a_guest_load_into_another_phase_does_not_bring_back_the_old_sky() {
+    let mut guest = SkyHold::default();
+    guest.note_zone_loads(0, PHASE, 1);
+    guest.receive(host_state(30, 0.0));
+    guest.step(10, PHASE, &reading(30));
+    assert!(guest.take_outcome().is_some());
+    assert!(!guest.note_zone_loads(500, PHASE + 1, 2));
+    assert!(guest.step(5_000, PHASE + 1, &reading(0)).is_empty());
+    assert!(guest.step(6_000, PHASE, &reading(0)).is_empty());
+}
+
+#[test]
+fn the_first_zone_load_count_the_guest_sees_is_not_a_reload() {
+    let mut guest = SkyHold::default();
+    assert!(!guest.note_zone_loads(0, PHASE, 5));
+    assert!(!guest.waits_for_zone_settle(0));
+    guest.receive(host_state(30, 0.0));
+    assert!(guest.step(0, PHASE, &reading(0)).env.is_some());
+}
+
 fn record_with(words: &[u64]) -> Vec<u8> {
     let mut record = vec![0_u8; 0xAA0];
     for (index, word) in words.iter().enumerate() {
