@@ -2,7 +2,8 @@ use replicant_proto::{DialogueLine, DialogueUpdate};
 
 use crate::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, FOLLOW_HOST_TALK_WAIT_MS,
-    LINE_PRESS_GIVES_UP_AFTER_MS, MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
+    HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS, LINE_PRESS_GIVES_UP_AFTER_MS,
+    MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
     OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS, TALK_LEAVE_EXTRA_UNITS,
 };
 
@@ -204,8 +205,9 @@ impl PartnerTalkMemory {
         })
     }
 
-    /// The talk the host left within the wait before this tick, when the guest's own copy is that
-    /// same talk: the host already left, so the guest's copy closes at once.
+    /// The talk the host left a while before this tick, when the guest's own copy is that same
+    /// talk: the host already left, so the guest's copy closes at once. The guest's scene copy can
+    /// reach the talk seconds after the host's, so the memory outlasts the follow wait.
     pub fn ended_for_follow(
         &self,
         own_talk: Option<DialogueLine>,
@@ -216,7 +218,8 @@ impl PartnerTalkMemory {
         self.last_ended
             .filter(|&(talk_id, ended_ms)| {
                 talk_id == own.talk_id
-                    && now_ms.saturating_sub(ended_ms) <= FOLLOW_HOST_TALK_WAIT_MS
+                    && now_ms.saturating_sub(ended_ms)
+                        <= HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS
             })
             .map(|(talk_id, _)| talk_id)
     }
