@@ -1,4 +1,5 @@
 use replicant_game::PhaseEntry;
+use replicant_game::host_led_stretch::stretch_the_story_is_inside;
 use replicant_game::story_jump::{
     JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, StoryJumpRefusal, StoryJumpView,
     arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
@@ -328,6 +329,7 @@ fn every_jump_point_expects_level_zero() {
         StoryJumpPoint::ForestInside,
         StoryJumpPoint::ManorEmilFollows,
         StoryJumpPoint::ManorBeforeBossFight8,
+        StoryJumpPoint::BossFight9,
     ] {
         assert_eq!(loadout_player_level(point), Some(0));
     }
@@ -1096,4 +1098,41 @@ fn the_boss_fight_8_jump_enters_the_second_manor_area_at_point_one_and_places_no
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::ManorBeforeBossFight8, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::ManorBeforeBossFight8, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_9_jump_is_the_village_with_the_manor_fight_done_and_the_cutscene_flag_on() {
+    let steps = loadout_steps(StoryJumpPoint::BossFight9);
+    let (flags, counters, snow) = final_story_state(steps.clone());
+    for id in [
+        509, 510, 511, 512, 513, 131, 106, 533, 534, 535, 536, 537, 538, 539, 540, 1367,
+    ] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [136, 1433, 1434, 1435, 541, 542, 543, 1327, 1328] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert!(snow.contains(&1065));
+    assert_eq!(counters.get(&100), Some(&3));
+    assert_eq!(counters.get(&101), Some(&3));
+    assert!(steps.contains(&JumpStep::SetItem { id: 267, count: 1 }));
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_boss_fight_9_jump_lands_inside_no_host_led_stretch() {
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::BossFight9));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    assert!(stretch_the_story_is_inside("A_CENTER_VILLAGE_01", flag_on).is_none());
+    assert!(stretch_the_story_is_inside("A_SOUTH_MANSION_02", flag_on).is_none());
+}
+
+#[test]
+fn the_boss_fight_9_jump_enters_the_village_at_point_four_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::BossFight9);
+    assert_eq!(name, "A_CENTER_VILLAGE_01");
+    assert_eq!(point, 4);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::BossFight9, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::BossFight9, false).is_none());
 }
