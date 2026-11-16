@@ -12,11 +12,14 @@ use crate::enemy_bullets::{
 use crate::game::GameError;
 use crate::memory::GameMemory;
 use crate::offsets::{
-    HANDLE_POOL_POINTERS_RVA, HANDLE_POOL_SLOT_COUNT, NORMAL_BULLET_OWNER_HANDLE_OFFSET,
-    NORMAL_BULLET_STATE_OFFSET, NORMAL_BULLET_VTABLE_RVA, SCRIPT_BULLET_VTABLE_RVA,
-    TRACE_BULLET_VTABLE_RVA,
+    HANDLE_POOL_POINTERS_RVA, HANDLE_POOL_SLOT_COUNT, NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET,
+    NORMAL_BULLET_EFFECT_HANDLES_OFFSET, NORMAL_BULLET_OWNER_HANDLE_OFFSET,
+    NORMAL_BULLET_RECORD_EFFECT_IDS_OFFSET, NORMAL_BULLET_RECORD_POINTER_OFFSET,
+    NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET, NORMAL_BULLET_STATE_OFFSET,
+    NORMAL_BULLET_VTABLE_RVA, SCRIPT_BULLET_VTABLE_RVA, TRACE_BULLET_VTABLE_RVA,
 };
 use crate::puppet::actor_is_live;
+use replicant_proto::BULLET_EFFECT_SLOTS;
 
 const POINTER_BYTES: usize = 8;
 
@@ -51,6 +54,16 @@ pub struct EnemyBulletScan {
     pub bullets: Vec<EnemyBullet>,
     pub census: EnemyBulletCensus,
     pub uncopied: Vec<UncopiedScriptBullet>,
+    pub not_drawn: Vec<NotDrawnNormalBullet>,
+}
+
+/// A running ordinary bullet of a shared enemy with no live effect handle, so no flight is sent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotDrawnNormalBullet {
+    pub enemy: EnemyId,
+    pub record_effect_ids: [i32; BULLET_EFFECT_SLOTS],
+    pub effect_handles: [u32; BULLET_EFFECT_SLOTS],
+    pub ground_effect_id: i32,
 }
 
 /// A running script bullet of a shared enemy that the scan counted as having no effect to copy.
@@ -136,6 +149,12 @@ pub fn scan_enemy_bullets<M: GameMemory>(
         let mut no_effect = false;
         let drawn = drawn_bullet(memory, actor, slot, class, &mut scan.census, &mut no_effect);
         let Some((bullet, sprite)) = drawn else {
+            if class == BulletClass::Normal
+                && scan.not_drawn.len() < MAX_UNCOPIED_SCRIPT_BULLETS_READ
+                && let Some(not_drawn) = read_not_drawn_normal_bullet(memory, actor, enemy)
+            {
+                scan.not_drawn.push(not_drawn);
+            }
             if no_effect && scan.uncopied.len() < MAX_UNCOPIED_SCRIPT_BULLETS_READ {
                 scan.uncopied.push(UncopiedScriptBullet {
                     enemy,
@@ -171,6 +190,47 @@ pub fn scan_enemy_bullets<M: GameMemory>(
         });
     }
     Ok(scan)
+}
+
+pub fn read_not_drawn_normal_bullet<M: GameMemory>(
+    memory: &M,
+    actor: u64,
+    enemy: EnemyId,
+) -> Option<NotDrawnNormalBullet> {
+    let record = memory
+        .read_u64(actor + NORMAL_BULLET_RECORD_POINTER_OFFSET)
+        .ok()?;
+    let settings = memory
+        .read_u64(actor + NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET)
+        .ok()?;
+    let mut record_effect_ids = [0_i32; BULLET_EFFECT_SLOTS];
+    let mut effect_handles = [0_u32; BULLET_EFFECT_SLOTS];
+    for (index, (id, handle)) in
+        (0_u64..).zip(record_effect_ids.iter_mut().zip(&mut effect_handles))
+    {
+        if record != 0 {
+            *id = memory
+                .read_i32(record + NORMAL_BULLET_RECORD_EFFECT_IDS_OFFSET + index * 4)
+                .ok()?;
+        }
+        *handle = memory
+            .read_i32(actor + NORMAL_BULLET_EFFECT_HANDLES_OFFSET + index * 4)
+            .ok()?
+            .cast_unsigned();
+    }
+    let ground_effect_id = if settings == 0 {
+        0
+    } else {
+        memory
+            .read_i32(settings + NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET)
+            .ok()?
+    };
+    Some(NotDrawnNormalBullet {
+        enemy,
+        record_effect_ids,
+        effect_handles,
+        ground_effect_id,
+    })
 }
 
 pub(super) fn bullet_class<M: GameMemory>(memory: &M, actor: u64) -> Option<BulletClass> {

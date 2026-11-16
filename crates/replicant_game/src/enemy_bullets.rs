@@ -40,8 +40,8 @@ pub use puppet_pass::{
 pub use refusals::FlightRefusals;
 pub use scale_growth::{scale_growth_of_radius, shot_scale_growth};
 pub use scan::{
-    EnemyBullet, EnemyBulletCensus, EnemyBulletScan, UncopiedScriptBullet, bullets_of_enemies,
-    scan_enemy_bullets,
+    EnemyBullet, EnemyBulletCensus, EnemyBulletScan, NotDrawnNormalBullet, UncopiedScriptBullet,
+    bullets_of_enemies, read_not_drawn_normal_bullet, scan_enemy_bullets,
 };
 pub use script_bullet::{
     NotCopyable, UncopiedWhy, read_script_bullet, script_bullet_is_laser, why_not_copied,

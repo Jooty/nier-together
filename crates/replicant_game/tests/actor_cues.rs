@@ -150,3 +150,51 @@ fn a_stone_turn_goes_to_the_enemy_sync_and_effects_stay_with_the_effects() {
     assert!(actor_cue_goes_to_enemy_sync(&stone));
     assert!(!actor_cue_goes_to_enemy_sync(&sound));
 }
+
+#[test]
+fn a_widening_ordinary_bullet_with_no_live_effect_is_read_for_the_log() {
+    use replicant_game::enemy_bullets::read_not_drawn_normal_bullet;
+    use replicant_game::offsets::{
+        EFFECT_INVALID_HANDLE, NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET,
+        NORMAL_BULLET_EFFECT_HANDLES_OFFSET, NORMAL_BULLET_RECORD_EFFECT_IDS_OFFSET,
+        NORMAL_BULLET_RECORD_POINTER_OFFSET, NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET,
+    };
+
+    use crate::fake_memory::FakeMemory;
+
+    // L34 run0: "99:0's ordinary bullet ... width grows 21.43, ... ground effect 0".
+    let (bullet, record, settings) = (0x1000_0000_u64, 0x2000_0000_u64, 0x3000_0000_u64);
+    let boss = EnemyId {
+        group: 99,
+        ordinal: 0,
+    };
+    let mut memory = FakeMemory::new();
+    memory.put(
+        bullet + NORMAL_BULLET_RECORD_POINTER_OFFSET,
+        &record.to_le_bytes(),
+    );
+    memory.put(
+        bullet + NORMAL_BULLET_ATTACK_SETTINGS_POINTER_OFFSET,
+        &settings.to_le_bytes(),
+    );
+    for slot in 0..4_u64 {
+        let id: i32 = if slot == 0 { 5001 } else { 0 };
+        memory.put(
+            record + NORMAL_BULLET_RECORD_EFFECT_IDS_OFFSET + slot * 4,
+            &id.to_le_bytes(),
+        );
+        memory.put(
+            bullet + NORMAL_BULLET_EFFECT_HANDLES_OFFSET + slot * 4,
+            &EFFECT_INVALID_HANDLE.to_le_bytes(),
+        );
+    }
+    memory.put(
+        settings + NORMAL_BULLET_SETTINGS_GROUND_EFFECT_ID_OFFSET,
+        &0_i32.to_le_bytes(),
+    );
+    let read = read_not_drawn_normal_bullet(&memory, bullet, boss).expect("readable");
+    assert_eq!(read.enemy, boss);
+    assert_eq!(read.record_effect_ids, [5001, 0, 0, 0]);
+    assert_eq!(read.effect_handles, [EFFECT_INVALID_HANDLE; 4]);
+    assert_eq!(read.ground_effect_id, 0);
+}
