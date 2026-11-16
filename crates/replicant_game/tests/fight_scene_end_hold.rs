@@ -1,6 +1,6 @@
 use replicant_game::fight_sync::{
-    GuestFightStream, GuestNotice, GuestPop, HostFightStream, HostStreamOut, OWN_SCENE_SETTLE_CAP_MS,
-    OwnSceneRelease, PopSource, SlotState,
+    GuestFightStream, GuestNotice, GuestPop, HostFightStream, HostStreamOut,
+    OWN_SCENE_SETTLE_CAP_MS, OwnSceneRelease, PopSource, SlotState,
 };
 use replicant_proto::{Message, decode, encode};
 
@@ -11,6 +11,7 @@ const FIGHT_START: &str = "EID_2000_a0050_Start";
 const SCENE_START: &str = "EID_2000_a0080_Start";
 const SCENE_END: &str = "EID_2000_a0080_End";
 const NEXT_SCENE_START: &str = "EID_2000_a0082_Start";
+const BRIGHTNESS_CHANGE: &str = "CB_Change_Bright";
 const STREAM_SLOT: u64 = 0x1_4130_2070;
 const SCENE_START_RAN_MS: u64 = 10_000;
 const HOST_SCENE_END_QUEUED_MS: u64 = 32_911;
@@ -18,6 +19,10 @@ const GUEST_SCENE_OVER_MS: u64 = 32_928;
 const GUEST_SCENE_STILL_HELD_MS: u64 = 32_944;
 const GUEST_OWN_END_POPPED_MS: u64 = 32_996;
 const GUEST_OWN_END_SLOT: u64 = 0x1_4130_2990;
+const RUN7_GUEST_SCENE_CLEARED_MS: u64 = 34_105;
+const RUN7_HOSTS_BRIGHTNESS_CHANGE_HELD_MS: u64 = 34_204;
+const RUN7_GUEST_OWN_END_POPPED_MS: u64 = 34_221;
+const RUN7_GUEST_NEXT_TICK_MS: u64 = 34_237;
 
 fn over_the_wire(message: Message) -> Message {
     assert_eq!(message.validate(), Ok(()));
@@ -25,12 +30,16 @@ fn over_the_wire(message: Message) -> Message {
 }
 
 fn host_stream_of_the_fight() -> Vec<Message> {
+    host_stream_of_the_fight_with(&[SCENE_START, SCENE_END, NEXT_SCENE_START])
+}
+
+fn host_stream_of_the_fight_with(entries_after_the_start: &[&str]) -> Vec<Message> {
     let mut host = HostFightStream::new();
     host.enter_phase(PHASE, PACK);
     let mut outs = host.popped(FIGHT_START, Vec::new(), false);
     outs.extend(host.callback_registered());
     outs.extend(host.script_slot(SlotState::Idle));
-    for name in [SCENE_START, SCENE_END, NEXT_SCENE_START] {
+    for name in entries_after_the_start {
         outs.extend(host.popped(name, Vec::new(), false));
         outs.extend(host.script_slot(SlotState::Idle));
     }
@@ -47,8 +56,12 @@ fn released(guest: &mut GuestFightStream, now_ms: u64) -> Option<String> {
 }
 
 fn guest_in_the_scene_the_stream_started() -> GuestFightStream {
+    guest_in_the_scene_the_stream_started_with(host_stream_of_the_fight())
+}
+
+fn guest_in_the_scene_the_stream_started_with(stream: Vec<Message>) -> GuestFightStream {
     let mut guest = GuestFightStream::new();
-    for message in host_stream_of_the_fight() {
+    for message in stream {
         guest.receive_message(message, HERE);
     }
     assert_eq!(released(&mut guest, 0).as_deref(), Some(FIGHT_START));
@@ -89,7 +102,13 @@ fn the_hosts_scene_end_waits_until_the_guests_own_scene_end_has_popped() {
         [GuestNotice::EntryWaitsForOwnScene { name, .. }] if name == SCENE_END
     ));
     assert_eq!(
-        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        guest.pop(
+            SCENE_END,
+            PopSource::Queued,
+            GUEST_OWN_END_SLOT,
+            HERE,
+            false
+        ),
         GuestPop::Hold
     );
     assert_eq!(
@@ -118,7 +137,10 @@ fn the_hosts_scene_end_goes_at_the_cap_when_the_guests_own_end_never_pops() {
     guest.set_own_scene_playing(false);
     assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS), None);
     assert_eq!(
-        released(&mut guest, GUEST_SCENE_OVER_MS + OWN_SCENE_SETTLE_CAP_MS - 1),
+        released(
+            &mut guest,
+            GUEST_SCENE_OVER_MS + OWN_SCENE_SETTLE_CAP_MS - 1
+        ),
         None
     );
     guest.take_notices();
@@ -142,14 +164,26 @@ fn an_own_end_that_popped_while_the_scene_still_played_does_not_release_the_entr
     guest.set_own_scene_playing(true);
     assert_eq!(released(&mut guest, HOST_SCENE_END_QUEUED_MS), None);
     assert_eq!(
-        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        guest.pop(
+            SCENE_END,
+            PopSource::Queued,
+            GUEST_OWN_END_SLOT,
+            HERE,
+            false
+        ),
         GuestPop::Hold
     );
     guest.set_own_scene_playing(false);
     assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS), None);
     assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS + 500), None);
     assert_eq!(
-        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        guest.pop(
+            SCENE_END,
+            PopSource::Queued,
+            GUEST_OWN_END_SLOT,
+            HERE,
+            false
+        ),
         GuestPop::Hold
     );
     assert_eq!(
@@ -180,4 +214,50 @@ fn a_guest_with_no_scene_of_its_own_runs_the_hosts_scene_end_at_once() {
         Some(SCENE_END)
     );
     assert_eq!(guest.take_notices(), Vec::new());
+}
+
+#[test]
+fn an_own_end_the_guests_player_set_off_after_the_clear_releases_the_held_entry() {
+    // Run7 (build b33ea6d8db56) guest: the scene's lock cleared at 15:04:34.105, the host's
+    // CB_Change_Bright (seq 21) was held at 34.204, the guest's own EID_2000_a0080_End fired at
+    // 34.221 as a player-tested callback and was dropped ("not run, the host's stream runs the
+    // fight"), yet the entry went only at the 1000 ms cap (35.109).
+    let mut guest = guest_in_the_scene_the_stream_started_with(host_stream_of_the_fight_with(&[
+        SCENE_START,
+        BRIGHTNESS_CHANGE,
+        SCENE_END,
+    ]));
+    guest.set_own_scene_playing(true);
+    assert_eq!(released(&mut guest, RUN7_GUEST_SCENE_CLEARED_MS - 16), None);
+    guest.set_own_scene_playing(false);
+    assert_eq!(released(&mut guest, RUN7_GUEST_SCENE_CLEARED_MS), None);
+    assert_eq!(
+        released(&mut guest, RUN7_HOSTS_BRIGHTNESS_CHANGE_HELD_MS),
+        None
+    );
+    guest.take_notices();
+    assert_eq!(
+        guest.pop_by_player(
+            SCENE_END,
+            Vec::new(),
+            HERE,
+            false,
+            RUN7_GUEST_OWN_END_POPPED_MS
+        ),
+        GuestPop::Hold
+    );
+    assert_eq!(
+        released(&mut guest, RUN7_GUEST_NEXT_TICK_MS).as_deref(),
+        Some(BRIGHTNESS_CHANGE)
+    );
+    assert!(matches!(
+        guest.take_notices().as_slice(),
+        [GuestNotice::EntryGoesAfterOwnScene {
+            name,
+            since_scene_cleared_ms,
+            by: OwnSceneRelease::OwnEndPopped,
+            ..
+        }] if name == BRIGHTNESS_CHANGE
+            && *since_scene_cleared_ms == RUN7_GUEST_NEXT_TICK_MS - RUN7_GUEST_SCENE_CLEARED_MS
+    ));
 }
