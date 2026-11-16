@@ -1,5 +1,8 @@
 use automata_game::exe::ExeVariant;
 use automata_game::save_redirect::SaveRedirectStatus;
+use automata_game::story_jump::{
+    Landing, OPEN_STORY_JUMPS, menu_label, press_outcome, story_jump_by_id,
+};
 use automata_game::travel::{GoToPartnerRefusal, JumpRefusal, TravelPoint, TravelView};
 use nt_hook::menu::{
     AreaChangeRefusal, AreaEntry, CoOpStatus, ExtraPanel, FixEntry, FixOutcome, GameMenu, MenuNote,
@@ -13,7 +16,7 @@ use crate::menu::{
 use crate::net::link_not_started_status;
 
 const NO_AREAS_YET_TEXT: &str = "no areas yet";
-const NO_STORY_JUMPS_YET_TEXT: &str = "no story jumps yet";
+const UNKNOWN_STORY_JUMP_TEXT: &str = "not a story jump";
 const NO_FIXES_TEXT: &str = "no fixes";
 const NO_START_STATUS_TEXT: &str = "start: not started";
 const NO_PARTNER_YET_TEXT: &str = "no partner yet";
@@ -28,6 +31,7 @@ pub struct AutomataMenu {
     build_commit: &'static str,
     save_status: fn() -> SaveRedirectStatus,
     start_status: fn() -> String,
+    start_index_of_record: fn(usize) -> Option<usize>,
     story_status: fn() -> String,
     partner_body_status: fn() -> String,
     co_op: fn() -> CoOpStatus,
@@ -42,6 +46,7 @@ impl AutomataMenu {
             build_commit,
             save_status: || SaveRedirectStatus::NotRedirected,
             start_status: || NO_START_STATUS_TEXT.to_owned(),
+            start_index_of_record: |_| None,
             story_status: || NO_STORY_STATUS_TEXT.to_owned(),
             partner_body_status: || NO_PARTNER_BODY_STATUS_TEXT.to_owned(),
             co_op: link_not_started_status,
@@ -67,6 +72,14 @@ impl AutomataMenu {
 
     pub fn with_start_status(mut self, start_status: fn() -> String) -> Self {
         self.start_status = start_status;
+        self
+    }
+
+    pub fn with_start_index_of_record(
+        mut self,
+        start_index_of_record: fn(usize) -> Option<usize>,
+    ) -> Self {
+        self.start_index_of_record = start_index_of_record;
         self
     }
 
@@ -151,11 +164,22 @@ impl GameMenu for AutomataMenu {
     }
 
     fn story_jumps(&self) -> Vec<StoryJumpEntry> {
-        Vec::new()
+        OPEN_STORY_JUMPS
+            .iter()
+            .map(|jump| StoryJumpEntry {
+                id: jump.id,
+                label: menu_label(jump),
+            })
+            .collect()
     }
 
-    fn run_story_jump(&self, _id: u32) -> Result<String, String> {
-        Err(NO_STORY_JUMPS_YET_TEXT.to_owned())
+    fn run_story_jump(&self, id: u32) -> Result<String, String> {
+        let jump = story_jump_by_id(id).ok_or_else(|| UNKNOWN_STORY_JUMP_TEXT.to_owned())?;
+        let start_index = match jump.landing {
+            Landing::ChapterRecord(record) => (self.start_index_of_record)(record),
+            Landing::NewGame | Landing::NotReady(_) => None,
+        };
+        press_outcome(jump, start_index)
     }
 
     fn fixes(&self) -> Vec<FixEntry> {

@@ -336,7 +336,7 @@ fn the_table_is_logged_in_one_line_and_the_chosen_candidate_builds_the_plan() {
     assert_eq!(
         logs,
         [
-            "start: 3 chapter records, 2 candidates (the candidate rule is a guess), chose index 1, phase 0x300"
+            "start: 3 chapter records, 3 candidates (every record can be chosen), chose index 1, phase 0x300"
         ]
     );
     let step = machine.step(5, &readings(idle_title()));
@@ -387,7 +387,7 @@ fn an_index_out_of_range_refuses_with_its_own_line() {
     let logs = machine.table_read(Ok(table()));
     assert!(
         logs.iter()
-            .any(|l| l == "start: refused, start_index 5 is out of range (2 candidates)")
+            .any(|l| l == "start: refused, start_index 5 is out of range (3 candidates)")
     );
     assert_eq!(
         machine.step(1, &readings(idle_title())).action,
@@ -399,7 +399,7 @@ fn an_index_out_of_range_refuses_with_its_own_line() {
 fn a_table_without_candidates_refuses() {
     let mut machine = world_machine(0);
     machine.step(0, &readings(idle_title()));
-    let logs = machine.table_read(Ok(vec![record(0, 1, 0x100, "opening_Prologue")]));
+    let logs = machine.table_read(Ok(Vec::new()));
     assert!(
         logs.iter()
             .any(|l| l == "start: refused, no start candidates in the chapter table")

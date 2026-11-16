@@ -137,6 +137,13 @@ pub fn status_line() -> String {
         .unwrap_or_default()
 }
 
+pub fn start_index_of_record(record_index: usize) -> Option<usize> {
+    let guard = DRIVER.try_lock().ok()?;
+    let driver = guard.as_ref()?;
+    let records = read_chapter_table(&driver.calls).ok()?;
+    automata_game::start::start_index_of_record(&records, record_index)
+}
+
 pub fn tick() {
     let Ok(mut guard) = DRIVER.try_lock() else {
         return;

@@ -116,6 +116,8 @@ mod start_records;
 mod story_follow;
 #[path = "story_gate.rs"]
 mod story_gate;
+#[path = "story_jump.rs"]
+mod story_jump;
 #[path = "story_place.rs"]
 mod story_place;
 #[path = "story_steps.rs"]

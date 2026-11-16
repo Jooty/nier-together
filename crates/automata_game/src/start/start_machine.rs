@@ -627,7 +627,7 @@ impl StartMachine {
 
     fn choose(&mut self, record_count: usize, found: &[Candidate], logs: &mut Vec<String>) {
         let counts = format!(
-            "start: {record_count} chapter records, {} candidates (the candidate rule is a guess)",
+            "start: {record_count} chapter records, {} candidates (every record can be chosen)",
             found.len()
         );
         if found.is_empty() {
