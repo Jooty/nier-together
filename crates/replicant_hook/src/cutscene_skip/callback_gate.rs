@@ -829,6 +829,14 @@ pub(super) fn tick(build: &VerifiedBuild, net: &NetThread, view: &NetShared) {
                     fired.name
                 ));
             }
+            PartnerFire::FollowHostFromAfar => {
+                releases.push(fired.name.clone());
+                log_line(&format!(
+                    "callback follow: the host started {}, a step that places or moves a story actor, it starts here too though you are {}",
+                    fired.name,
+                    partner_place.describe()
+                ));
+            }
             PartnerFire::Noted => log_line(&format!(
                 "callback follow: the partner fired {}, your game has not yet",
                 fired.name

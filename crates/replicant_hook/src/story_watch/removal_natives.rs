@@ -60,7 +60,7 @@ pub(super) fn story_has_taken_her() -> bool {
         .settled_out()
 }
 
-pub(super) fn forget_removal() {
+pub(crate) fn forget_removal() {
     REMOVAL
         .lock()
         .unwrap_or_else(PoisonError::into_inner)

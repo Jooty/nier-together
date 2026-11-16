@@ -1,4 +1,6 @@
-use crate::host_led_stretch::{HostLedStretch, stretch_armed_by, stretch_starting_at};
+use crate::host_led_stretch::{
+    HostLedStretch, stretch_armed_by, stretch_starting_at, stretch_the_story_is_inside,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StretchEnd {
@@ -12,6 +14,7 @@ pub enum StretchEnd {
 pub enum StretchPlace {
     NotInOne,
     InsideIt,
+    InsideItTheGuestIsNotTakenAlong,
     ItsLastStep,
 }
 
@@ -20,6 +23,7 @@ pub enum StretchChange {
     Armed(&'static HostLedStretch),
     Disarmed(&'static HostLedStretch, StretchEnd),
     Started(&'static HostLedStretch),
+    StartedFromTheStory(&'static HostLedStretch),
     Ended(&'static HostLedStretch, StretchEnd),
 }
 
@@ -30,6 +34,7 @@ pub struct HostLedStretchState {
     armed: Option<(&'static HostLedStretch, u64)>,
     on: Option<(&'static HostLedStretch, u64)>,
     ended_at_its_last_step: Option<&'static HostLedStretch>,
+    over_in_these_packs: Option<&'static HostLedStretch>,
 }
 
 impl HostLedStretchState {
@@ -38,6 +43,7 @@ impl HostLedStretchState {
             armed: None,
             on: None,
             ended_at_its_last_step: None,
+            over_in_these_packs: None,
         }
     }
 
@@ -55,6 +61,9 @@ impl HostLedStretchState {
         if let Some((stretch, _)) = self.on {
             if stretch.last_step == step {
                 return StretchPlace::ItsLastStep;
+            }
+            if stretch.guest_is_not_taken_along {
+                return StretchPlace::InsideItTheGuestIsNotTakenAlong;
             }
             return StretchPlace::InsideIt;
         }
@@ -76,6 +85,7 @@ impl HostLedStretchState {
             if stretch.last_pack == pack && stretch.last_step == step {
                 self.on = None;
                 self.ended_at_its_last_step = Some(stretch);
+                self.over_in_these_packs = Some(stretch);
                 return Some(StretchChange::Ended(stretch, StretchEnd::LastStep));
             }
             return None;
@@ -91,17 +101,47 @@ impl HostLedStretchState {
         self.armed = None;
         self.on = Some((stretch, now_ms));
         self.ended_at_its_last_step = None;
+        self.over_in_these_packs = None;
         Some(StretchChange::Started(stretch))
+    }
+
+    /// Starts the stretch the story state of `pack` is inside when none is on: after a save is
+    /// loaded or a story jump lands there, no live step starts it. A stretch that ended at its
+    /// last step or ran past its limit is not started again until this game leaves its packs.
+    pub fn start_from_the_story(
+        &mut self,
+        pack: &str,
+        flag_on: impl Fn(u16) -> bool,
+        now_ms: u64,
+    ) -> Option<StretchChange> {
+        if self.on.is_some() {
+            return None;
+        }
+        let stretch = stretch_the_story_is_inside(pack, flag_on)?;
+        if self.over_in_these_packs == Some(stretch) {
+            return None;
+        }
+        self.armed = None;
+        self.on = Some((stretch, now_ms));
+        self.ended_at_its_last_step = None;
+        Some(StretchChange::StartedFromTheStory(stretch))
     }
 
     /// Once per tick with the pack this game is in (`None` while it loads or is in a menu).
     pub fn check(&mut self, pack: Option<&str>, now_ms: u64) -> Option<StretchChange> {
+        if let (Some(over), Some(pack)) = (self.over_in_these_packs, pack)
+            && pack != over.pack
+            && pack != over.last_pack
+        {
+            self.over_in_these_packs = None;
+        }
         let Some((stretch, since_ms)) = self.on else {
             return self.check_armed(pack, now_ms);
         };
         let end = if pack.is_some_and(|pack| pack != stretch.pack && pack != stretch.last_pack) {
             StretchEnd::LeftThePack
         } else if now_ms.saturating_sub(since_ms) >= stretch.ends_itself_after_ms {
+            self.over_in_these_packs = Some(stretch);
             StretchEnd::TookTooLong
         } else {
             return None;
@@ -112,6 +152,7 @@ impl HostLedStretchState {
 
     pub fn end_with_the_session(&mut self) -> Option<StretchChange> {
         self.ended_at_its_last_step = None;
+        self.over_in_these_packs = None;
         if let Some((stretch, _)) = self.on.take() {
             self.armed = None;
             return Some(StretchChange::Ended(stretch, StretchEnd::SessionOver));

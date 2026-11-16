@@ -12,6 +12,22 @@ pub fn started_line(stretch: &HostLedStretch, host: bool) -> String {
     )
 }
 
+pub fn started_from_the_story_line(stretch: &HostLedStretch, host: bool, pack: &str) -> String {
+    let who = if host {
+        "the guest watches you"
+    } else {
+        "you watch the host, your body hidden and held"
+    };
+    let flags = match (stretch.story_on_flag, stretch.story_off_flag) {
+        (Some(on), Some(off)) => format!("g{on} on and g{off} off"),
+        _ => "no story flags".to_owned(),
+    };
+    format!(
+        "host-led stretch: the story state in {pack} ({flags}) is inside the stretch started by {}, so it is on without that step (a load or a jump); {who} to {} in {}",
+        stretch.first_step, stretch.last_step, stretch.last_pack
+    )
+}
+
 pub fn ended_line(stretch: &HostLedStretch, end: StretchEnd) -> String {
     format!(
         "host-led stretch: {} ended, {}",

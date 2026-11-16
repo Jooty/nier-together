@@ -3,17 +3,19 @@ use std::sync::{Mutex, PoisonError};
 use replicant_game::Replicant;
 use replicant_game::host_led_stretch::{
     GUEST_REFUSED_DOOR_CALLBACK_PREFIX, HostLedStretch, HostLedStretchState, StretchChange,
-    StretchPlace, armed_line, disarmed_line, ended_line, started_line,
-    stretch_the_guest_waits_to_start,
+    StretchEnd, StretchPlace, armed_line, disarmed_line, ended_line, started_from_the_story_line,
+    started_line, stretch_the_guest_waits_to_start,
 };
 use replicant_game::shared_events::phase_name;
 use replicant_game::stay_together::FollowRole;
-use replicant_proto::{CallbackFired, Message};
+use replicant_game::story_progress::StoryArrays;
+use replicant_proto::{CallbackFired, Message, StoryArray};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net::{self, NetState, net_clock_ms};
+use crate::story_progress::{read_live_arrays, with_host_story};
 
 static STRETCH: Mutex<HostLedStretchState> = Mutex::new(HostLedStretchState::new());
 
@@ -43,7 +45,9 @@ pub(crate) fn note_own_step(name: &str, the_gate_sends_it: bool) {
     report(change, true, name);
     // The step's own fade out runs before the next tick would arm the fade sync.
     match change {
-        StretchChange::Started(_) => crate::fade_sync::arm_host_led_stretch(true),
+        StretchChange::Started(_) | StretchChange::StartedFromTheStory(_) => {
+            crate::fade_sync::arm_host_led_stretch(true);
+        }
         StretchChange::Ended(..) => crate::fade_sync::arm_host_led_stretch(false),
         StretchChange::Armed(_) | StretchChange::Disarmed(..) => {}
     }
@@ -81,6 +85,22 @@ pub(crate) fn note_hosts_step(phase: u16, name: &str) {
     drop(stretch);
     if let Some(change) = change {
         report(change, false, name);
+        give_her_back_at_the_last_step(change);
+    }
+}
+
+pub(crate) fn note_fight_stream_step(name: &str) {
+    let Some(net) = net::handle() else {
+        return;
+    };
+    let view = net.view();
+    let Some(phase) = view.local.as_ref().map(|local| local.phase) else {
+        return;
+    };
+    match FollowRole::from_slot(view.local_slot) {
+        FollowRole::Host => note_own_step(name, true),
+        FollowRole::Guest => note_hosts_step(phase, name),
+        FollowRole::Unknown => {}
     }
 }
 
@@ -90,10 +110,11 @@ pub(crate) fn tick(build: &VerifiedBuild) {
         let pack = Replicant::new(InProcessMemory::new(build))
             .current_phase()
             .ok();
-        STRETCH
+        let checked = STRETCH
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .check(pack.as_deref(), net_clock_ms())
+            .check(pack.as_deref(), net_clock_ms());
+        checked.or_else(|| start_from_the_story(build, pack.as_deref()?))
     } else {
         STRETCH
             .lock()
@@ -194,6 +215,44 @@ pub(crate) fn guest_is_not_taken_along_now() -> Option<&'static HostLedStretch> 
         .filter(|stretch| stretch.guest_is_not_taken_along)
 }
 
+fn start_from_the_story(build: &VerifiedBuild, pack: &str) -> Option<StretchChange> {
+    if STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .current()
+        .is_some()
+    {
+        return None;
+    }
+    let start = |arrays: &StoryArrays| {
+        STRETCH
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .start_from_the_story(
+                pack,
+                |id| arrays.flag(StoryArray::GameFlags, id),
+                net_clock_ms(),
+            )
+    };
+    if is_the_guest() {
+        with_host_story(start).flatten()
+    } else {
+        start(&read_live_arrays(build)?)
+    }
+}
+
+fn give_her_back_at_the_last_step(change: StretchChange) {
+    if let StretchChange::Ended(stretch, StretchEnd::LastStep) = change
+        && stretch.the_guest_plays_from_its_last_step
+    {
+        crate::story_watch::forget_removal();
+        log_line(&format!(
+            "host-led stretch: the watch ends at {}, the story's own call that brings the companion back comes later and is not waited for",
+            stretch.last_step
+        ));
+    }
+}
+
 fn is_the_guest() -> bool {
     net::handle()
         .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Guest)
@@ -204,6 +263,13 @@ fn report(change: StretchChange, host: bool, step: &str) {
         StretchChange::Armed(stretch) => armed_line(stretch, step),
         StretchChange::Disarmed(stretch, end) => disarmed_line(stretch, end),
         StretchChange::Started(stretch) => started_line(stretch, host),
+        StretchChange::StartedFromTheStory(stretch) => {
+            let pack = net::handle()
+                .and_then(|net| net.view().local.as_ref().map(|local| local.phase))
+                .and_then(phase_name)
+                .unwrap_or("this pack");
+            started_from_the_story_line(stretch, host, pack)
+        }
         StretchChange::Ended(stretch, end) => ended_line(stretch, end),
     });
 }
