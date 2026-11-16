@@ -248,39 +248,27 @@ fn every_fight_in_the_table_has_an_over_flag_past_its_approach() {
 }
 
 #[test]
-fn she_is_given_back_for_an_event_scene_and_a_moment_after_it() {
+fn she_is_given_back_for_an_event_scene_and_off_again_the_tick_it_ends() {
+    // run-1115j host run1: the scene began 01:58:07.119 (active byte found 1), the event scene
+    // flag dropped at 01:58:23.461, and on build 856a5a2e she stayed active to 01:58:26.464
     let mut rule = rule_with_her_held_off();
+    let scene_began = 7_119;
+    let scene_end = 23_461;
     assert_eq!(
-        rule.step(tick_at(1_000, false, true)),
+        rule.step(tick_at(scene_began, true, true)),
         CompanionOffStep::Lend {
-            write_active: true,
+            write_active: false,
             why: CompanionLendReason::Scene
         }
     );
     assert_eq!(
-        rule.step(tick_at(1_016, true, true)),
+        rule.step(tick_at(scene_began + 16, true, true)),
         CompanionOffStep::Leave
     );
     assert_eq!(rule.lent_for(), Some(&CompanionLendReason::Scene));
-    let scene_end = 30_000;
+    assert_eq!(COMPANION_LENT_AFTER_A_SCENE_MS, 0);
     assert_eq!(
         rule.step(tick_at(scene_end, true, false)),
-        CompanionOffStep::Leave
-    );
-    assert_eq!(
-        rule.step(tick_at(
-            scene_end + COMPANION_LENT_AFTER_A_SCENE_MS - 1,
-            true,
-            false
-        )),
-        CompanionOffStep::Leave
-    );
-    assert_eq!(
-        rule.step(tick_at(
-            scene_end + COMPANION_LENT_AFTER_A_SCENE_MS,
-            true,
-            false
-        )),
         CompanionOffStep::LendOver {
             deactivate: true,
             why: CompanionLendReason::Scene
@@ -288,12 +276,32 @@ fn she_is_given_back_for_an_event_scene_and_a_moment_after_it() {
     );
     assert_eq!(rule.lent_for(), None);
     assert_eq!(
-        rule.step(tick_at(
-            scene_end + COMPANION_LENT_AFTER_A_SCENE_MS + 16,
-            false,
-            false
-        )),
+        rule.step(tick_at(scene_end + 16, false, false)),
         CompanionOffStep::Leave
+    );
+    assert_eq!(
+        rule.step(tick_at(scene_end + 3_000, true, false)),
+        CompanionOffStep::Deactivate
+    );
+}
+
+#[test]
+fn a_scene_that_comes_back_after_a_gap_lends_her_again_as_the_scripts_left_her() {
+    let mut rule = rule_with_her_held_off();
+    rule.step(tick_at(1_000, true, true));
+    assert_eq!(
+        rule.step(tick_at(1_016, true, false)),
+        CompanionOffStep::LendOver {
+            deactivate: true,
+            why: CompanionLendReason::Scene
+        }
+    );
+    assert_eq!(
+        rule.step(tick_at(1_032, false, true)),
+        CompanionOffStep::Lend {
+            write_active: true,
+            why: CompanionLendReason::Scene
+        }
     );
 }
 
@@ -353,13 +361,8 @@ fn a_lend_keeps_her_as_the_scripts_leave_her() {
     rule.step(tick_at(1_000, false, true));
     rule.step(tick_at(1_016, true, true));
     rule.step(tick_at(1_032, false, true));
-    rule.step(tick_at(2_000, false, false));
     assert_eq!(
-        rule.step(tick_at(
-            2_000 + COMPANION_LENT_AFTER_A_SCENE_MS,
-            false,
-            false
-        )),
+        rule.step(tick_at(2_000, false, false)),
         CompanionOffStep::LendOver {
             deactivate: false,
             why: CompanionLendReason::Scene

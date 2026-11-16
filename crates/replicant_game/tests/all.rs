@@ -167,6 +167,8 @@ mod host_view;
 mod inventory;
 #[path = "invincibility.rs"]
 mod invincibility;
+#[path = "kaine_ai_hold.rs"]
+mod kaine_ai_hold;
 #[path = "kaine_box_moves.rs"]
 mod kaine_box_moves;
 #[path = "kaine_companion_off.rs"]
@@ -177,6 +179,8 @@ mod kaine_companion_off_everywhere;
 mod kaine_companion_off_fallback;
 #[path = "kaine_door_state.rs"]
 mod kaine_door_state;
+#[path = "kaine_feet_drive.rs"]
+mod kaine_feet_drive;
 #[path = "kaine_feet_line.rs"]
 mod kaine_feet_line;
 #[path = "kaine_hit_power.rs"]

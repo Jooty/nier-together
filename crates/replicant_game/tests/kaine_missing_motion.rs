@@ -117,6 +117,52 @@ fn an_empty_name_is_never_logged_and_a_name_without_the_pack_prefix_is() {
     assert!(missed.observe("jog_lp", None).is_some());
 }
 
+const NIER025_NAMES_MISSED_AT_THE_STORY_JUMP_LOAD: usize = 48;
+const HER_MOTION_WORK: u64 = 0x1_4000_0000;
+const ANOTHER_MOTION_WORK: u64 = 0x1_5000_0000;
+
+#[test]
+fn the_flood_of_another_packs_names_at_the_load_no_longer_hides_the_indoor_miss() {
+    // run-1115j guest run2, 01:44:50.423 to 01:44:50.426: 48 distinct NIER025_* misses at the
+    // story jump load used up the old cap of 48 before she ever walked indoors
+    let mut missed = MissedMotionNames::new();
+    for number in 0..NIER025_NAMES_MISSED_AT_THE_STORY_JUMP_LOAD {
+        let name = format!("NIER025_swl_missing_{number}");
+        assert!(missed.observe_on(HER_MOTION_WORK, &name, None).is_some());
+    }
+    assert!(
+        missed
+            .observe_on(HER_MOTION_WORK, "NIER025_jog_lp", None)
+            .is_some()
+    );
+    assert_eq!(
+        missed.last_missed_on(HER_MOTION_WORK),
+        Some("NIER025_jog_lp")
+    );
+}
+
+#[test]
+fn the_last_miss_is_kept_per_motion_work_and_a_miss_with_a_twin_is_not_a_miss() {
+    let mut missed = MissedMotionNames::new();
+    missed.observe_on(HER_MOTION_WORK, "NIER020_sws_walk_lp", None);
+    missed.observe_on(ANOTHER_MOTION_WORK, "EM_slime_walk", None);
+    missed.observe_on(HER_MOTION_WORK, "NIER013_jog_lp", Some("KAINE015_run_lp"));
+    assert_eq!(
+        missed.last_missed_on(HER_MOTION_WORK),
+        Some("NIER020_sws_walk_lp")
+    );
+    assert_eq!(
+        missed.last_missed_on(ANOTHER_MOTION_WORK),
+        Some("EM_slime_walk")
+    );
+    assert_eq!(missed.last_missed_on(0x9999), None);
+    missed.observe_on(HER_MOTION_WORK, "NIER020_sws_walk_lp", None);
+    assert_eq!(
+        missed.last_missed_on(HER_MOTION_WORK),
+        Some("NIER020_sws_walk_lp")
+    );
+}
+
 #[test]
 fn the_log_stops_after_the_most_distinct_names() {
     let mut missed = MissedMotionNames::new();

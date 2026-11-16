@@ -7,16 +7,42 @@ pub const MOTION_SUFFIXES_HER_PACK_LACKS_WITH_THEIR_TWINS: [(&str, &str); 3] = [
     ("bioRun_ed", "run_ed"),
     ("jog_lp", "run_lp"),
 ];
-pub const MOST_DISTINCT_MISSED_MOTION_NAMES_LOGGED: usize = 48;
+pub const MOST_DISTINCT_MISSED_MOTION_NAMES_LOGGED: usize = 400;
+pub const MOST_MOTION_WORKS_WITH_A_LAST_MISS: usize = 16;
 
 #[derive(Debug, Default)]
 pub struct MissedMotionNames {
     seen: Vec<String>,
+    last_by_work: Vec<(u64, String)>,
 }
 
 impl MissedMotionNames {
     pub const fn new() -> Self {
-        Self { seen: Vec::new() }
+        Self {
+            seen: Vec::new(),
+            last_by_work: Vec::new(),
+        }
+    }
+
+    /// A miss on the motion work at `work`: when no twin stands in, remembered as that work's
+    /// last miss (so the feet line can name what the game asked her body for); logged once per
+    /// distinct name either way.
+    pub fn observe_on(&mut self, work: u64, name: &str, twin: Option<&str>) -> Option<String> {
+        if !name.is_empty() && twin.is_none() {
+            if let Some((_, last)) = self.last_by_work.iter_mut().find(|(seen, _)| *seen == work) {
+                name.clone_into(last);
+            } else if self.last_by_work.len() < MOST_MOTION_WORKS_WITH_A_LAST_MISS {
+                self.last_by_work.push((work, name.to_owned()));
+            }
+        }
+        self.observe(name, twin)
+    }
+
+    pub fn last_missed_on(&self, work: u64) -> Option<&str> {
+        self.last_by_work
+            .iter()
+            .find(|(seen, _)| *seen == work)
+            .map(|(_, name)| name.as_str())
     }
 
     pub fn observe(&mut self, name: &str, twin: Option<&str>) -> Option<String> {

@@ -79,9 +79,23 @@ fn twin_index(lookup: MotionIndexByName, this: *mut c_void, name: *const u8) -> 
     let line = MISSED_NAMES
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .observe(asked, twin.as_deref().filter(|_| found.is_some()));
+        .observe_on(
+            this as u64,
+            asked,
+            twin.as_deref().filter(|_| found.is_some()),
+        );
     if let Some(line) = line {
         log_line(&line);
     }
     found
+}
+
+/// The motion name the game last asked the motion work at `motion_work` for and did not find
+/// (nor a twin for), if any miss was seen there.
+pub fn last_missed_motion_on(motion_work: u64) -> Option<String> {
+    MISSED_NAMES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .last_missed_on(motion_work)
+        .map(str::to_owned)
 }

@@ -103,7 +103,7 @@ fn a_listed_fight_that_closes_leaves_her_off_under_the_general_rule() {
 }
 
 #[test]
-fn her_script_mode_lends_her_until_a_moment_after_it_ends() {
+fn her_script_mode_lends_her_until_the_tick_it_ends() {
     let mut rule = general_rule_with_her_held_off();
     rule.function_ran("ScriptMode_to_Kaine_01");
     assert_eq!(
@@ -117,19 +117,34 @@ fn her_script_mode_lends_her_until_a_moment_after_it_ends() {
         rule.step(script_mode_tick(60_000, true, true)),
         CompanionOffStep::Leave
     );
+    assert_eq!(COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS, 0);
     assert_eq!(
         rule.step(script_mode_tick(61_000, true, false)),
-        CompanionOffStep::Leave
-    );
-    assert_eq!(
-        rule.step(script_mode_tick(
-            61_000 + COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS,
-            true,
-            false
-        )),
         CompanionOffStep::LendOver {
             deactivate: true,
             why: CompanionLendReason::ScriptMode("ScriptMode_to_Kaine_01".to_owned())
+        }
+    );
+    assert_eq!(
+        rule.step(script_mode_tick(61_016, true, false)),
+        CompanionOffStep::Deactivate
+    );
+}
+
+#[test]
+fn a_driver_call_keeps_its_window_and_she_is_off_again_when_it_ends() {
+    let mut rule = general_rule_with_her_held_off();
+    rule.function_ran(ELEVATOR_SEEK);
+    rule.function_addresses_her(ELEVATOR_SEEK, tick(5_000, true, false));
+    assert_eq!(
+        rule.step(tick(5_000 + COMPANION_LENT_AFTER_A_CALL_MS - 1, true, true)),
+        CompanionOffStep::Leave
+    );
+    assert_eq!(
+        rule.step(tick(5_000 + COMPANION_LENT_AFTER_A_CALL_MS, true, true)),
+        CompanionOffStep::LendOver {
+            deactivate: true,
+            why: CompanionLendReason::Call(ELEVATOR_SEEK.to_owned())
         }
     );
 }

@@ -1,3 +1,4 @@
+mod ai_hold;
 mod box_moves;
 mod companion_drivers;
 mod companion_off;
@@ -25,6 +26,7 @@ mod stand_in_beats;
 mod stats;
 mod swapped_level;
 
+pub use ai_hold::{HerAiHoldReading, format_held_ticks, her_ai_is_held};
 pub use box_moves::{
     BODIES_WITHOUT_BOX_PUSH_OR_PULL_MOTIONS, SwappedBoxMoveNote, swapped_body_box_move_text,
     swapped_body_moves_boxes_without_motions,
@@ -125,8 +127,8 @@ pub const HELD_TRAP_RELEASE_DELAY_MS: u64 = 3_000;
 pub const SCENE_STAND_IN_MAX_OPEN_MS: u64 = 180_000;
 pub const COMPANION_PLACE_TRUSTED_WITHIN_UNITS: f32 = 3.0;
 pub const COMPANION_LENT_AFTER_A_CALL_MS: u64 = 3_000;
-pub const COMPANION_LENT_AFTER_A_SCENE_MS: u64 = 3_000;
-pub const COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS: u64 = 3_000;
+pub const COMPANION_LENT_AFTER_A_SCENE_MS: u64 = 0;
+pub const COMPANION_LENT_AFTER_HER_SCRIPT_MODE_MS: u64 = 0;
 pub const COMPANION_OFF_EVERYWHERE_ROW_NAME: &str = "everywhere";
 pub const COMPANION_OFF_GAUGE_CLOSED_FOR_GOOD_MS: u64 = 20_000;
 pub const COMPANION_OFF_BOSS_GONE_FOR_GOOD_MS: u64 = 20_000;
