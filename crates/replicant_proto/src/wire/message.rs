@@ -13,16 +13,16 @@ use crate::wire::{
     EnemySnapshot, EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim,
     FightPromptCount, FightRadioWaitEnded, FightRequest, FightRequestAnswer, FightStreamEntry,
     FightTape, FightWindowMark, FollowPhase, GameReadiness, GatherAnswer, GatherForScene,
-    GuestWatches, ItemCounts, ItemPickup, ItemTake, LiftCall, LiftCallAnswer, LobbyBody,
-    LobbyCharacter, LobbyReady, LobbyStart, MAX_DISPLAY_NAME_BYTES, MAX_PLAYERS, MessageHandlerRan,
-    MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup, PartnerNotice, PausedHits,
-    PlayerHit, PlayerSettings, PlayerState, PowerModelEnded, PowerModelMotion, PowerModelState,
-    PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage, ScriptRoll, SeatPart, SeatReceipt,
-    SessionOptions, SharedFunctionRan, ShotCue, SkipPromptAnswer, SkipPromptVerdict, SkyAssets,
-    SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges, StoryDigest,
-    StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize, TeleportHere,
-    TutorialPrompt, VoiceCharacter, WallBroken, WireError, WorldEffectMove, WorldEffectPlay,
-    WorldObjectBroken, WorldObjectMoved,
+    GuestWatches, HostDefeatScreen, ItemCounts, ItemPickup, ItemTake, LiftCall, LiftCallAnswer,
+    LobbyBody, LobbyCharacter, LobbyReady, LobbyStart, MAX_DISPLAY_NAME_BYTES, MAX_PLAYERS,
+    MessageHandlerRan, MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup,
+    PartnerNotice, PausedHits, PlayerHit, PlayerSettings, PlayerState, PowerModelEnded,
+    PowerModelMotion, PowerModelState, PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage,
+    ScriptRoll, SeatPart, SeatReceipt, SessionOptions, SharedFunctionRan, ShotCue,
+    SkipPromptAnswer, SkipPromptVerdict, SkyAssets, SkyRecordChunk, SkyState, SoundPlay,
+    StoryArrayPart, StoryCall, StoryChanges, StoryDigest, StoryJump, StoryRefused, StoryRequest,
+    StoryWrite, TalkChoice, TalkWindowSize, TeleportHere, TutorialPrompt, VoiceCharacter,
+    WallBroken, WireError, WorldEffectMove, WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -154,6 +154,7 @@ pub enum Message {
     WorldObjectBroken(WorldObjectBroken),
     GuestWatches(GuestWatches),
     TalkWindowSize(TalkWindowSize),
+    HostDefeatScreen(HostDefeatScreen),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -292,6 +293,7 @@ impl Message {
             Message::WorldObjectBroken(_) => "WorldObjectBroken",
             Message::GuestWatches(_) => "GuestWatches",
             Message::TalkWindowSize(_) => "TalkWindowSize",
+            Message::HostDefeatScreen(_) => "HostDefeatScreen",
         }
     }
 
@@ -422,6 +424,7 @@ impl Message {
                 | Message::WorldObjectBroken(_)
                 | Message::GuestWatches(_)
                 | Message::TalkWindowSize(_)
+                | Message::HostDefeatScreen(_)
         )
     }
 
@@ -541,6 +544,7 @@ impl Message {
             Message::AttackGaugeAsk(ask) => ask.validate(),
             Message::PartPickup(pickup) => pickup.validate(),
             Message::RuleRoomBreak(rule_break) => rule_break.validate(),
+            Message::HostDefeatScreen(screen) => screen.validate(),
             Message::Reject(_)
             | Message::GatherAnswer(_)
             | Message::Ping(_)
