@@ -85,17 +85,13 @@ fn the_forest_text_scene_is_one_stretch_from_its_start_to_its_end() {
 }
 
 #[test]
-fn the_village_stretch_ends_at_its_end_so_the_morning_runs_after_it() {
+fn the_village_text_scene_is_no_stretch_both_games_run_their_own_copy() {
+    assert_eq!(stretch_starting_at(VILLAGE, VILLAGE_START), None);
     let mut state = HostLedStretchState::new();
-    assert!(matches!(
-        state.host_step(VILLAGE, VILLAGE_START, 0),
-        Some(StretchChange::Started(_))
-    ));
-    assert!(matches!(
-        state.host_step(VILLAGE, VILLAGE_END, 18_593),
-        Some(StretchChange::Ended(_, StretchEnd::LastStep))
-    ));
+    assert_eq!(state.host_step(VILLAGE, VILLAGE_START, 0), None);
+    assert_eq!(state.host_step(VILLAGE, VILLAGE_END, 18_593), None);
     assert_eq!(state.host_step(VILLAGE, VILLAGE_MORNING_STEP, 40_459), None);
+    assert_eq!(state.current(), None);
 }
 
 #[test]

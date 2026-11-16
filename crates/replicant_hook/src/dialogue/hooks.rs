@@ -171,14 +171,18 @@ extern "system" fn update_detour(window: *mut c_void, input: *mut u8) {
         }
         let frame =
             crate::dialogue::choice_hover::before_window_update(build, &own_input, follows_host);
-        if frame.buttons_off || frame.enter_list {
-            if frame.buttons_off {
-                // The guest's own copy of the host's talk moves only with the host's lines.
-                own_input[TALK_UPDATE_INPUT_ENABLED_OFFSET] = 0;
-                own_input[TALK_UPDATE_INPUT_POINTER_ACTIVE_OFFSET] = 0;
-                own_input[TALK_UPDATE_INPUT_BUTTONS_START_OFFSET..TALK_UPDATE_INPUT_ENABLED_OFFSET]
-                    .fill(0);
-            }
+        if frame.buttons_off {
+            // The guest's own copy of the host's talk moves only with the host's lines.
+            own_input[TALK_UPDATE_INPUT_ENABLED_OFFSET] = 0;
+            own_input[TALK_UPDATE_INPUT_POINTER_ACTIVE_OFFSET] = 0;
+            own_input[TALK_UPDATE_INPUT_BUTTONS_START_OFFSET..TALK_UPDATE_INPUT_ENABLED_OFFSET]
+                .fill(0);
+        }
+        // The host's line is reached by the press the host made, in the game's own update.
+        let pressed = frame.buttons_off
+            && !frame.enter_list
+            && crate::dialogue::window_calls::press_for_the_wanted_line(build, &mut own_input);
+        if frame.buttons_off || frame.enter_list || pressed {
             if frame.enter_list {
                 // The prompt's waiting state opens its list on this press; nothing else is held.
                 own_input[TALK_UPDATE_INPUT_ENABLED_OFFSET] = 1;
@@ -227,6 +231,10 @@ unsafe fn step_mirrored_window(build: &VerifiedBuild, window: *mut c_void, input
     }
     // The window's button tests all require this flag, so the partner's presses never advance it.
     quiet_input[TALK_UPDATE_INPUT_ENABLED_OFFSET] = 0;
+    quiet_input[TALK_UPDATE_INPUT_POINTER_ACTIVE_OFFSET] = 0;
+    quiet_input[TALK_UPDATE_INPUT_BUTTONS_START_OFFSET..TALK_UPDATE_INPUT_ENABLED_OFFSET].fill(0);
+    // Only the press that follows the talker's own line goes in.
+    crate::dialogue::window_calls::press_for_the_wanted_line(build, &mut quiet_input);
     // The original update also resets a player field each frame; the mirror leaves the player alone.
     // SAFETY: the handler is the game's own state function for this state, called with the
     // window and an update argument shaped like the game's, on the game thread.

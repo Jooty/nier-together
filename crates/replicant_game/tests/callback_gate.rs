@@ -843,3 +843,27 @@ fn a_waiting_name_that_is_not_an_end_is_not_the_copy_a_host_end_needs() {
         &waiting
     ));
 }
+
+#[test]
+fn a_start_the_guest_ran_alone_is_not_started_again_when_the_hosts_fire_comes() {
+    const TEXT_SCENE_START: &str = "EID_1500_a0005_010_01_Start";
+    const GUEST_OWN_POP_MS: u64 = 6_477_019;
+    const HOSTS_FIRE_ARRIVED_MS: u64 = 6_477_133;
+    let mut gate = CallbackGate::new();
+    gate.note_partner_here(false);
+    assert_eq!(
+        gate.local_fire(GateRole::Guest, TEXT_SCENE_START, GUEST_OWN_POP_MS),
+        LocalFire::RunAlone,
+        "run 1115j 01:47:57.019: the guest's own copy of the text scene popped with the host 71.5 units away"
+    );
+    gate.note_partner_here(true);
+    assert_eq!(
+        gate.partner_fire(GateRole::Guest, TEXT_SCENE_START, HOSTS_FIRE_ARRIVED_MS),
+        PartnerFire::RanHereAlready
+    );
+    assert_eq!(
+        gate.partner_fire(GateRole::Guest, TEXT_SCENE_START, HOSTS_FIRE_ARRIVED_MS + 1),
+        PartnerFire::FollowHost,
+        "a later fire of the same step is a new one"
+    );
+}

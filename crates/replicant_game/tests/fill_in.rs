@@ -297,3 +297,34 @@ fn the_unreachable_table_is_sorted_and_names_shared_functions_only() {
         assert!(script_function(pack, name).is_some(), "{pack} {name}");
     }
 }
+
+#[test]
+fn a_step_the_hosts_own_villager_talk_starts_runs_on_the_guest_at_once() {
+    const VILLAGE: &str = "A_CENTER_VILLAGE_01";
+    const VILLAGE_PHASE: u16 = 1;
+    const CHOICE_STEP: &str = "EID_1500_a0005_020_Select";
+    const RUN_1115J_HOST_COPY_ARRIVED_MS: u64 = 6_471_256;
+    assert_eq!(
+        fill_in_reach(VILLAGE, CHOICE_STEP),
+        FillInReach::CannotReachHere,
+        "run 1115j 01:47:51.256: the host's copy waited 3000 ms for a guest copy that only the host's talk can start, so the guest's prompt opened after the host had answered"
+    );
+    let mut relay = FillInRelay::new();
+    assert_eq!(
+        relay.arrive(
+            VILLAGE_PHASE,
+            CHOICE_STEP,
+            fill_in_reach(VILLAGE, CHOICE_STEP),
+            RUN_1115J_HOST_COPY_ARRIVED_MS
+        ),
+        FillInArrival::Waiting {
+            position: 1,
+            due_in_ms: 0,
+        }
+    );
+    assert!(
+        relay
+            .tick(true, RUN_1115J_HOST_COPY_ARRIVED_MS)
+            .is_some_and(|copy| copy.name == CHOICE_STEP)
+    );
+}

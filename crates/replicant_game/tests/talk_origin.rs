@@ -475,3 +475,19 @@ fn the_guest_follows_the_hosts_text_scene_to_its_end() {
         Some(MirrorAction::ChainOwnTalk(line(TEXT_SCENE_SECOND_TALK, 0)))
     );
 }
+
+#[test]
+fn a_talk_a_scripted_escort_step_starts_is_a_story_step_without_an_event_id() {
+    const ESCORT_STEP: &str = "ScriptMode_to_Kaine_02";
+    const ESCORT_TALK: u32 = 1354;
+    const ESCORT_TALK_START_MS: u64 = 6_799_000;
+    const ESCORT_TALK_OPEN_MS: u64 = 6_799_015;
+    let mut origin = TalkOriginTracker::new();
+    origin.note_script_talk_start(ESCORT_STEP, ESCORT_TALK_START_MS);
+    assert_eq!(
+        origin.observe(Some(ESCORT_TALK), false, ESCORT_TALK_OPEN_MS),
+        Some((ESCORT_TALK, TalkOrigin::StoryStep(ESCORT_STEP.to_owned()))),
+        "run 1115j 01:53:19.015: the host kept talk 1354 as its own, so the guest saw it only from its own copy 9.5 s later"
+    );
+    assert!(origin.current_is_story_step());
+}

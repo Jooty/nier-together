@@ -56,3 +56,10 @@ pub fn check_story_jump(view: &StoryJumpView) -> Result<(), StoryJumpRefusal> {
 pub fn jump_waits_for_pause_menu(view: &StoryJumpView) -> bool {
     view.pause_menu_open
 }
+
+/// The host's jump reloads its phase in place when it is already there, and its stage start runs
+/// again with the jump's flags. A guest already in that phase must reload too, or its game keeps
+/// the actors of the old flags; a guest elsewhere follows the host's phase change as usual.
+pub fn guest_reloads_in_place(current_phase: Option<&str>, destination_phase: &str) -> bool {
+    current_phase == Some(destination_phase)
+}

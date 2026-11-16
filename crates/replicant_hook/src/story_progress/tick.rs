@@ -4,8 +4,9 @@ use replicant_game::downed::OWN_DRIFT_HOLD_AFTER_REWIND_MS;
 use replicant_game::fix_buttons::TakeOnce;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_progress::{
-    FeedSend, SAME_STORY_REQUEST_IGNORED_MS, STORY_DIGEST_INTERVAL_MS,
-    STORY_MESSAGES_KEPT_BEFORE_ARMING, STORY_REQUEST_RETRY_MS, StoryArrays, StoryFeed, StoryMirror,
+    FeedSend, HostStoryApply, HostStoryApplyGate, SAME_STORY_REQUEST_IGNORED_MS,
+    STORY_DIGEST_INTERVAL_MS, STORY_MESSAGES_KEPT_BEFORE_ARMING, STORY_REQUEST_RETRY_MS,
+    StoryArrays, StoryFeed, StoryMirror,
 };
 use replicant_game::story_writes::STORY_WRITE_HOLD_MS;
 use replicant_proto::{
@@ -43,6 +44,8 @@ struct GuestStory {
     mirror: StoryMirror,
     requested_at_ms: Option<u64>,
     queued: Vec<Message>,
+    apply_gate: HostStoryApplyGate,
+    last_apply: Option<HostStoryApply>,
 }
 
 pub fn request_story_resync() {
@@ -285,6 +288,23 @@ fn guest_tick(
         log_line("story: guest asked the host for its whole story state");
     }
     if readiness == GameReadiness::NotLinked || slot_changed {
+        return;
+    }
+    let apply = guest.apply_gate.step(
+        readiness.is_in_play(),
+        crate::player_body::phase_load_count(),
+        now,
+    );
+    if guest.last_apply != Some(apply) {
+        guest.last_apply = Some(apply);
+        log_line(match apply {
+            HostStoryApply::Now => "story: the host's changes apply here again",
+            HostStoryApply::HeldForTheLoad => {
+                "story: the host's changes wait while this game loads its phase and for the first second after, so this game's stage start reads the flags the host's stage start did"
+            }
+        });
+    }
+    if apply == HostStoryApply::HeldForTheLoad {
         return;
     }
     let Some(live) = read_live_arrays(build) else {

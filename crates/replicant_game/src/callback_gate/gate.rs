@@ -34,6 +34,9 @@ pub enum PartnerFire {
     /// The host's step puts a story actor in the world or moves one: the guest starts it too
     /// wherever it stands in the phase, so the actor is in its world as in the host's.
     FollowHostFromAfar,
+    /// The guest's own game ran this step alone, before the host's fire reached it: the host's
+    /// copy is not started on top of it.
+    RanHereAlready,
     Noted,
     Elsewhere,
 }
@@ -137,6 +140,7 @@ impl CallbackGate {
                 if take_entry(&mut self.partner_fired, name) {
                     LocalFire::RunAfterPartner
                 } else if self.partner_elsewhere {
+                    self.local_fired.push((name.to_owned(), now_ms));
                     LocalFire::RunAlone
                 } else {
                     if !self.held.iter().any(|(held, _)| held == name) {
@@ -158,6 +162,9 @@ impl CallbackGate {
                     return PartnerFire::Release {
                         waited_ms: now_ms.saturating_sub(since_ms),
                     };
+                }
+                if take_entry(&mut self.local_fired, name) {
+                    return PartnerFire::RanHereAlready;
                 }
                 self.partner_fired.push((name.to_owned(), now_ms));
                 if !is_event_callback_name(name) {

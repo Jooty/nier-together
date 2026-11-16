@@ -159,6 +159,8 @@ mod host_led_script_talk;
 mod host_led_stretch;
 #[path = "host_removal.rs"]
 mod host_removal;
+#[path = "host_story_apply_gate.rs"]
+mod host_story_apply_gate;
 #[path = "host_story_talk_pace.rs"]
 mod host_story_talk_pace;
 #[path = "host_view.rs"]
@@ -211,6 +213,8 @@ mod kaine_swapped_level;
 mod kill_guard;
 #[path = "lift_rides.rs"]
 mod lift_rides;
+#[path = "line_press.rs"]
+mod line_press;
 #[path = "loading_lines.rs"]
 mod loading_lines;
 #[path = "local_pose.rs"]

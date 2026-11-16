@@ -2,6 +2,7 @@
 mod choice_follow;
 mod choice_hover;
 mod held_talk_start;
+mod line_press;
 mod mirror;
 mod on_screen;
 mod own_window;
@@ -21,6 +22,7 @@ pub use choice_hover::{
     read_choice_prompt, write_highlighted_option,
 };
 pub use held_talk_start::{HeldTalkRelease, HeldTalkStart, HeldTalkStep};
+pub use line_press::{LinePress, PressStep, TalkWindowReading};
 pub use mirror::{
     HostLedScriptTalk, MirrorAction, MirrorInput, PartnerTalkMemory, PartnerTalkMirror, TalkLeader,
     leader_for_own_talk, talk_tags_run_here, within_talk_range,
@@ -81,6 +83,13 @@ pub const TALK_UPDATE_INPUT_VERTICAL_NEXT_OFFSETS: [usize; 4] = [0x21, 0x25, 0x3
 pub const TALK_UPDATE_INPUT_HORIZONTAL_PREVIOUS_OFFSETS: [usize; 4] = [0x22, 0x26, 0x39, 0x3D];
 pub const TALK_UPDATE_INPUT_HORIZONTAL_NEXT_OFFSETS: [usize; 4] = [0x23, 0x27, 0x3A, 0x3E];
 pub const TALK_UPDATE_INPUT_ENTER_LIST_OFFSET: usize = TALK_UPDATE_INPUT_VERTICAL_NEXT_OFFSETS[0];
+pub const TALK_UPDATE_INPUT_CONFIRM_OFFSET: usize = 0x28;
+pub const TALK_PLAYER_STATE_TYPING: i32 = 3;
+pub const TALK_PLAYER_STATE_WAITS_FOR_A_PRESS: i32 = 4;
+pub const LINE_PRESS_OPENS_THE_TALK_AFTER_MS: u64 = 600;
+pub const LINE_PRESS_GIVES_UP_AFTER_MS: u64 = 3_000;
+pub const STORY_STEP_CALLS_WITHOUT_AN_EVENT_ID: [&str; 2] =
+    ["ScriptMode_to_Kaine_02", "ScriptMode_to_Kaine_03"];
 pub const TALK_PLAYER_PROMPT_KIND_OFFSET: u64 = 0x46_3068;
 pub const TALK_PLAYER_CHOICE_SELECTOR_OFFSET: u64 = 0x46_2A28;
 pub const CHOICE_SELECTOR_OPTION_COUNT_OFFSET: u64 = 0x20;

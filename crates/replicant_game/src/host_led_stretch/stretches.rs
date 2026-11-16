@@ -25,21 +25,7 @@ pub struct HostLedStretch {
     pub the_guest_plays_from_its_last_step: bool,
 }
 
-pub static HOST_LED_STRETCHES: [HostLedStretch; 4] = [
-    HostLedStretch {
-        pack: "A_CENTER_VILLAGE_01",
-        first_step: "EID_1500_a0005_010_01_Start",
-        last_pack: "A_CENTER_VILLAGE_01",
-        last_step: "EID_1500_a0005_010_01_End",
-        armed_by: None,
-        refuses_guest_doors: false,
-        guest_is_not_taken_along: false,
-        guest_waits_for_the_hosts_first_step: false,
-        ends_itself_after_ms: HOST_LED_STRETCH_ENDS_ITSELF_AFTER_MS,
-        story_on_flag: None,
-        story_off_flag: None,
-        the_guest_plays_from_its_last_step: false,
-    },
+pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
     HostLedStretch {
         pack: "C_FOREST_FIELD_01",
         first_step: "EID_1500_a0020g_0010_Start",

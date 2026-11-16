@@ -4,7 +4,8 @@ use replicant_game::story_jump::{
     JumpStep, LEARN_MAGIC_NATIVE_RVA, PLAYER_UNIQUE_ACTOR_ID, SET_HAVE_WHITE_BOOK_NATIVE_RVA,
     SET_ITEM_NUM_NATIVE_RVA, SET_MAGIC_SLOT_NATIVE_RVA, SET_PLAYER_MP_FULL_MODE_NATIVE_RVA,
     SET_PLAYER_WEAPON_NATIVE_RVA, SET_TUTORIAL_NATIVE_RVA, SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA,
-    StoryJumpView, check_story_jump, destination, jump_waits_for_pause_menu, loadout_steps,
+    StoryJumpView, check_story_jump, destination, guest_reloads_in_place,
+    jump_waits_for_pause_menu, loadout_steps,
 };
 use replicant_game::{GameMemory, PhaseEntry, Replicant};
 use replicant_proto::{Message, StoryArray, StoryChange, StoryJump, StoryJumpPoint};
@@ -62,6 +63,28 @@ fn receive_from_host(build: &VerifiedBuild) {
     for point in GuestLoadouts::take_all() {
         apply_loadout(build, point);
         log_line("story jump: loadout applied, following the host");
+        reload_in_place_as_the_host_did(build, point);
+    }
+}
+
+fn reload_in_place_as_the_host_did(build: &VerifiedBuild, point: StoryJumpPoint) {
+    let (phase_name, phase_point) = destination(point);
+    let current = Replicant::new(InProcessMemory::new(build))
+        .current_phase()
+        .ok();
+    if !guest_reloads_in_place(current.as_deref(), phase_name) {
+        return;
+    }
+    let Some(phase) = PhaseEntry::find(phase_name) else {
+        return;
+    };
+    match change_phase(build, phase, phase_point) {
+        Ok(()) => log_line(&format!(
+            "story jump: the host reloaded {phase_name} in place, this game reloads it too (point {phase_point}) so its stage start runs again with the jump's flags, as the host's did"
+        )),
+        Err(error) => log_line(&format!(
+            "story jump: the host reloaded {phase_name} in place, this game could not ({error})"
+        )),
     }
 }
 
