@@ -1,5 +1,7 @@
 mod fake_memory;
 
+#[path = "actor_cue_replay_l34.rs"]
+mod actor_cue_replay_l34;
 #[path = "actor_cues.rs"]
 mod actor_cues;
 #[path = "actor_model.rs"]
