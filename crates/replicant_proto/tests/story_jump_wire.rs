@@ -179,7 +179,7 @@ fn every_gather_answer_round_trips_and_is_relayed() {
 }
 
 #[test]
-fn the_temple_village_seafront_and_manor_jumps_round_trip_and_are_indexes_13_to_19() {
+fn the_temple_village_seafront_and_manor_jumps_round_trip_and_are_indexes_13_to_20() {
     for (point, index) in [
         (StoryJumpPoint::TempleBeforeBoss, 13u8),
         (StoryJumpPoint::VillageBackFromTemple, 14u8),
@@ -188,6 +188,7 @@ fn the_temple_village_seafront_and_manor_jumps_round_trip_and_are_indexes_13_to_
         (StoryJumpPoint::ForestInside, 17u8),
         (StoryJumpPoint::ManorEmilFollows, 18u8),
         (StoryJumpPoint::ManorBeforeBossFight8, 19u8),
+        (StoryJumpPoint::BossFight9, 20u8),
     ] {
         let message = Message::StoryJump(StoryJump { point });
         assert!(message.is_relayed());

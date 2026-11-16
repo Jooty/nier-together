@@ -22,6 +22,7 @@ pub enum StoryJumpPoint {
     ForestInside,
     ManorEmilFollows,
     ManorBeforeBossFight8,
+    BossFight9,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

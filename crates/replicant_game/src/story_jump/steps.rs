@@ -632,6 +632,32 @@ const EMIL_FOLLOWS_TO_BEFORE_BOSS_FIGHT_8_EXTRA_STEPS: [JumpStep; 3] = [
     JumpStep::SetFlag { id: 1435 },
 ];
 
+const BEFORE_BOSS_FIGHT_8_TO_BOSS_FIGHT_9_EXTRA_STEPS: [JumpStep; 23] = [
+    JumpStep::ClearFlag { id: 1433 },
+    JumpStep::ClearFlag { id: 1434 },
+    JumpStep::ClearFlag { id: 1435 },
+    JumpStep::ClearFlag { id: 136 },
+    JumpStep::SetFlag { id: 510 },
+    JumpStep::SetFlag { id: 511 },
+    JumpStep::SetFlag { id: 512 },
+    JumpStep::SetFlag { id: 131 },
+    JumpStep::SetFlag { id: 106 },
+    JumpStep::SetFlag { id: 513 },
+    JumpStep::SetFlag { id: 533 },
+    JumpStep::SetFlag { id: 534 },
+    JumpStep::SetFlag { id: 535 },
+    JumpStep::SetFlag { id: 536 },
+    JumpStep::SetFlag { id: 537 },
+    JumpStep::SetFlag { id: 538 },
+    JumpStep::SetFlag { id: 539 },
+    JumpStep::SetFlag { id: 540 },
+    JumpStep::SetFlag { id: 1367 },
+    JumpStep::SetSnowFlag { id: 1065 },
+    JumpStep::SetItem { id: 267, count: 1 },
+    JumpStep::SetGameCounter { id: 100, value: 3 },
+    JumpStep::SetGameCounter { id: 101, value: 3 },
+];
+
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
 const AFTER_PROLOGUE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const AFTER_PROLOGUE_POINT: i32 = 8;
@@ -671,6 +697,8 @@ const MANOR_EMIL_FOLLOWS_PHASE: &str = "A_SOUTH_MANSION_01";
 const MANOR_EMIL_FOLLOWS_POINT: i32 = 1;
 const MANOR_BEFORE_BOSS_FIGHT_8_PHASE: &str = "A_SOUTH_MANSION_02";
 const MANOR_BEFORE_BOSS_FIGHT_8_POINT: i32 = 1;
+const BOSS_FIGHT_9_PHASE: &str = "A_CENTER_VILLAGE_01";
+const BOSS_FIGHT_9_POINT: i32 = 4;
 const FOREST_INSIDE_PHASE: &str = "C_FOREST_FIELD_01";
 const FOREST_INSIDE_POINT: i32 = 1;
 
@@ -835,6 +863,13 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::BossFight9 => {
+            let mut steps = loadout_steps(StoryJumpPoint::ManorBeforeBossFight8);
+            steps.pop();
+            steps.extend_from_slice(&BEFORE_BOSS_FIGHT_8_TO_BOSS_FIGHT_9_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -870,5 +905,6 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
             MANOR_BEFORE_BOSS_FIGHT_8_PHASE,
             MANOR_BEFORE_BOSS_FIGHT_8_POINT,
         ),
+        StoryJumpPoint::BossFight9 => (BOSS_FIGHT_9_PHASE, BOSS_FIGHT_9_POINT),
     }
 }
