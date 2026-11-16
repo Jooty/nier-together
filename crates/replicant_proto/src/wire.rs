@@ -1,3 +1,4 @@
+mod actor_cue;
 mod attack_gauge;
 mod block_held;
 mod block_moved;
@@ -66,6 +67,10 @@ mod tutorial_prompt;
 mod weapon_state;
 mod world_object;
 
+pub use actor_cue::{
+    ATTACHED_EFFECT_COLOUR_FLOATS, ATTACHED_EFFECT_STYLE_FLOATS, ActorCue, ActorCueKind,
+    AttachedEffect, MAX_ACTOR_CUE_ID, StoneHandler, StoneTurn,
+};
 pub use attack_gauge::{
     AttackGaugeAsk, AttackGaugeHit, AttackGaugeNode, AttackGaugeOpen, AttackGaugeState,
     MAX_ATTACK_GAUGE_HIT_DAMAGE, MAX_ATTACK_GAUGE_NODE_HP, MAX_ATTACK_GAUGE_NODES,

@@ -5,7 +5,7 @@ use nt_wire::{
 use serde::{Deserialize, Serialize};
 
 use crate::wire::{
-    AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved, BodyPackName,
+    ActorCue, AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved, BodyPackName,
     BombBlast, BulletEffectPlay, BulletFlight, CallbackFired, CampaignCard, CartRide, CartRun,
     ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk, DesyncDigest, DialogueUpdate,
     DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone, EnemyBulletFlight,
@@ -154,6 +154,7 @@ pub enum Message {
     WorldObjectBroken(WorldObjectBroken),
     GuestWatches(GuestWatches),
     TalkWindowSize(TalkWindowSize),
+    ActorCue(ActorCue),
     HostDefeatScreen(HostDefeatScreen),
     SideViewState(SideViewState),
 }
@@ -294,6 +295,7 @@ impl Message {
             Message::WorldObjectBroken(_) => "WorldObjectBroken",
             Message::GuestWatches(_) => "GuestWatches",
             Message::TalkWindowSize(_) => "TalkWindowSize",
+            Message::ActorCue(_) => "ActorCue",
             Message::HostDefeatScreen(_) => "HostDefeatScreen",
             Message::SideViewState(_) => "SideViewState",
         }
@@ -426,6 +428,7 @@ impl Message {
                 | Message::WorldObjectBroken(_)
                 | Message::GuestWatches(_)
                 | Message::TalkWindowSize(_)
+                | Message::ActorCue(_)
                 | Message::HostDefeatScreen(_)
                 | Message::SideViewState(_)
         )
@@ -545,6 +548,7 @@ impl Message {
             | Message::SideViewState(_) => Ok(()),
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
+            Message::ActorCue(cue) => cue.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),
             Message::PartPickup(pickup) => pickup.validate(),
             Message::RuleRoomBreak(rule_break) => rule_break.validate(),

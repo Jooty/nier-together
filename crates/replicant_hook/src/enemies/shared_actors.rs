@@ -19,3 +19,18 @@ pub fn shared_enemy_actors() -> SharedEnemyActors {
         actors: view.enemies.clone(),
     })
 }
+
+/// This frame's role and the network id of `actor` when it is a shared enemy, boss or companion.
+pub fn shared_actor_id(actor: u64) -> Option<(EnemySyncRole, EnemyId)> {
+    with_view(|view| Some((view.role?, *view.enemies.get(&actor)?)))
+}
+
+/// The local actor that stands for shared actor `id` this frame.
+pub fn shared_actor_of(id: EnemyId) -> Option<u64> {
+    with_view(|view| {
+        view.enemies
+            .iter()
+            .find(|(_, known)| **known == id)
+            .map(|(actor, _)| *actor)
+    })
+}

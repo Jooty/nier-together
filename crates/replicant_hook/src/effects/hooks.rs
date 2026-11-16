@@ -41,7 +41,7 @@ use crate::diagnostics::log_line;
 use crate::effects::report::{
     REFUSED_BY_RATE_LIMIT, SENT_EFFECTS, SENT_SOUNDS, SENT_STOPS, UNREADABLE, count, log_limited,
 };
-use crate::effects::sound_probe;
+use crate::effects::{actor_cues, sound_probe};
 use crate::enemies::applying_remote;
 use crate::game_hooks::hook_address;
 use crate::kaine::{
@@ -100,6 +100,7 @@ struct PendingWorldEffect {
 thread_local! {
     static CREATE_BY_ID_CALLER_RVA: Cell<u32> = const { Cell::new(0) };
     static ATTACHING_ACTOR: Cell<u64> = const { Cell::new(0) };
+    static CUBE_GLOW_RELAYED: Cell<bool> = const { Cell::new(false) };
     static NESTED_EFFECT_CALLS: Cell<u32> = const { Cell::new(0) };
     static OWN_HIT_IN_FLIGHT: Cell<bool> = const { Cell::new(false) };
     static HIT_SPARK_VIA: Cell<&'static str> = const { Cell::new(SPAWN_BY_NAME_CALL_NAME) };
@@ -212,6 +213,7 @@ pub fn install(build: VerifiedBuild) {
         )
     };
     sound_probe::install(build);
+    actor_cues::install(build);
 }
 
 /// Runs `call` as a nested effect call: an effect spawned by name inside it belongs to an
@@ -292,6 +294,10 @@ fn effect_is_sent_as_actor_effect(source: EffectSource) -> bool {
 
 fn actor_effect_is_sent_directly(actor: u64) -> bool {
     source_in_play(actor).is_some_and(|(_, source)| effect_is_sent_as_actor_effect(source))
+}
+
+pub(super) fn sending() -> bool {
+    SENDING.load(Ordering::Relaxed)
 }
 
 pub(super) fn set_sending(sending: bool) {
@@ -477,11 +483,14 @@ extern "system" fn spawn_by_name_detour(
         });
     }
     let cube_glow = panic::catch_unwind(|| note_cube_effect(name)).unwrap_or(false);
-    let due = (spawn_is_sent(outermost, hit_related_spawn()) || cube_glow)
-        && SENDING.load(Ordering::Relaxed);
+    let due = SENDING.load(Ordering::Relaxed)
+        && (spawn_is_sent(outermost, hit_related_spawn()) || cube_glow);
     if due && spawn_is_drawn_by_shot_sync(CREATE_BY_ID_CALLER_RVA.with(Cell::get)) {
         let _ = panic::catch_unwind(note_shot_slot_not_resent);
     } else if due {
+        if cube_glow {
+            CUBE_GLOW_RELAYED.with(|cell| cell.set(true));
+        }
         let (handle, name, matrix) = (handle as usize, name as usize, matrix as usize);
         let arguments = [
             spawned_scale.to_bits(),
@@ -523,6 +532,7 @@ extern "system" fn attach_effect_by_id_detour(
         return 0;
     }
     let was_attaching = ATTACHING_ACTOR.with(|cell| cell.replace(actor as usize as u64));
+    let outer_glow_relayed = CUBE_GLOW_RELAYED.with(|cell| cell.replace(false));
     // SAFETY: the trampoline continues into the original function, which has this signature.
     let result = unsafe {
         core::mem::transmute::<*mut c_void, AttachEffectById>(original)(
@@ -530,6 +540,24 @@ extern "system" fn attach_effect_by_id_detour(
         )
     };
     ATTACHING_ACTOR.with(|cell| cell.set(was_attaching));
+    let relayed_as_cube_glow = CUBE_GLOW_RELAYED.with(|cell| cell.replace(outer_glow_relayed));
+    if result & 0xFF != 0 && SENDING.load(Ordering::Relaxed) {
+        let (actor, colour, scale) = (actor as usize, colour as usize, scale as usize);
+        let _ = panic::catch_unwind(|| {
+            actor_cues::note_attach(
+                actor as u64,
+                id,
+                bone,
+                unique,
+                colour as u64,
+                scale as u64,
+                a,
+                b,
+                c,
+                relayed_as_cube_glow,
+            );
+        });
+    }
     result
 }
 
@@ -582,6 +610,8 @@ extern "system" fn create_by_id_detour(
         return handle;
     }
     let caller_rva = game_caller_rva();
+    let nested = NESTED_EFFECT_CALLS.with(|depth| depth.get() > 0)
+        || ATTACHING_ACTOR.with(|actor| actor.get() != 0);
     let was_caller = CREATE_BY_ID_CALLER_RVA.with(|cell| cell.replace(caller_rva));
     // SAFETY: the trampoline continues into the original function, which has this signature.
     let create = || unsafe {
@@ -597,6 +627,11 @@ extern "system" fn create_by_id_detour(
         // SAFETY: the game wrote the new handle through this out pointer just now.
         let made = unsafe { handle.read() };
         let _ = panic::catch_unwind(|| crate::enemy_bullets::note_effect_made(id, made));
+        if SENDING.load(Ordering::Relaxed) {
+            let _ = panic::catch_unwind(|| {
+                actor_cues::note_create_by_id(made, id, caller_rva, nested);
+            });
+        }
     }
     result
 }

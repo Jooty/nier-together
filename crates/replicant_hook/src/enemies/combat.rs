@@ -7,7 +7,10 @@ use replicant_game::enemies::{
 };
 use replicant_game::offsets::{ACTOR_KIND_MASK_OFFSET, ACTOR_SPAWN_SERIAL_OFFSET};
 use replicant_game::puppet::actor_is_live;
-use replicant_proto::{EnemyCreation, EnemyDrop, EnemyId, EnemyKilled, EnemyWordDrop, PlayerHit};
+use replicant_proto::{
+    EnemyCreation, EnemyDrop, EnemyId, EnemyKilled, EnemyWordDrop, PlayerHit, StoneHandler,
+    StoneTurn,
+};
 
 use crate::enemies::counters::CombatCounts;
 use crate::memory::InProcessMemory;
@@ -25,6 +28,9 @@ pub(super) struct CombatState {
     pub(super) puppet_kind: Option<PuppetKind>,
     pub(super) killed_copies: HashSet<u64>,
     pub(super) pending_kills: Vec<(EnemyKilled, u64)>,
+    pub(super) pending_stones: Vec<(EnemyId, StoneTurn, u64)>,
+    pub(super) pending_stone_breaks: Vec<EnemyId>,
+    pub(super) stoned_copies: HashMap<EnemyId, StonedCopy>,
     pub(super) pending_player_hits: Vec<PlayerHit>,
     pub(super) pending_drops: Vec<EnemyDrop>,
     pub(super) pending_word_drops: Vec<EnemyWordDrop>,
@@ -60,6 +66,17 @@ pub(super) struct CombatState {
 pub(super) struct LocalEnemy {
     pub(super) actor: u64,
     pub(super) serial: i32,
+}
+
+/// A copy the host's cue turned to stone, which runs its own stone state until the host's
+/// statue breaks.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct StonedCopy {
+    pub(super) copy: u64,
+    pub(super) serial: i32,
+    pub(super) handler: StoneHandler,
+    pub(super) host_broke: bool,
+    pub(super) held_dummy: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy)]

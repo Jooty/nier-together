@@ -3,6 +3,7 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Instant;
 
 use nt_hook::line_budget::LineBudget;
+use replicant_game::effects::actor_cue_goes_to_enemy_sync;
 use replicant_game::enemies::{
     CountLog, CubeStateLog, ENEMY_ID_LIST_INTERVAL_MS, ENEMY_MIRROR_DELAY_MS, ENEMY_ROUND_CAPACITY,
     EnemyLog, EnemyMirror, EnemyRoster, EnemySighting, FIGHT_SPAWN_FILL_IN_GRACE_MS,
@@ -50,6 +51,7 @@ use crate::enemies::spawn_hook::take_creation;
 use crate::enemies::status::{
     EnemySyncRole, EnemySyncStatus, enemy_id_text, publish_status, snap_enabled,
 };
+use crate::enemies::stone;
 use crate::enemies::{
     MAX_RECENT_ENEMY_EVENTS, MOTION_FRAME_MOVED, MOTION_RESTART_INTERVAL_MS, MOTION_STALL_MS,
     SECOND_MOTION_LAYER,
@@ -177,7 +179,7 @@ pub fn tick_enemy_sync(build: &VerifiedBuild) {
                 | Message::EnemyDrop(_)
                 | Message::EnemyWordDrop(_)
                 | Message::EnemyBodyGone(_)
-        )
+        ) || matches!(message, Message::ActorCue(cue) if actor_cue_goes_to_enemy_sync(&cue.kind))
     });
     let view = net.view();
     let options = view.options;
@@ -343,6 +345,7 @@ fn host_step(
         })
         .collect();
     host_combat::apply_guest_hits(&mut sync.combat, local, now_ms, &hits);
+    stone::watch_host_statues(local.build);
     let now = Instant::now();
     if sync
         .last_host_send

@@ -818,6 +818,19 @@ fn samples() -> Vec<Message> {
         }),
         Message::GuestWatches(GuestWatches { watching: true }),
         Message::TalkWindowSize(TalkWindowSize { size: 9 }),
+        Message::ActorCue(ActorCue {
+            actor: enemy_id(),
+            id: 458,
+            kind: ActorCueKind::AttachEffect(AttachedEffect {
+                bone: -1,
+                unique: true,
+                colour: [1.0, 0.5, 0.25, 1.0],
+                style: [1.0, 1.0, 1.0, 1.0],
+                mode: 0,
+                flags: 1,
+                extra: 2,
+            }),
+        }),
         Message::HostDefeatScreen(HostDefeatScreen {
             defeat: 3,
             cursor: 1,
@@ -829,19 +842,6 @@ fn samples() -> Vec<Message> {
             side_view_door: 1,
         }),
     ]
-}
-
-fn varint_of(mut value: u32) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    loop {
-        let low = (value & 0x7f) as u8;
-        value >>= 7;
-        if value == 0 {
-            bytes.push(low);
-            return bytes;
-        }
-        bytes.push(low | 0x80);
-    }
 }
 
 fn hex_of(bytes: &[u8]) -> String {
@@ -904,8 +904,9 @@ fn samples_are_the_variants_in_declaration_order() {
 
 #[test]
 fn every_variant_has_a_sample() {
-    let next_index = u32::try_from(samples().len()).expect("fewer than 2^32 variants");
-    let beyond_last = postcard::from_bytes::<Message>(&varint_of(next_index));
+    let next_index = u32::try_from(samples().len()).expect("a variant count fits a u32");
+    let index_bytes = postcard::to_allocvec(&next_index).expect("an index encodes");
+    let beyond_last = postcard::from_bytes::<Message>(&index_bytes);
     assert!(
         matches!(beyond_last, Err(postcard::Error::SerdeDeCustom)),
         "Message has a variant after sample {next_index}: add its sample and its golden line"

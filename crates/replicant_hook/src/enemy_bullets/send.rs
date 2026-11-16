@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, Mutex, PoisonError};
 
 use replicant_game::enemy_bullets::{
@@ -7,7 +7,7 @@ use replicant_game::enemy_bullets::{
     SHOT_CUE_SUMMARY_INTERVAL_MS, ShotCueGate, ShotCueTally, ShotInstances, SpriteBulletKinds,
     UncopiedTally, look_scale, scan_enemy_bullets,
 };
-use replicant_proto::{EnemyId, Message, ShotCue};
+use replicant_proto::{BULLET_EFFECT_SLOTS, EnemyId, Message, ShotCue};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
@@ -19,6 +19,8 @@ use crate::memory::InProcessMemory;
 use crate::net::{NetThread, net_clock_ms};
 
 static SENDING: LazyLock<Mutex<Sending>> = LazyLock::new(Mutex::default);
+
+const MAX_NOT_DRAWN_KINDS_LOGGED: usize = 64;
 
 #[derive(Debug, Default)]
 struct Sending {
@@ -38,6 +40,7 @@ struct Sending {
     cue_gate: ShotCueGate,
     cue_tally: ShotCueTally,
     last_cue_summary_ms: u64,
+    not_drawn_kinds: HashSet<(EnemyId, [i32; BULLET_EFFECT_SLOTS], i32)>,
 }
 
 pub(super) fn send_enemy_bullets(
@@ -64,6 +67,27 @@ pub(super) fn send_enemy_bullets(
         return;
     };
     sending.most_in_the_air.keep_highest(&scan.census);
+    for not_drawn in &scan.not_drawn {
+        let kind = (
+            not_drawn.enemy,
+            not_drawn.record_effect_ids,
+            not_drawn.ground_effect_id,
+        );
+        if sending.not_drawn_kinds.len() < MAX_NOT_DRAWN_KINDS_LOGGED
+            && sending.not_drawn_kinds.insert(kind)
+        {
+            log_line(&format!(
+                "enemy bullets: an ordinary bullet from enemy {} has no live effect, no flight sent: record effect ids {:?}, effect handles {:x?}, ground effect {}, start effect {} and start sound {} (sent as shot cues when it starts), lasting sound {}",
+                enemy_id_text(not_drawn.enemy),
+                not_drawn.record_effect_ids,
+                not_drawn.effect_handles,
+                not_drawn.ground_effect_id,
+                not_drawn.start_effect_id,
+                not_drawn.start_sound_id,
+                not_drawn.lasting_sound_id
+            ));
+        }
+    }
     for line in sending.uncopied.add_scan(&scan.uncopied) {
         log_line(&line);
     }

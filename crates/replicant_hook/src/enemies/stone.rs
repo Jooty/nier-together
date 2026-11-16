@@ -1,0 +1,295 @@
+//! Stone: on the host, an enemy's own message handler turns it to stone; the host tells the
+//! guest, whose copy is turned by the same handler and then ticks fully, as a dying copy does.
+
+use core::ffi::c_void;
+use core::ptr;
+use std::collections::HashSet;
+use std::panic;
+use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
+
+use replicant_game::GameMemory;
+use replicant_game::effects::{
+    HostStatueWatch, STONE_HANDLERS, StoneDummy, actor_holds_stone, actor_of_stone_dummy_handle,
+    host_statue_watch, read_stone_state, stone_dummy_handle, stone_handler_rva,
+};
+use replicant_game::offsets::{
+    ACTOR_SPAWN_SERIAL_OFFSET, AI_MESSAGE_RECORD_BYTES, AI_MESSAGE_RECORD_ID_OFFSET,
+    STONE_MESSAGE_ID, STONE_STATE_BYTES_OFFSET,
+};
+use replicant_game::puppet::actor_is_live;
+use replicant_proto::{ActorCue, ActorCueKind, EnemyId, Message, StoneHandler, StoneTurn};
+
+use crate::build_gate::VerifiedBuild;
+use crate::diagnostics::log_line;
+use crate::enemies::{EnemySyncRole, enemy_id_text, shared_actor_id};
+use crate::game_hooks::hook_address;
+use crate::memory::InProcessMemory;
+use crate::net::{self, NetSharedExt};
+
+static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
+static ORIGINAL_HANDLERS: [AtomicPtr<c_void>; 3] = [
+    AtomicPtr::new(ptr::null_mut()),
+    AtomicPtr::new(ptr::null_mut()),
+    AtomicPtr::new(ptr::null_mut()),
+];
+static LOGGED_ACTORS: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
+static HOST_STATUES: Mutex<Vec<HostStatue>> = Mutex::new(Vec::new());
+
+const MAX_LOGGED_STONE_ACTORS: usize = 256;
+const MAX_WATCHED_HOST_STATUES: usize = 32;
+
+type StoneMessageHandler = unsafe extern "system" fn(*mut c_void, *mut c_void, *const u8) -> u64;
+
+#[repr(C, align(16))]
+struct MessageRecord([u8; AI_MESSAGE_RECORD_BYTES]);
+
+struct StoneBefore {
+    state_bytes: [u8; 2],
+    was_stone: bool,
+}
+
+struct HostStatue {
+    actor: u64,
+    serial: i32,
+    enemy: EnemyId,
+    handler: StoneHandler,
+    dummy_handle: Option<(u32, u32)>,
+}
+
+pub(super) fn install(build: VerifiedBuild) {
+    if HOOKED_BUILD.set(build).is_err() {
+        return;
+    }
+    let detours: [*mut c_void; 3] = [
+        leader_detour as *const () as *mut c_void,
+        sword_detour as *const () as *mut c_void,
+        grapple_detour as *const () as *mut c_void,
+    ];
+    for ((handler, detour), original) in STONE_HANDLERS.iter().zip(detours).zip(&ORIGINAL_HANDLERS)
+    {
+        #[expect(
+            unsafe_code,
+            reason = "hooks an enemy's stone message handler by address"
+        )]
+        // SAFETY: the RVA starts the handler (global state, actor, message record -> handled) in
+        // the verified build, and every detour matches that signature.
+        unsafe {
+            hook_address(
+                handler_name(*handler),
+                (build.module_base() + u64::from(stone_handler_rva(*handler))) as usize,
+                detour,
+                original,
+            );
+        }
+    }
+}
+
+/// Turns the guest's copy to stone with the handler the host's enemy ran; true when the copy's
+/// state machine now holds the stone state.
+pub(super) fn turn_copy(build: &VerifiedBuild, copy: u64, turn: StoneTurn) -> bool {
+    let mut memory = InProcessMemory::new(build);
+    for (offset, byte) in (0_u64..).zip(turn.state_bytes) {
+        if memory
+            .write_u8(copy + STONE_STATE_BYTES_OFFSET + offset, byte)
+            .is_err()
+        {
+            return false;
+        }
+    }
+    let mut record = MessageRecord([0; AI_MESSAGE_RECORD_BYTES]);
+    record.0[AI_MESSAGE_RECORD_ID_OFFSET..AI_MESSAGE_RECORD_ID_OFFSET + 4]
+        .copy_from_slice(&STONE_MESSAGE_ID.to_le_bytes());
+    let function = (build.module_base() + u64::from(stone_handler_rva(turn.handler))) as usize;
+    #[expect(unsafe_code, reason = "calls the enemy's own stone message handler")]
+    // SAFETY: the handler (global state, actor, record) reads only the record's id and the actor
+    // for message 0x1C, never the global state; the copy is a live copy of the same enemy
+    // class, the record outlives the call, and this runs on the game thread.
+    unsafe {
+        core::mem::transmute::<usize, StoneMessageHandler>(function)(
+            ptr::null_mut(),
+            copy as usize as *mut c_void,
+            record.0.as_ptr(),
+        );
+    }
+    actor_holds_stone(&memory, copy, turn.handler)
+}
+
+/// On the host, each tick: a statue whose damage dummy is gone broke here, so the guest's copy
+/// is told to break too.
+pub(super) fn watch_host_statues(build: &VerifiedBuild) {
+    let broke = {
+        let mut statues = HOST_STATUES.lock().unwrap_or_else(PoisonError::into_inner);
+        if statues.is_empty() {
+            return;
+        }
+        let memory = InProcessMemory::new(build);
+        let mut broke = Vec::new();
+        statues.retain_mut(|statue| {
+            let still_it = actor_is_live(&memory, statue.actor).unwrap_or(false)
+                && memory
+                    .read_i32(statue.actor + ACTOR_SPAWN_SERIAL_OFFSET)
+                    .is_ok_and(|serial| serial == statue.serial);
+            let view = still_it
+                .then(|| read_stone_state(&memory, statue.actor, statue.handler))
+                .flatten();
+            if let Some(view) = view
+                && matches!(view.dummy, StoneDummy::Standing(_))
+            {
+                statue.dummy_handle = stone_dummy_handle(&memory, view.state);
+            }
+            let remembered_dummy_gone = statue
+                .dummy_handle
+                .is_some_and(|handle| actor_of_stone_dummy_handle(&memory, handle).is_none());
+            match host_statue_watch(view, remembered_dummy_gone) {
+                HostStatueWatch::Keep => true,
+                HostStatueWatch::Broke => {
+                    broke.push(statue.enemy);
+                    false
+                }
+                HostStatueWatch::Drop => false,
+            }
+        });
+        broke
+    };
+    let Some(net) = net::handle() else {
+        return;
+    };
+    for enemy in broke {
+        let cue = ActorCue {
+            actor: enemy,
+            id: 0,
+            kind: ActorCueKind::StoneBroken,
+        };
+        net.send_relayed(Message::ActorCue(cue));
+        log_line(&format!(
+            "stone: {}'s statue broke here (its damage dummy is gone), sent to the guest",
+            enemy_id_text(enemy)
+        ));
+    }
+}
+
+fn handler_name(handler: StoneHandler) -> &'static str {
+    match handler {
+        StoneHandler::Leader => "EnemyLeader::StoneMessage",
+        StoneHandler::Sword => "EnemySword::StoneMessage",
+        StoneHandler::Grapple => "EnemyGrapple::StoneMessage",
+    }
+}
+
+extern "system" fn leader_detour(
+    global: *mut c_void,
+    actor: *mut c_void,
+    record: *const u8,
+) -> u64 {
+    run_handler(0, global, actor, record)
+}
+
+extern "system" fn sword_detour(global: *mut c_void, actor: *mut c_void, record: *const u8) -> u64 {
+    run_handler(1, global, actor, record)
+}
+
+extern "system" fn grapple_detour(
+    global: *mut c_void,
+    actor: *mut c_void,
+    record: *const u8,
+) -> u64 {
+    run_handler(2, global, actor, record)
+}
+
+#[expect(
+    unsafe_code,
+    reason = "calls the original stone message handler through the trampoline MinHook built"
+)]
+fn run_handler(index: usize, global: *mut c_void, actor: *mut c_void, record: *const u8) -> u64 {
+    let original = ORIGINAL_HANDLERS[index].load(Ordering::Acquire);
+    if original.is_null() {
+        return 1;
+    }
+    let (actor_address, record_address) = (actor as usize as u64, record as usize as u64);
+    let handler = STONE_HANDLERS[index];
+    let before = panic::catch_unwind(|| read_before(actor_address, record_address, handler))
+        .ok()
+        .flatten();
+    // SAFETY: the trampoline continues into the original handler, which has this signature.
+    let handled = unsafe {
+        core::mem::transmute::<*mut c_void, StoneMessageHandler>(original)(global, actor, record)
+    };
+    if let Some(before) = before {
+        let _ = panic::catch_unwind(|| after_stone_message(handler, actor_address, before));
+    }
+    handled
+}
+
+fn read_before(actor: u64, record: u64, handler: StoneHandler) -> Option<StoneBefore> {
+    let memory = InProcessMemory::new(HOOKED_BUILD.get()?);
+    let id = memory
+        .read_i32(record + AI_MESSAGE_RECORD_ID_OFFSET as u64)
+        .ok()?;
+    if id != STONE_MESSAGE_ID {
+        return None;
+    }
+    let state_bytes = memory
+        .read_array::<2>(actor + STONE_STATE_BYTES_OFFSET)
+        .ok()?;
+    Some(StoneBefore {
+        state_bytes,
+        was_stone: actor_holds_stone(&memory, actor, handler),
+    })
+}
+
+fn after_stone_message(handler: StoneHandler, actor: u64, before: StoneBefore) {
+    let Some(build) = HOOKED_BUILD.get() else {
+        return;
+    };
+    let memory = InProcessMemory::new(build);
+    let state_bytes = before.state_bytes;
+    let turned = !before.was_stone && actor_holds_stone(&memory, actor, handler);
+    let shared = shared_actor_id(actor);
+    let first = {
+        let mut logged = LOGGED_ACTORS.lock().unwrap_or_else(PoisonError::into_inner);
+        logged.len() < MAX_LOGGED_STONE_ACTORS && logged.insert(actor)
+    };
+    let name = shared.map_or_else(|| format!("actor {actor:#x}"), |(_, id)| enemy_id_text(id));
+    if first {
+        log_line(&format!(
+            "stone: {name} got the stone message ({handler:?} handler, state bytes {state_bytes:?}), turned to stone {turned}"
+        ));
+    }
+    let Some((EnemySyncRole::Host, id)) = shared else {
+        return;
+    };
+    let Some(net) = net::handle() else {
+        return;
+    };
+    if !turned || !net.view().partner_in_play() {
+        return;
+    }
+    let cue = ActorCue {
+        actor: id,
+        id: 0,
+        kind: ActorCueKind::TurnedToStone(StoneTurn {
+            handler,
+            state_bytes,
+        }),
+    };
+    if cue.validate().is_ok() {
+        net.send_relayed(Message::ActorCue(cue));
+        log_line(&format!("stone: {name} turned to stone, sent to the guest"));
+        let serial = memory
+            .read_i32(actor + ACTOR_SPAWN_SERIAL_OFFSET)
+            .unwrap_or_default();
+        let mut statues = HOST_STATUES.lock().unwrap_or_else(PoisonError::into_inner);
+        statues.retain(|statue| statue.actor != actor);
+        if statues.len() >= MAX_WATCHED_HOST_STATUES {
+            statues.remove(0);
+        }
+        statues.push(HostStatue {
+            actor,
+            serial,
+            enemy: id,
+            handler,
+            dummy_handle: None,
+        });
+    }
+}

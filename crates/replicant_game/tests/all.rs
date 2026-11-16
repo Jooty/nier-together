@@ -1,5 +1,9 @@
 mod fake_memory;
 
+#[path = "actor_cue_replay_l34.rs"]
+mod actor_cue_replay_l34;
+#[path = "actor_cues.rs"]
+mod actor_cues;
 #[path = "actor_model.rs"]
 mod actor_model;
 #[path = "armed_host_led_stretch.rs"]
@@ -8,6 +12,8 @@ mod armed_host_led_stretch;
 mod arrival;
 #[path = "arrive_in_state.rs"]
 mod arrive_in_state;
+#[path = "attached_cue_effects.rs"]
+mod attached_cue_effects;
 #[path = "attack_gauge.rs"]
 mod attack_gauge;
 #[path = "attack_gauge_opening_hit.rs"]
@@ -34,6 +40,8 @@ mod breaker_body_hold;
 mod bullet_flights;
 #[path = "bullet_hits.rs"]
 mod bullet_hits;
+#[path = "bullet_starts.rs"]
+mod bullet_starts;
 #[path = "ca_gauge.rs"]
 mod ca_gauge;
 #[path = "callback_gate.rs"]
@@ -217,6 +225,8 @@ mod kaine_stats;
 mod kaine_swapped_level;
 #[path = "kill_guard.rs"]
 mod kill_guard;
+#[path = "lasting_cue_sounds.rs"]
+mod lasting_cue_sounds;
 #[path = "level_up.rs"]
 mod level_up;
 #[path = "lift_rides.rs"]
@@ -375,6 +385,8 @@ mod sky;
 mod stay_together;
 #[path = "step_echo.rs"]
 mod step_echo;
+#[path = "stone_break.rs"]
+mod stone_break;
 #[path = "story_calls.rs"]
 mod story_calls;
 #[path = "story_jump.rs"]
