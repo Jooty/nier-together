@@ -132,7 +132,7 @@ fn her_script_mode_lends_her_until_the_tick_it_ends() {
 }
 
 #[test]
-fn a_driver_call_lends_her_for_the_frames_its_message_needs_and_no_longer() {
+fn a_driver_call_keeps_its_window_and_she_is_off_again_when_it_ends() {
     let mut rule = general_rule_with_her_held_off();
     rule.function_ran(ELEVATOR_SEEK);
     rule.function_addresses_her(ELEVATOR_SEEK, tick(5_000, true, false));
