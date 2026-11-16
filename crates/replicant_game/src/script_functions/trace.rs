@@ -29,8 +29,9 @@ pub fn traced_function_text(args: &[u8]) -> Option<String> {
 }
 
 pub fn traced_function_name(text: &str) -> Option<&str> {
+    // Two packs print "<pack> -> StartStage" with spaces around the arrow.
     let (after_arrow, has_arrow) = match text.rsplit_once(TRACE_ARROW) {
-        Some((_, name)) => (name, true),
+        Some((_, name)) => (name.trim(), true),
         None => (text, false),
     };
     let (name, has_call_suffix) = match after_arrow.strip_suffix(TRACE_CALL_SUFFIX) {

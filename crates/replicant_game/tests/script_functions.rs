@@ -392,12 +392,28 @@ fn both_print_forms_name_the_function_and_other_text_does_not() {
         "EID_0200_a0030g_End",
         "",
         "->",
+        " -> ",
         "()",
         "two words()",
         "hits 12",
     ] {
         assert_eq!(traced_function_name(text), None, "{text}");
     }
+}
+
+#[test]
+fn the_two_packs_that_print_spaces_around_the_arrow_name_their_stage_start_too() {
+    // script-functions.toml: A_CLIFF_VILLAGE_01 and A_TRIAL_01 print "<pack> -> StartStage"; the
+    // other 94 packs print "<pack>->StartStage()" or build the same text from pack->name.
+    assert_eq!(
+        traced_function_name("A_CLIFF_VILLAGE_01 -> StartStage"),
+        Some("StartStage"),
+        "R1b D3c: the leading space failed the name check, so every load into these packs held the host's changes the full 15 s"
+    );
+    assert_eq!(
+        traced_function_name("A_TRIAL_01 -> StartStage"),
+        Some("StartStage")
+    );
 }
 
 #[test]

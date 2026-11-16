@@ -23,7 +23,7 @@ pub use header::{
     HeaderTooShort, apply_header_records, ending_records_are_empty, ending_records_gained,
     fix_header_checksum, header_checksum, merge_ending_records, read_ending_records,
 };
-pub use load_settle::{HostStoryApply, HostStoryApplyGate};
+pub use load_settle::{HostStoryApply, HostStoryApplyGate, HostStoryRelease};
 pub use milestones::milestone_ids;
 pub use mirror::{StoryMirror, StoryPlan};
 pub use player_local_flags::{is_player_local_flag, without_player_local_flags};

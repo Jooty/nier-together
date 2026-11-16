@@ -1,10 +1,11 @@
 use std::sync::{LazyLock, Mutex, PoisonError};
 
+use replicant_game::Replicant;
 use replicant_game::downed::OWN_DRIFT_HOLD_AFTER_REWIND_MS;
 use replicant_game::fix_buttons::TakeOnce;
-use replicant_game::stay_together::FollowRole;
+use replicant_game::stay_together::{FollowRole, local_phase_index};
 use replicant_game::story_progress::{
-    FeedSend, HostStoryApply, HostStoryApplyGate, SAME_STORY_REQUEST_IGNORED_MS,
+    FeedSend, HostStoryApply, HostStoryApplyGate, HostStoryRelease, SAME_STORY_REQUEST_IGNORED_MS,
     STORY_DIGEST_INTERVAL_MS, STORY_MESSAGES_KEPT_BEFORE_ARMING, STORY_REQUEST_RETRY_MS,
     StoryArrays, StoryFeed, StoryMirror,
 };
@@ -15,6 +16,7 @@ use replicant_proto::{
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::memory::InProcessMemory;
 use crate::net::NetSharedExt;
 use crate::net::{self, NetShared, NetState, NetThread, net_clock_ms};
 use crate::story_progress::calls::{
@@ -300,17 +302,27 @@ fn guest_tick(
     if readiness == GameReadiness::NotLinked || slot_changed {
         return;
     }
+    let local_phase = local_phase_index(&Replicant::new(InProcessMemory::new(build)));
     let apply = guest.apply_gate.step(
         readiness.is_in_play(),
         crate::player_body::phase_load_count(),
+        local_phase,
         now,
     );
     if guest.last_apply != Some(apply) {
         guest.last_apply = Some(apply);
         log_line(match apply {
-            HostStoryApply::Now => "story: the host's changes apply here again",
+            HostStoryApply::Now => match guest.apply_gate.last_release() {
+                Some(HostStoryRelease::StageStart) => {
+                    "story: the host's changes apply here again, this game's own StartStage has run"
+                }
+                Some(HostStoryRelease::Cap) => {
+                    "story: the host's changes apply here again, no StartStage was seen within 15 s of the load"
+                }
+                None => "story: the host's changes apply here again",
+            },
             HostStoryApply::HeldForTheLoad => {
-                "story: the host's changes wait while this game loads its phase and until its own StartStage has run (15 s at most), so that stage start reads the flags the host's did"
+                "story: the host's changes wait from this game's phase change until its own StartStage has run (15 s after the load at most), so that stage start reads the flags the host's did"
             }
         });
     }
