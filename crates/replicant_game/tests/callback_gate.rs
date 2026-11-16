@@ -4,7 +4,8 @@ use replicant_game::callback_gate::{
     END_FOLLOW_STILL_WAITING_LOG_MS, EndArrival, EndDrop, EndFollow, EndQueue, GateRole, GateStep,
     LocalFire, MaskIdleTimer, ParkedCall, ParkedKind, PartnerFire, PartnerStartedCopies,
     QueueEvent, RanEnds, Released, WaitStep, end_follow, event_base, event_family, is_end_callback,
-    is_event_talk, is_gated_callback, is_scene_talk, wait_step,
+    is_event_talk, is_gated_callback, is_scene_talk, own_end_is_the_copy_a_waiting_host_end_needs,
+    wait_step,
 };
 use replicant_game::ui_scenes::PAUSE_MENU_CLOSE_MAX_REQUESTS_PER_SCENE_START;
 use replicant_proto::StoryCall;
@@ -813,4 +814,32 @@ fn a_parked_call_does_not_count_as_a_queued_end_of_the_same_name() {
     queue.park_call(hit(1), 1);
     assert!(!queue.contains(HIT));
     assert!(queue.take_through(HIT).is_empty());
+}
+
+#[test]
+fn the_guests_own_end_is_the_copy_a_waiting_host_end_needs() {
+    let mut waiting = EndQueue::new();
+    waiting.push("EID_2000_a0050_End", 1, 0);
+    assert!(own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0050_End",
+        &waiting
+    ));
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0042_End",
+        &waiting
+    ));
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0050_End",
+        &EndQueue::new()
+    ));
+}
+
+#[test]
+fn a_waiting_name_that_is_not_an_end_is_not_the_copy_a_host_end_needs() {
+    let mut waiting = EndQueue::new();
+    waiting.push("Reset_EID_2000_a0050", 1, 0);
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "Reset_EID_2000_a0050",
+        &waiting
+    ));
 }

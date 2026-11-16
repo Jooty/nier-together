@@ -10,7 +10,8 @@ mod stretch_end;
 
 pub use end_follow::{
     EndArrival, EndDrop, EndFollow, MaskIdleTimer, PendingEnd, WaitStep, control_slots_free,
-    end_follow, is_end_callback, slots_an_end_waits_on, wait_step,
+    end_follow, is_end_callback, own_end_is_the_copy_a_waiting_host_end_needs,
+    slots_an_end_waits_on, wait_step,
 };
 pub use end_queue::{EndQueue, ParkedCall, ParkedKind, QueueEvent, Released};
 pub use gate::{CallbackGate, GateRole, GateStep, LocalFire, PartnerFire};

@@ -7,7 +7,7 @@ use replicant_game::callback_gate::{
     LocalFire, MaskIdleTimer, ParkedCall, PartnerFire, PartnerStartedCopies, PlayedStart,
     QueueEvent, RanEnds, RelayedScenesPlayed, Released, TALK_START_AFTER_COMMAND_MS,
     control_slots_free, end_follow_around_a_stretch, event_base, is_end_callback, is_event_talk,
-    is_gated_callback, slots_an_end_waits_on,
+    is_gated_callback, own_end_is_the_copy_a_waiting_host_end_needs, slots_an_end_waits_on,
 };
 use replicant_game::marker::{CONTROL_MASK_FIRST_RVA, read_world_flags};
 use replicant_game::message_handlers::HandlerFire;
@@ -388,6 +388,13 @@ pub(crate) fn partner_end_waiting_for(phase: u16) -> bool {
         .unwrap_or_else(PoisonError::into_inner)
         .front_end()
         .is_some_and(|end| end.phase == phase)
+}
+
+pub(crate) fn own_end_is_the_copy_the_waiting_host_end_needs(name: &str) -> bool {
+    own_end_is_the_copy_a_waiting_host_end_needs(
+        name,
+        &WAITING_ENDS.lock().unwrap_or_else(PoisonError::into_inner),
+    )
 }
 
 fn control_mask_settled(build: &VerifiedBuild) -> bool {
