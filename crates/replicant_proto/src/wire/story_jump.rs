@@ -1,29 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum StoryJumpPoint {
-    AfterPrologue,
-    AtPopolaTalk,
-    BeforeNextDay,
-    AtShrineEntrance,
-    AtShrineTop,
-    AtShrineBoss,
-    BossFight3,
-    JunkHeapFloorB2,
-    JunkHeapBossFight5,
-    AfterBossFight6,
-    BossFight6,
-    AfterFacade,
-    TempleEntrance,
-    TempleBeforeBoss,
-    VillageBackFromTemple,
-    SeafrontWithRedBag,
-    ManorFront,
-    ForestInside,
-    ManorEmilFollows,
-    ManorBeforeBossFight8,
-    BossFight9,
-}
+use crate::wire::story_jump_point::StoryJumpPoint;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoryJump {

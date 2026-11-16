@@ -537,7 +537,7 @@ fn samples() -> Vec<Message> {
             state: "voice".to_owned(),
         }),
         Message::StoryJump(StoryJump {
-            point: StoryJumpPoint::AtPopolaTalk,
+            point: StoryJumpPoint::LibraryPopolaTalk,
         }),
         Message::LobbyBody(LobbyBody {
             body: PartnerBody::SeedNierF,
@@ -858,7 +858,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 79);
+    assert_eq!(PROTOCOL_VERSION, 80);
 }
 
 #[test]

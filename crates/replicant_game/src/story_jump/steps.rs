@@ -1,6 +1,6 @@
 use replicant_proto::StoryJumpPoint;
 
-const AFTER_PROLOGUE_STEPS: [JumpStep; 18] = [
+const AFTER_PROLOGUE_STEPS: [JumpStep; 17] = [
     JumpStep::SetFlag { id: 71 },
     JumpStep::SetFlag { id: 153 },
     JumpStep::ClearFlag { id: 1403 },
@@ -18,7 +18,6 @@ const AFTER_PROLOGUE_STEPS: [JumpStep; 18] = [
     JumpStep::SetItem { id: 727, count: 0 },
     JumpStep::SetItem { id: 1000, count: 1 },
     JumpStep::EquipWeapon { id: 1000 },
-    JumpStep::SetPlayerLevel { level: 0 },
 ];
 
 const POPOLA_TALK_EXTRA_STEPS: [JumpStep; 3] = [
@@ -711,7 +710,6 @@ pub enum JumpStep {
     SetGameCounter { id: u8, value: u8 },
     SetItem { id: i32, count: i32 },
     EquipWeapon { id: i32 },
-    SetPlayerLevel { level: i32 },
     MpFullMode { on: bool },
     SetHaveWhiteBook { on: bool },
     LearnMagic { id: i32 },
@@ -720,31 +718,31 @@ pub enum JumpStep {
 
 pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
     match point {
-        StoryJumpPoint::AfterPrologue => {
+        StoryJumpPoint::VillageAfterPrologue => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AtPopolaTalk => {
+        StoryJumpPoint::LibraryPopolaTalk => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.extend_from_slice(&POPOLA_TALK_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::BeforeNextDay => {
+        StoryJumpPoint::VillageBeforeNextDay => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.extend_from_slice(&BEFORE_NEXT_DAY_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AtShrineEntrance => {
+        StoryJumpPoint::ShrineEntrance => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.extend_from_slice(&BEFORE_NEXT_DAY_EXTRA_STEPS);
             steps.extend_from_slice(&AT_SHRINE_ENTRANCE_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AtShrineTop => {
+        StoryJumpPoint::ShrineTop => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.extend_from_slice(&BEFORE_NEXT_DAY_EXTRA_STEPS);
             steps.extend_from_slice(&AT_SHRINE_ENTRANCE_EXTRA_STEPS);
@@ -752,7 +750,7 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AtShrineBoss => {
+        StoryJumpPoint::ShrineBoss2 => {
             let mut steps = AFTER_PROLOGUE_STEPS.to_vec();
             steps.extend_from_slice(&BEFORE_NEXT_DAY_EXTRA_STEPS);
             steps.extend_from_slice(&AT_SHRINE_ENTRANCE_EXTRA_STEPS);
@@ -762,45 +760,45 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::BossFight3 => {
-            let mut steps = loadout_steps(StoryJumpPoint::AtShrineBoss);
+        StoryJumpPoint::AerieBoss3 => {
+            let mut steps = loadout_steps(StoryJumpPoint::ShrineBoss2);
             steps.pop();
             steps.extend_from_slice(&AERIE_ENTRANCE_EXTRA_STEPS);
             steps.extend_from_slice(&BOSS_FIGHT_3_LEAD_IN_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::JunkHeapFloorB2 => {
-            let mut steps = loadout_steps(StoryJumpPoint::BossFight3);
+        StoryJumpPoint::JunkHeapB2 => {
+            let mut steps = loadout_steps(StoryJumpPoint::AerieBoss3);
             steps.pop();
             steps.extend_from_slice(&BOSS_FIGHT_3_TO_JUNK_HEAP_FIRST_UPGRADE_EXTRA_STEPS);
             steps.extend_from_slice(&JUNK_HEAP_LIFT_TO_FLOOR_B2_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::JunkHeapBossFight5 => {
-            let mut steps = loadout_steps(StoryJumpPoint::JunkHeapFloorB2);
+        StoryJumpPoint::JunkHeapBoss5 => {
+            let mut steps = loadout_steps(StoryJumpPoint::JunkHeapB2);
             steps.pop();
             steps.extend_from_slice(&JUNK_HEAP_FLOOR_B2_TO_BOSS_FIGHT_5_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::BossFight6 => {
-            let mut steps = loadout_steps(StoryJumpPoint::JunkHeapBossFight5);
+        StoryJumpPoint::AerieBoss6 => {
+            let mut steps = loadout_steps(StoryJumpPoint::JunkHeapBoss5);
             steps.pop();
             steps.extend_from_slice(&BOSS_FIGHT_6_LEAD_IN_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AfterBossFight6 => {
-            let mut steps = loadout_steps(StoryJumpPoint::BossFight6);
+        StoryJumpPoint::AerieAfterBoss6 => {
+            let mut steps = loadout_steps(StoryJumpPoint::AerieBoss6);
             steps.pop();
             steps.extend_from_slice(&BOSS_FIGHT_6_TO_AFTER_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::AfterFacade => {
-            let mut steps = loadout_steps(StoryJumpPoint::AfterBossFight6);
+        StoryJumpPoint::DesertAfterFacade => {
+            let mut steps = loadout_steps(StoryJumpPoint::AerieAfterBoss6);
             steps.pop();
             steps.extend_from_slice(&AFTER_BOSS_FIGHT_6_TO_FACADE_ENTRANCE_EXTRA_STEPS);
             steps.extend_from_slice(&FACADE_ENTRANCE_TO_AFTER_FACADE_EXTRA_STEPS);
@@ -808,42 +806,42 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps
         }
         StoryJumpPoint::TempleEntrance => {
-            let mut steps = loadout_steps(StoryJumpPoint::AfterFacade);
+            let mut steps = loadout_steps(StoryJumpPoint::DesertAfterFacade);
             steps.pop();
             steps.extend_from_slice(&AFTER_FACADE_TO_TEMPLE_ENTRANCE_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::TempleBeforeBoss => {
+        StoryJumpPoint::TempleBoss7 => {
             let mut steps = loadout_steps(StoryJumpPoint::TempleEntrance);
             steps.pop();
             steps.extend_from_slice(&TEMPLE_ENTRANCE_TO_BEFORE_BOSS_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::VillageBackFromTemple => {
-            let mut steps = loadout_steps(StoryJumpPoint::TempleBeforeBoss);
+        StoryJumpPoint::VillageAfterTemple => {
+            let mut steps = loadout_steps(StoryJumpPoint::TempleBoss7);
             steps.pop();
             steps.extend_from_slice(&TEMPLE_BEFORE_BOSS_TO_VILLAGE_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::SeafrontWithRedBag => {
-            let mut steps = loadout_steps(StoryJumpPoint::VillageBackFromTemple);
+        StoryJumpPoint::SouthPlainsRedBag => {
+            let mut steps = loadout_steps(StoryJumpPoint::VillageAfterTemple);
             steps.pop();
             steps.extend_from_slice(&VILLAGE_TO_SEAFRONT_WITH_RED_BAG_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
         StoryJumpPoint::ManorFront => {
-            let mut steps = loadout_steps(StoryJumpPoint::SeafrontWithRedBag);
+            let mut steps = loadout_steps(StoryJumpPoint::SouthPlainsRedBag);
             steps.pop();
             steps.extend_from_slice(&SEAFRONT_WITH_RED_BAG_TO_MANOR_FRONT_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::ForestInside => {
-            let mut steps = loadout_steps(StoryJumpPoint::VillageBackFromTemple);
+        StoryJumpPoint::ForestArrival => {
+            let mut steps = loadout_steps(StoryJumpPoint::VillageAfterTemple);
             steps.pop();
             steps.extend_from_slice(&VILLAGE_TO_FOREST_INSIDE_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
@@ -856,15 +854,15 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::ManorBeforeBossFight8 => {
+        StoryJumpPoint::ManorBoss8 => {
             let mut steps = loadout_steps(StoryJumpPoint::ManorEmilFollows);
             steps.pop();
             steps.extend_from_slice(&EMIL_FOLLOWS_TO_BEFORE_BOSS_FIGHT_8_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
-        StoryJumpPoint::BossFight9 => {
-            let mut steps = loadout_steps(StoryJumpPoint::ManorBeforeBossFight8);
+        StoryJumpPoint::VillageBoss9 => {
+            let mut steps = loadout_steps(StoryJumpPoint::ManorBoss8);
             steps.pop();
             steps.extend_from_slice(&BEFORE_BOSS_FIGHT_8_TO_BOSS_FIGHT_9_EXTRA_STEPS);
             steps.push(AFTER_PROLOGUE_MP_STEP);
@@ -875,36 +873,36 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
 
 pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
     match point {
-        StoryJumpPoint::AfterPrologue => (AFTER_PROLOGUE_PHASE, AFTER_PROLOGUE_POINT),
-        StoryJumpPoint::AtPopolaTalk => (POPOLA_TALK_PHASE, POPOLA_TALK_POINT),
-        StoryJumpPoint::BeforeNextDay => (BEFORE_NEXT_DAY_PHASE, BEFORE_NEXT_DAY_POINT),
-        StoryJumpPoint::AtShrineEntrance => (AT_SHRINE_ENTRANCE_PHASE, AT_SHRINE_ENTRANCE_POINT),
-        StoryJumpPoint::AtShrineTop => (AT_SHRINE_TOP_PHASE, AT_SHRINE_TOP_POINT),
-        StoryJumpPoint::AtShrineBoss => (AT_SHRINE_BOSS_PHASE, AT_SHRINE_BOSS_POINT),
-        StoryJumpPoint::BossFight3 => (BOSS_FIGHT_3_PHASE, BOSS_FIGHT_3_POINT),
-        StoryJumpPoint::JunkHeapFloorB2 => (JUNK_HEAP_FLOOR_B2_PHASE, JUNK_HEAP_FLOOR_B2_POINT),
-        StoryJumpPoint::JunkHeapBossFight5 => {
+        StoryJumpPoint::VillageAfterPrologue => (AFTER_PROLOGUE_PHASE, AFTER_PROLOGUE_POINT),
+        StoryJumpPoint::LibraryPopolaTalk => (POPOLA_TALK_PHASE, POPOLA_TALK_POINT),
+        StoryJumpPoint::VillageBeforeNextDay => (BEFORE_NEXT_DAY_PHASE, BEFORE_NEXT_DAY_POINT),
+        StoryJumpPoint::ShrineEntrance => (AT_SHRINE_ENTRANCE_PHASE, AT_SHRINE_ENTRANCE_POINT),
+        StoryJumpPoint::ShrineTop => (AT_SHRINE_TOP_PHASE, AT_SHRINE_TOP_POINT),
+        StoryJumpPoint::ShrineBoss2 => (AT_SHRINE_BOSS_PHASE, AT_SHRINE_BOSS_POINT),
+        StoryJumpPoint::AerieBoss3 => (BOSS_FIGHT_3_PHASE, BOSS_FIGHT_3_POINT),
+        StoryJumpPoint::JunkHeapB2 => (JUNK_HEAP_FLOOR_B2_PHASE, JUNK_HEAP_FLOOR_B2_POINT),
+        StoryJumpPoint::JunkHeapBoss5 => {
             (JUNK_HEAP_BOSS_FIGHT_5_PHASE, JUNK_HEAP_BOSS_FIGHT_5_POINT)
         }
-        StoryJumpPoint::AfterBossFight6 => (AFTER_BOSS_FIGHT_6_PHASE, AFTER_BOSS_FIGHT_6_POINT),
-        StoryJumpPoint::BossFight6 => (BOSS_FIGHT_6_PHASE, BOSS_FIGHT_6_POINT),
-        StoryJumpPoint::AfterFacade => (AFTER_FACADE_PHASE, AFTER_FACADE_POINT),
+        StoryJumpPoint::AerieAfterBoss6 => (AFTER_BOSS_FIGHT_6_PHASE, AFTER_BOSS_FIGHT_6_POINT),
+        StoryJumpPoint::AerieBoss6 => (BOSS_FIGHT_6_PHASE, BOSS_FIGHT_6_POINT),
+        StoryJumpPoint::DesertAfterFacade => (AFTER_FACADE_PHASE, AFTER_FACADE_POINT),
         StoryJumpPoint::TempleEntrance => (TEMPLE_ENTRANCE_PHASE, TEMPLE_ENTRANCE_POINT),
-        StoryJumpPoint::TempleBeforeBoss => (TEMPLE_BEFORE_BOSS_PHASE, TEMPLE_BEFORE_BOSS_POINT),
-        StoryJumpPoint::VillageBackFromTemple => (
+        StoryJumpPoint::TempleBoss7 => (TEMPLE_BEFORE_BOSS_PHASE, TEMPLE_BEFORE_BOSS_POINT),
+        StoryJumpPoint::VillageAfterTemple => (
             VILLAGE_BACK_FROM_TEMPLE_PHASE,
             VILLAGE_BACK_FROM_TEMPLE_POINT,
         ),
-        StoryJumpPoint::SeafrontWithRedBag => {
+        StoryJumpPoint::SouthPlainsRedBag => {
             (SEAFRONT_WITH_RED_BAG_PHASE, SEAFRONT_WITH_RED_BAG_POINT)
         }
         StoryJumpPoint::ManorFront => (MANOR_FRONT_PHASE, MANOR_FRONT_POINT),
-        StoryJumpPoint::ForestInside => (FOREST_INSIDE_PHASE, FOREST_INSIDE_POINT),
+        StoryJumpPoint::ForestArrival => (FOREST_INSIDE_PHASE, FOREST_INSIDE_POINT),
         StoryJumpPoint::ManorEmilFollows => (MANOR_EMIL_FOLLOWS_PHASE, MANOR_EMIL_FOLLOWS_POINT),
-        StoryJumpPoint::ManorBeforeBossFight8 => (
+        StoryJumpPoint::ManorBoss8 => (
             MANOR_BEFORE_BOSS_FIGHT_8_PHASE,
             MANOR_BEFORE_BOSS_FIGHT_8_POINT,
         ),
-        StoryJumpPoint::BossFight9 => (BOSS_FIGHT_9_PHASE, BOSS_FIGHT_9_POINT),
+        StoryJumpPoint::VillageBoss9 => (BOSS_FIGHT_9_PHASE, BOSS_FIGHT_9_POINT),
     }
 }

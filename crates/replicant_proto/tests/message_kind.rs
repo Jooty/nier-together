@@ -8,12 +8,19 @@ fn a_message_kind_is_its_variant_name_without_the_payload() {
 
 const SINGLE_BYTE_VARIANT_LIMIT: u8 = 128;
 
+const FIRST_STORY_JUMP_ID_BYTE: u8 = 30;
+
 fn zeroed_message_of_variant(index: u8) -> Option<Message> {
-    let mut bytes = vec![0_u8; 256];
-    bytes[0] = index;
-    postcard::take_from_bytes::<Message>(&bytes)
-        .ok()
-        .map(|(message, _)| message)
+    [0_u8, FIRST_STORY_JUMP_ID_BYTE]
+        .into_iter()
+        .find_map(|first_payload_byte| {
+            let mut bytes = vec![0_u8; 256];
+            bytes[0] = index;
+            bytes[1] = first_payload_byte;
+            postcard::take_from_bytes::<Message>(&bytes)
+                .ok()
+                .map(|(message, _)| message)
+        })
 }
 
 #[test]

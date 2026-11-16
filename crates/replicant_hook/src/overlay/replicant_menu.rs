@@ -18,57 +18,6 @@ use crate::overlay::status_lines::game_status_lines;
 use crate::story_jump::{host_can_offer_jump, jump_is_waiting_for_menu, last_refusal};
 use crate::teleport::last_outcome as last_teleport_outcome;
 
-const STORY_JUMPS: [(StoryJumpPoint, &str); 21] = [
-    (StoryJumpPoint::AfterPrologue, "Skip the prologue"),
-    (StoryJumpPoint::AtPopolaTalk, "Library: talk to Popola"),
-    (
-        StoryJumpPoint::BeforeNextDay,
-        "Village: before the next day",
-    ),
-    (
-        StoryJumpPoint::AtShrineEntrance,
-        "Lost Shrine: the entrance",
-    ),
-    (StoryJumpPoint::AtShrineTop, "Shrine top: the stone field"),
-    (StoryJumpPoint::AtShrineBoss, "Shrine boss: the arena"),
-    (StoryJumpPoint::BossFight3, "Boss fight 3"),
-    (StoryJumpPoint::JunkHeapFloorB2, "Junk Heap: floor B2"),
-    (
-        StoryJumpPoint::JunkHeapBossFight5,
-        "Junk Heap: boss fight 5",
-    ),
-    (StoryJumpPoint::BossFight6, "Boss fight 6"),
-    (StoryJumpPoint::AfterBossFight6, "After boss fight 6"),
-    (StoryJumpPoint::AfterFacade, "After the Facade"),
-    (
-        StoryJumpPoint::TempleEntrance,
-        "Barren Temple: the entrance",
-    ),
-    (
-        StoryJumpPoint::TempleBeforeBoss,
-        "Barren Temple: before boss fight 7",
-    ),
-    (
-        StoryJumpPoint::VillageBackFromTemple,
-        "The village: back from the temple",
-    ),
-    (StoryJumpPoint::ForestInside, "Forest of Myth: just inside"),
-    (
-        StoryJumpPoint::SeafrontWithRedBag,
-        "Seafront: before entering, with the red bag",
-    ),
-    (StoryJumpPoint::ManorFront, "The manor: in front of it"),
-    (
-        StoryJumpPoint::ManorEmilFollows,
-        "The manor: Emil follows you",
-    ),
-    (
-        StoryJumpPoint::ManorBeforeBossFight8,
-        "The manor: before boss fight 8",
-    ),
-    (StoryJumpPoint::BossFight9, "Boss fight 9: just before it"),
-];
-
 impl GameMenu for ReplicantOverlay {
     fn co_op_status(&self) -> CoOpStatus {
         co_op_status()
@@ -142,22 +91,20 @@ impl GameMenu for ReplicantOverlay {
         if !host_can_offer_jump() {
             return Vec::new();
         }
-        STORY_JUMPS
-            .iter()
-            .enumerate()
-            .map(|(index, (_, label))| StoryJumpEntry {
-                id: u32::try_from(index).unwrap_or(u32::MAX),
-                label: (*label).to_owned(),
+        StoryJumpPoint::in_id_order()
+            .map(|point| StoryJumpEntry {
+                id: u32::from(point.id()),
+                label: point.name().to_owned(),
             })
             .collect()
     }
 
     fn run_story_jump(&self, id: u32) -> Result<String, String> {
-        let (point, _) = usize::try_from(id)
+        let point = u16::try_from(id)
             .ok()
-            .and_then(|index| STORY_JUMPS.get(index))
+            .and_then(StoryJumpPoint::from_id)
             .ok_or_else(|| format!("unknown story jump {id}"))?;
-        actions::enqueue(Action::StoryJump(*point))
+        actions::enqueue(Action::StoryJump(point))
             .map(|()| String::from("asked the game to jump"))
             .map_err(|error| format!("not queued: {error}"))
     }

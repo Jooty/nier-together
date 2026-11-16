@@ -18,7 +18,7 @@ pub struct ArrivalSpot {
 
 pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
     match point {
-        StoryJumpPoint::AtShrineBoss => {
+        StoryJumpPoint::ShrineBoss2 => {
             let [x, y, z] = ARENA_HOST_POSITION;
             let side = if host {
                 0.0
@@ -27,7 +27,7 @@ pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
             };
             Some(ArrivalSpot { x: x + side, y, z })
         }
-        StoryJumpPoint::JunkHeapFloorB2 => {
+        StoryJumpPoint::JunkHeapB2 => {
             let [x, y, z] = JUNK_HEAP_FLOOR_B2_HOST_POSITION;
             let side = if host {
                 0.0
@@ -36,7 +36,7 @@ pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
             };
             Some(ArrivalSpot { x: x + side, y, z })
         }
-        StoryJumpPoint::AfterBossFight6 => {
+        StoryJumpPoint::AerieAfterBoss6 => {
             let [x, y, z] = AFTER_BOSS_FIGHT_6_HOST_POSITION;
             let side = if host {
                 0.0

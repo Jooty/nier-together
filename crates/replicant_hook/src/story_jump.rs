@@ -2,6 +2,7 @@ mod arrival;
 mod level;
 mod natives;
 mod run;
+mod stat_level;
 mod status;
 
 pub(crate) use level::install;

@@ -1,6 +1,7 @@
 mod arrival;
 mod gate;
 mod level;
+mod stat_level;
 mod steps;
 
 pub use arrival::{ArrivalSpot, arrival_is_due, arrival_spot};
@@ -10,8 +11,8 @@ pub use gate::{
 };
 pub use level::{
     LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, check_level, level_check_is_due,
-    loadout_player_level,
 };
+pub use stat_level::{jump_stat_level, levels_to_raise};
 pub use steps::{JumpStep, destination, loadout_steps};
 
 pub const SET_TUTORIAL_NATIVE_RVA: u32 = 0x70_2B10;

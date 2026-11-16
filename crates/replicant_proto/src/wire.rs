@@ -59,6 +59,8 @@ mod side_view_state;
 mod sky_state;
 mod story_call;
 mod story_jump;
+mod story_jump_point;
+mod story_jump_point_serde;
 mod story_progress;
 mod talk_choice;
 mod talk_window_size;
@@ -191,7 +193,8 @@ pub use story_call::{
     MAX_STORY_CALL_ARGS, MAX_STORY_CALL_NAME_BYTES, MAX_STORY_CALL_TEXT_BYTES, StoryCall,
     StoryCallArg, StoryRefusalReason, StoryRefused,
 };
-pub use story_jump::{StoryJump, StoryJumpPoint};
+pub use story_jump::StoryJump;
+pub use story_jump_point::{STORY_JUMP_ROWS, StoryJumpPoint, StoryJumpRow};
 pub use story_progress::{
     StoryArray, StoryArrayPart, StoryChange, StoryChanges, StoryDigest, StoryRequest, StoryWrite,
     StoryWriteSource,
@@ -203,7 +206,7 @@ pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 79;
+pub const PROTOCOL_VERSION: u16 = 80;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;
