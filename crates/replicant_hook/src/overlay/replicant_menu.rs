@@ -52,12 +52,12 @@ const STORY_JUMPS: [(StoryJumpPoint, &str); 18] = [
         StoryJumpPoint::VillageBackFromTemple,
         "The village: back from the temple",
     ),
+    (StoryJumpPoint::ForestInside, "Forest of Myth: just inside"),
     (
         StoryJumpPoint::SeafrontWithRedBag,
         "Seafront: before entering, with the red bag",
     ),
     (StoryJumpPoint::ManorFront, "The manor: in front of it"),
-    (StoryJumpPoint::ForestInside, "Forest of Myth: just inside"),
 ];
 
 impl GameMenu for ReplicantOverlay {
