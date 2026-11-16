@@ -220,10 +220,13 @@ fn a_registered_talk_id_that_is_not_listed_passes() {
 fn run_1116a_the_villager_talk_that_leads_into_the_home_dream_waits_for_a_partner_outside_the_house()
  {
     const VILLAGER: i32 = 1002;
-    const HOUSE_DOOR_TO_ROOM_UNITS: f32 = 71.5;
-    const FLOOR_BELOW_UNITS: f32 = 4.9;
+    const VILLAGE_PHASE: u16 = 1;
+    const HOST_UPSTAIRS_AT_THE_PRESS: [f32; 3] = [31.0, 18.0, 11.6];
+    const GUEST_OUTSIDE_AT_THE_PRESS: [f32; 3] = [98.9, 27.0, -10.4];
+    const HOUSE_LOWER_FLOOR: [f32; 3] = [31.0, 14.0, 11.1];
     // Run 1116a host 08:29:25.143: actor 1002 pressed with talk 1321 registered (1322 after a
-    // refusal); its end runs EID_1500_a0005_020_Select, the choice into the dream.
+    // refusal); its chain ends in EID_1500_a0005_020_Select, the choice into the dream. Guest
+    // 08:29:23.898: the guest at (98.9, 27.0, -10.4), both in phase 1; host 08:29:18.891 on the lower floor.
     for talk_id in [1321, 1322] {
         let mut registry = TalkRegistry::default();
         registry.register_talk_id(VILLAGER, 0, talk_id);
@@ -232,11 +235,29 @@ fn run_1116a_the_villager_talk_that_leads_into_the_home_dream_waits_for_a_partne
             Some((talk_id, "EID_1500_a0005_020"))
         );
     }
-    let outside = partner_at(HOUSE_DOOR_TO_ROOM_UNITS, PHASE, 0);
-    assert!(matches!(
-        verdict_with(true, true, Some(&outside)),
-        PressVerdict::Wait { .. }
-    ));
-    let inside = partner_at(FLOOR_BELOW_UNITS, PHASE, 0);
-    assert_eq!(verdict_with(true, true, Some(&inside)), PressVerdict::Allow);
+    let judge = |position: [f32; 3]| {
+        let guest = Companion {
+            name: "Sam".to_owned(),
+            placement: Some(Placement {
+                phase: VILLAGE_PHASE,
+                position,
+            }),
+            age_ms: 0,
+        };
+        judge_press(&PressAsk {
+            connected: true,
+            partner_game_open: true,
+            local: Some(Placement {
+                phase: VILLAGE_PHASE,
+                position: HOST_UPSTAIRS_AT_THE_PRESS,
+            }),
+            partner: Some(&guest),
+            radius: ZoneRadius::default(),
+        })
+    };
+    let PressVerdict::Wait { distance_units, .. } = judge(GUEST_OUTSIDE_AT_THE_PRESS) else {
+        panic!("the press must wait for the guest outside the house");
+    };
+    assert!((distance_units - 71.9).abs() < 0.1);
+    assert_eq!(judge(HOUSE_LOWER_FLOOR), PressVerdict::Allow);
 }
