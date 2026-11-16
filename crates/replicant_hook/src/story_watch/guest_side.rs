@@ -19,8 +19,9 @@ use crate::memory::InProcessMemory;
 use crate::net::{self, NetState, net_clock_ms};
 use crate::slot_zero::{read_slot_zero, write_slot_zero};
 use crate::story_watch::body::{Placed, WatchedBody};
+use crate::story_watch::forget_removal;
 use crate::story_watch::host_side::{forget_guest, tick_host};
-use crate::story_watch::removal_natives::{forget_removal, step_removal, story_has_taken_her};
+use crate::story_watch::removal_natives::{step_removal, story_has_taken_her};
 use crate::story_watch::setting::guest_watches_setting;
 
 const HOST_POSITION_FRESH_FOR: Duration = Duration::from_millis(1_500);

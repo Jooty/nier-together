@@ -22,6 +22,8 @@ pub use relayed_scenes::{PlayedStart, RelayedScenesPlayed, scene_base, start_bas
 pub use scene_pull::{ScenePull, ScenePullFacts, ScenePullSkip, scene_pull};
 pub use stretch_end::end_follow_around_a_stretch;
 
+pub const HOST_STEPS_THAT_PLACE_OR_MOVE_A_STORY_ACTOR: [&str; 2] =
+    ["EID_2000_a0026g_02_Start", "EID_2000_a0026g_03_Start"];
 pub const GATED_CALLBACK_NAMES: [&str; 1] = ["Boss_Battle_Start"];
 pub const GATED_EVENT_SUFFIX: &str = "_Start";
 pub const SCENE_PLAY_SUFFIXES: [&str; 3] = ["_PLAY_EVENT", "_EVENT", "_Event"];

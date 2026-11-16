@@ -215,6 +215,8 @@ mod lift_rides;
 mod loading_lines;
 #[path = "local_pose.rs"]
 mod local_pose;
+#[path = "manor_watch.rs"]
+mod manor_watch;
 #[path = "message_handlers.rs"]
 mod message_handlers;
 #[path = "minimap.rs"]

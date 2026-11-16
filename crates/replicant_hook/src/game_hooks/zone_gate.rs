@@ -188,11 +188,15 @@ fn judge_popped_callback(
     match crate::fight_sync::judge_pop(manager, &name, arguments) {
         FightPop::Hold => return 0,
         FightPop::Replayed => {
+            crate::host_led_stretch::note_fight_stream_step(&name);
             crate::one_sided::note_fired(&name);
             crate::kaine::stand_in_function_ran(&name);
             return fired;
         }
-        FightPop::HostWindow => return run_inside_the_fight_window(fired, &name, arguments),
+        FightPop::HostWindow => {
+            crate::host_led_stretch::note_fight_stream_step(&name);
+            return run_inside_the_fight_window(fired, &name, arguments);
+        }
         FightPop::Outside => {}
     }
     if !runs_the_hosts_step_copy && crate::cutscene_skip::is_injected_duplicate(&name) {

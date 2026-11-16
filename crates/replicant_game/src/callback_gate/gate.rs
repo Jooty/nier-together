@@ -1,6 +1,7 @@
 use crate::callback_gate::{
     CALLBACK_GATE_AFTER_DIALOG_CLOSE_MS, CALLBACK_GATE_GUEST_GIVE_UP_MS,
     CALLBACK_GATE_HOST_GRACE_MS, CALLBACK_GATE_PAIRING_WINDOW_MS,
+    HOST_STEPS_THAT_PLACE_OR_MOVE_A_STORY_ACTOR,
 };
 use crate::story_calls::is_event_callback_name;
 use crate::ui_scenes::PAUSE_MENU_CLOSE_MAX_REQUESTS_PER_SCENE_START;
@@ -30,6 +31,9 @@ pub enum PartnerFire {
     /// The host started an event the guest's game has not reached; the guest, standing in the
     /// same place, starts it too. Whichever copy pops first runs, the other is a duplicate.
     FollowHost,
+    /// The host's step puts a story actor in the world or moves one: the guest starts it too
+    /// wherever it stands in the phase, so the actor is in its world as in the host's.
+    FollowHostFromAfar,
     Noted,
     Elsewhere,
 }
@@ -156,8 +160,14 @@ impl CallbackGate {
                     };
                 }
                 self.partner_fired.push((name.to_owned(), now_ms));
-                if !self.partner_elsewhere && is_event_callback_name(name) {
+                if !is_event_callback_name(name) {
+                    return PartnerFire::Noted;
+                }
+                if !self.partner_elsewhere {
                     return PartnerFire::FollowHost;
+                }
+                if HOST_STEPS_THAT_PLACE_OR_MOVE_A_STORY_ACTOR.contains(&name) {
+                    return PartnerFire::FollowHostFromAfar;
                 }
                 PartnerFire::Noted
             }

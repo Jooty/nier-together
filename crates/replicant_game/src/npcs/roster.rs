@@ -5,8 +5,8 @@ use replicant_proto::NpcId;
 use crate::npcs::NpcSighting;
 
 /// Gives each NPC of the phase its network id the same way on both machines: NPCs of one (script
-/// group, class) are numbered by spawn serial from 0 at phase start. Splitting by class keeps an
-/// NPC that exists on one machine only from shifting the numbers of every other model.
+/// group, class) are numbered by spawn serial from 0 at phase start, and from 0 again once none
+/// of them is left. Splitting by class keeps a one-machine NPC from shifting the other models.
 #[derive(Debug, Default)]
 pub struct NpcRoster {
     phase: Option<u16>,
@@ -105,6 +105,14 @@ impl NpcRoster {
                 update.gone.push(*id);
             }
             stays
+        });
+        // A model none of whose NPCs is left numbers from 0 again, so one machine that missed an
+        // earlier spawn of it (a step it did not run) numbers the next one as the other does.
+        let known = &self.known;
+        self.next_ordinal.retain(|&(group, class), _| {
+            known
+                .values()
+                .any(|id| id.group == group && id.class == class)
         });
         update.seen.sort_by_key(|(id, _)| *id);
         update.seen.dedup_by_key(|(id, _)| *id);
