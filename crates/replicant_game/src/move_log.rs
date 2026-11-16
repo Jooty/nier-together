@@ -1,6 +1,7 @@
 mod body_speed_rate;
 mod feet;
 mod feet_drive;
+mod host_pace;
 mod input;
 mod line;
 mod names;
@@ -18,6 +19,7 @@ pub use feet::{FeetReading, FeetSecond, format_feet_second, read_feet};
 pub use feet_drive::{
     FeetDrive, FeetDriveReading, FeetDriveStep, FeetDriveTally, house_pace_in_play,
 };
+pub use host_pace::HostPaceWatch;
 pub use input::{input_block_getter, read_move_axis, read_move_keys};
 pub use line::{MoveLineContext, format_move_line};
 pub use names::{action_set_for_seed, state_name_for_rva};
@@ -53,7 +55,12 @@ pub const SPEED_CAP_HOUSE_VALUE_MIN: f32 = 0.005;
 pub const SPEED_CAP_REPORT_WINDOW_AFTER_LOW_MS: u64 = 1_000;
 pub const RUN_LOOP_MOTION_NAME: &str = "KAINE015_run_lp";
 pub const RUN_LOOP_ROOT_TRAVEL_PER_SECOND_AT_FULL_SPEED: f32 = 6.0;
-pub const HOST_INDOOR_PACE_PER_SECOND: f32 = 2.9;
+pub const FALLBACK_INDOOR_PACE_PER_SECOND: f32 = 2.9;
+pub const HOST_PACE_MEASURING_WINDOW_SECONDS: f64 = 0.5;
+pub const HOST_PACE_LEAST_MOVING_PER_SECOND: f32 = 2.0;
+pub const HOST_PACE_LEAST_PER_SECOND: f32 = 2.5;
+pub const HOST_PACE_LARGEST_PER_SECOND: f32 = 4.5;
+pub const HOST_PACE_AVERAGE_SAMPLE_WEIGHT: f32 = 0.3;
 pub const INDOOR_FEET_MOVING_GROUND_SPEED: f32 = 0.02;
 pub const INDOOR_FEET_PLAY_BLEND_SECONDS: f32 = 0.2;
 pub const HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE: u32 = 10;

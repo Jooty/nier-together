@@ -1,5 +1,5 @@
 use crate::move_log::{
-    BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST, HOST_INDOOR_PACE_PER_SECOND,
+    BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST, FALLBACK_INDOOR_PACE_PER_SECOND,
     PACE_AVERAGE_SAMPLE_WEIGHT, PACE_BLOCKED_BELOW_SHARE_OF_THE_AIM, PACE_LARGEST_STEP_OF_THE_RATE,
     PACE_TICKS_PER_RATE_STEP, RUN_LOOP_ROOT_TRAVEL_PER_SECOND_AT_FULL_SPEED,
 };
@@ -10,6 +10,7 @@ use crate::move_log::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaceFeedback {
     rate: f32,
+    aim_per_second: f32,
     average_step_per_second: Option<f32>,
     samples_since_last_step: u32,
 }
@@ -18,6 +19,7 @@ impl Default for PaceFeedback {
     fn default() -> Self {
         Self {
             rate: starting_body_speed_rate(),
+            aim_per_second: FALLBACK_INDOOR_PACE_PER_SECOND,
             average_step_per_second: None,
             samples_since_last_step: 0,
         }
@@ -25,6 +27,21 @@ impl Default for PaceFeedback {
 }
 
 impl PaceFeedback {
+    /// Moves the aim to the host's measured pace, taking the rate and the average along with it
+    /// so the correction does not have to climb there in steps of a quarter.
+    pub fn retarget(&mut self, aim_per_second: f32) {
+        if !aim_per_second.is_finite() || aim_per_second <= 0.0 {
+            return;
+        }
+        let share = aim_per_second / self.aim_per_second;
+        self.aim_per_second = aim_per_second;
+        let rate = (self.rate * share).clamp(BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST);
+        if let Some(average) = self.average_step_per_second {
+            self.average_step_per_second = Some(average * rate / self.rate);
+        }
+        self.rate = rate;
+    }
+
     /// One tick of her run loop under a held stick, with the step she took this tick.
     pub fn observe(&mut self, step_per_second: f32) -> f32 {
         if !step_per_second.is_finite() {
@@ -42,10 +59,10 @@ impl PaceFeedback {
         }
         self.samples_since_last_step = 0;
         // a body pressed against a wall travels nothing at any rate: it tells nothing about the pace
-        if average < PACE_BLOCKED_BELOW_SHARE_OF_THE_AIM * HOST_INDOOR_PACE_PER_SECOND {
+        if average < PACE_BLOCKED_BELOW_SHARE_OF_THE_AIM * self.aim_per_second {
             return self.rate;
         }
-        let wanted = (HOST_INDOOR_PACE_PER_SECOND / average).clamp(
+        let wanted = (self.aim_per_second / average).clamp(
             1.0 / PACE_LARGEST_STEP_OF_THE_RATE,
             PACE_LARGEST_STEP_OF_THE_RATE,
         );
@@ -54,6 +71,10 @@ impl PaceFeedback {
         self.average_step_per_second = Some(average * rate / self.rate);
         self.rate = rate;
         rate
+    }
+
+    pub fn aim_per_second(&self) -> f32 {
+        self.aim_per_second
     }
 
     pub fn rate(&self) -> f32 {
@@ -66,6 +87,6 @@ impl PaceFeedback {
 }
 
 pub fn starting_body_speed_rate() -> f32 {
-    (HOST_INDOOR_PACE_PER_SECOND / RUN_LOOP_ROOT_TRAVEL_PER_SECOND_AT_FULL_SPEED)
+    (FALLBACK_INDOOR_PACE_PER_SECOND / RUN_LOOP_ROOT_TRAVEL_PER_SECOND_AT_FULL_SPEED)
         .clamp(BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST)
 }

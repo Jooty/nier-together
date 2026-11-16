@@ -85,6 +85,7 @@ fn the_feet_line_names_the_motion_the_drive_and_the_last_miss() {
             step_per_second: Some(2.54),
             body_speed_rate: Some(0.48),
             pace_per_second: Some(2.87),
+            aim_per_second: 2.9,
             drive: FeetDriveTally {
                 plays: 1,
                 rate_writes: 3
@@ -92,7 +93,7 @@ fn the_feet_line_names_the_motion_the_drive_and_the_last_miss() {
             last_missed: Some("NIER025_jog_lp"),
         }),
         "indoor feet: her body plays KAINE015_walk_ed_1 (index 420) at frame 12.5 of 171, motion speed 1.00, step 2.54/s; \
-         her body speed rate 1:0 0.48 (her run loop's pace 2.87/s against the first body's 2.90/s), 5:2 left as the game holds it; \
+         her body speed rate 1:0 0.48 (her run loop's pace 2.87/s against the host's 2.90/s), 5:2 left as the game holds it; \
          the drive played KAINE015_run_lp 1 times and wrote the rate 3 times; \
          the game last asked her body for NIER025_jog_lp and missed"
     );
@@ -103,11 +104,12 @@ fn the_feet_line_names_the_motion_the_drive_and_the_last_miss() {
             step_per_second: None,
             body_speed_rate: None,
             pace_per_second: None,
+            aim_per_second: 2.9,
             drive: FeetDriveTally::default(),
             last_missed: None,
         }),
         "indoor feet: her body plays no motion, step ?/s; \
-         her body speed rate 1:0 ? (her run loop's pace ?/s against the first body's 2.90/s), 5:2 left as the game holds it; \
+         her body speed rate 1:0 ? (her run loop's pace ?/s against the host's 2.90/s), 5:2 left as the game holds it; \
          the drive did nothing; no motion the game asked her body for was missing"
     );
 }

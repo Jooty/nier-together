@@ -1,7 +1,7 @@
 use crate::memory::GameMemory;
 use crate::move_log::{
     BODY_LAYER_MOTION_SPEED_RATE_ID, BODY_SPEED_RATE_CHANNEL_THE_FEET_DRIVE_OWNS, FeetDriveTally,
-    HOST_INDOOR_PACE_PER_SECOND, RUN_LOOP_MOTION_NAME,
+    RUN_LOOP_MOTION_NAME,
 };
 use crate::offsets::{
     MOTION_LAYER_CURRENT_SLOT_INDEX_OFFSET, MOTION_LAYER_MAX_SLOT_COUNT,
@@ -29,6 +29,7 @@ pub struct FeetSecond<'a> {
     pub step_per_second: Option<f32>,
     pub body_speed_rate: Option<f32>,
     pub pace_per_second: Option<f32>,
+    pub aim_per_second: f32,
     pub drive: FeetDriveTally,
     pub last_missed: Option<&'a str>,
 }
@@ -64,9 +65,10 @@ pub fn format_feet_second(second: &FeetSecond<'_>) -> String {
         ),
     };
     let rate = format!(
-        "her body speed rate {BODY_LAYER_MOTION_SPEED_RATE_ID}:{BODY_SPEED_RATE_CHANNEL_THE_FEET_DRIVE_OWNS} {} (her run loop's pace {}/s against the first body's {HOST_INDOOR_PACE_PER_SECOND:.2}/s), 5:2 left as the game holds it",
+        "her body speed rate {BODY_LAYER_MOTION_SPEED_RATE_ID}:{BODY_SPEED_RATE_CHANNEL_THE_FEET_DRIVE_OWNS} {} (her run loop's pace {}/s against the host's {:.2}/s), 5:2 left as the game holds it",
         number(second.body_speed_rate),
         number(second.pace_per_second),
+        second.aim_per_second,
     );
     let drive = match (second.drive.plays, second.drive.rate_writes) {
         (0, 0) => "the drive did nothing".to_owned(),

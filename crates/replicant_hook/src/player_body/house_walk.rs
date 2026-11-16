@@ -1,10 +1,11 @@
 use core::ffi::c_void;
 use std::ffi::CString;
 use std::sync::{LazyLock, Mutex, PoisonError};
+use std::time::Instant;
 
 use replicant_game::move_log::{
-    BODY_SPEED_RATE_WRITE_TOLERANCE, FeetDrive, FeetDriveReading, FeetDriveTally, FeetSecond,
-    GAMES_OWN_BODY_SPEED_RATE, INDOOR_FEET_PLAY_BLEND_SECONDS, RUN_LOOP_MOTION_NAME,
+    FeetDrive, FeetDriveReading, FeetDriveTally, FeetSecond,
+    HostPaceWatch, INDOOR_FEET_PLAY_BLEND_SECONDS, RUN_LOOP_MOTION_NAME,
     SpeedCapSecond, SpeedCapWatch, format_feet_second, format_speed_cap_second, house_pace_in_play,
     is_house_speed_cap_value, read_body_speed_rate, read_feet, read_move_sample, read_speed_cap,
     read_state_rva, write_body_speed_rate,
@@ -19,12 +20,14 @@ use replicant_proto::PartnerBody;
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
-use crate::net::net_clock_ms;
+use crate::net::{self, net_clock_ms};
 use crate::player_body::missing_motion_detour::last_missed_motion_on;
 use crate::player_body::real_body;
 
 static FEET_DRIVE: LazyLock<Mutex<(FeetDrive, SpeedCapWatch, FeetDriveTally)>> =
     LazyLock::new(Mutex::default);
+static HOST_PACE: LazyLock<Mutex<(HostPaceWatch, Option<Instant>)>> = LazyLock::new(Mutex::default);
+static HOST_PACE_CLOCK_START: LazyLock<Instant> = LazyLock::new(Instant::now);
 
 type PlayByName = unsafe extern "system" fn(*mut c_void, *const u8, u32, f32, f32, i32, u8);
 type ApplyMotionSpeedRates = unsafe extern "system" fn(*mut c_void);
@@ -49,9 +52,7 @@ pub fn drive_indoor_feet(
     let (drive, watch, tally) = &mut *state;
     let line_due = watch.due(now_ms, is_house_speed_cap_value(cap));
     let rate_now = read_body_speed_rate(&memory, actor);
-    let ours_in_place = rate_now.is_some_and(|rate| {
-        (rate - GAMES_OWN_BODY_SPEED_RATE).abs() > BODY_SPEED_RATE_WRITE_TOLERANCE
-    });
+    let ours_in_place = drive.holds_a_rate_of_ours(rate_now);
     let mut reading = FeetDriveReading {
         kaine_swapped,
         state_rva: read_state_rva(&memory, actor),
@@ -62,6 +63,7 @@ pub fn drive_indoor_feet(
         step_per_second: None,
         ground_speed: 0.0,
         body_motion: None,
+        host_pace_per_second: measured_host_pace(),
     };
     if !house_pace_in_play(&reading) && !ours_in_place && !line_due {
         drive.tick(&reading);
@@ -74,10 +76,8 @@ pub fn drive_indoor_feet(
     reading.ground_speed = sample.speed.unwrap_or(0.0);
     reading.body_motion = name.as_deref();
     let step = drive.tick(&reading);
-    let rate_off = rate_now
-        .is_some_and(|rate| (rate - step.body_speed_rate).abs() > BODY_SPEED_RATE_WRITE_TOLERANCE);
-    if rate_off {
-        if write_body_speed_rate(&mut memory, actor, step.body_speed_rate) {
+    if let Some(rate) = drive.rate_to_write(rate_now, step) {
+        if write_body_speed_rate(&mut memory, actor, rate) {
             apply_motion_speed_rates(build, actor);
             tally.count_rate_write();
         } else {
@@ -115,10 +115,28 @@ pub fn drive_indoor_feet(
             step_per_second: sample.applied_step_per_second,
             body_speed_rate: read_body_speed_rate(&memory, actor),
             pace_per_second: drive.pace().average_step_per_second(),
+            aim_per_second: drive.pace().aim_per_second(),
             drive: tally.take(),
             last_missed: last_missed.as_deref(),
         }));
     }
+}
+
+fn measured_host_pace() -> Option<f32> {
+    let net = net::handle()?;
+    let view = net.view();
+    let remote = view.partner_state()?;
+    let mut guard = HOST_PACE.lock().unwrap_or_else(PoisonError::into_inner);
+    let (watch, last_received) = &mut *guard;
+    if *last_received != Some(remote.received_at) {
+        *last_received = Some(remote.received_at);
+        let seconds = remote
+            .received_at
+            .saturating_duration_since(*HOST_PACE_CLOCK_START)
+            .as_secs_f64();
+        watch.observe(remote.state.position, seconds);
+    }
+    watch.pace_per_second()
 }
 
 fn apply_motion_speed_rates(build: &VerifiedBuild, actor: u64) {
