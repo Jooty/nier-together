@@ -87,6 +87,7 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
     crate::own_ride::ride_function_ran(build, name);
     crate::own_ride::note_step();
     crate::kaine::companion_off_function_ran(build, name);
+    crate::story_progress::note_function_ran(name);
     crate::kaine::stand_in_function_ran(name);
     let Some((phase, label)) = local_phase_and_label(build) else {
         return;

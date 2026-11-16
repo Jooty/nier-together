@@ -1,9 +1,10 @@
 use replicant_game::side_view::{
     ArrivalViewFix, CHANGE_CAMERA_STATUS_NATIVE_RVA, DoorMoveAction, DoorMoveFacts,
     INDOOR_ARRIVAL_SETTLE_MS, IndoorArrivalReading, IndoorArrivalWatch, OwnSideViewDoor,
-    SIDE_VIEW_DOORS, SIDE_VIEW_MODE_OFF_NATIVE_RVA, SideViewWatch,
-    TERRAIN_PARTS_VISIBLE_NATIVE_RVA, ViewOffArg, door_action_for_a_move, door_by_id,
-    door_entered_by, door_with_start_point, view_off_calls,
+    SIDE_VIEW_DOORS, SIDE_VIEW_MODE_OFF_NATIVE_RVA, SIDE_VIEW_MODE_ON_NATIVE_RVA, SideViewWatch,
+    TERRAIN_PARTS_INVISIBLE_NATIVE_RVA, TERRAIN_PARTS_VISIBLE_NATIVE_RVA, ViewArg,
+    door_action_for_a_move, door_by_id, door_entered_by, door_with_start_point, scene_view_on,
+    view_off_calls, view_on_calls,
 };
 use replicant_game::story_calls::is_event_id_name;
 use replicant_proto::NO_SIDE_VIEW_DOOR;
@@ -421,17 +422,17 @@ fn the_off_routine_calls_the_games_view_off_native_and_never_a_story_call() {
 fn leaving_a_door_place_inside_its_area_also_restores_its_shell_and_outdoor_camera() {
     let house = door_by_id(AREA_ONE, HOUSE_DOOR).expect("the house is listed");
     let calls = view_off_calls(Some(house));
-    let shown: Vec<&ViewOffArg> = calls
+    let shown: Vec<&ViewArg> = calls
         .iter()
         .filter(|call| call.native_rva == TERRAIN_PARTS_VISIBLE_NATIVE_RVA)
         .flat_map(|call| &call.args)
         .collect();
-    assert_eq!(shown, [&ViewOffArg::Text("PARTS_GROUP001")]);
+    assert_eq!(shown, [&ViewArg::Text("PARTS_GROUP001")]);
     let status = calls
         .iter()
         .find(|call| call.native_rva == CHANGE_CAMERA_STATUS_NATIVE_RVA)
         .expect("the outdoor camera status is set");
-    assert_eq!(status.args[0], ViewOffArg::Int(house.outdoor_camera_status));
+    assert_eq!(status.args[0], ViewArg::Int(house.outdoor_camera_status));
 }
 
 #[test]
@@ -441,4 +442,64 @@ fn after_an_area_change_the_off_routine_leaves_the_new_areas_shell_and_camera_st
         call.native_rva != TERRAIN_PARTS_VISIBLE_NATIVE_RVA
             && call.native_rva != CHANGE_CAMERA_STATUS_NATIVE_RVA
     }));
+}
+
+#[test]
+fn the_text_scenes_end_gives_the_guest_the_houses_view_behind_the_black_screen() {
+    const TEXT_SCENE_END: &str = "EID_1500_a0005_010_01_End";
+    let Some((scene, door)) = scene_view_on(AREA_ONE, TEXT_SCENE_END, false, HOUSE_DOOR) else {
+        panic!(
+            "run 1115j 01:48:27.292: the guest's End popped with the host in door 1's view and the guest's own view off"
+        );
+    };
+    assert_eq!(door.id, HOUSE_DOOR);
+    assert_eq!(scene.indoor_camera_status, 2);
+    assert_eq!(
+        scene_view_on(AREA_ONE, TEXT_SCENE_END, true, HOUSE_DOOR),
+        None,
+        "a game already in the view takes nothing"
+    );
+    assert_eq!(
+        scene_view_on(AREA_ONE, TEXT_SCENE_END, false, NO_SIDE_VIEW_DOOR),
+        None,
+        "without the host's view there is none to take"
+    );
+    assert_eq!(
+        scene_view_on(AREA_ONE, "EID_1500_a0005_010_01_End02", false, HOUSE_DOOR),
+        None
+    );
+    assert_eq!(
+        scene_view_on(AREA_ZERO, TEXT_SCENE_END, false, HOUSE_DOOR),
+        None
+    );
+}
+
+#[test]
+fn the_view_on_calls_are_the_doors_own_entry_natives_without_its_pause_release() {
+    let (scene, door) =
+        scene_view_on(AREA_ONE, "EID_1500_a0005_010_01_End", false, HOUSE_DOOR).expect("listed");
+    let calls = view_on_calls(scene, door);
+    let natives: Vec<u32> = calls.iter().map(|call| call.native_rva).collect();
+    assert_eq!(
+        natives
+            .iter()
+            .filter(|&&rva| rva == SIDE_VIEW_MODE_ON_NATIVE_RVA)
+            .count(),
+        1
+    );
+    assert!(!natives.contains(&SIDE_VIEW_MODE_OFF_NATIVE_RVA));
+    assert!(!natives.contains(&TERRAIN_PARTS_VISIBLE_NATIVE_RVA));
+    let hidden: Vec<&ViewArg> = calls
+        .iter()
+        .filter(|call| call.native_rva == TERRAIN_PARTS_INVISIBLE_NATIVE_RVA)
+        .flat_map(|call| &call.args)
+        .collect();
+    assert_eq!(hidden, [&ViewArg::Text("PARTS_GROUP001")]);
+    let status = calls
+        .iter()
+        .find(|call| call.native_rva == CHANGE_CAMERA_STATUS_NATIVE_RVA)
+        .expect("the indoor camera status is set");
+    assert_eq!(status.args[0], ViewArg::Int(2));
+    assert_eq!(SIDE_VIEW_MODE_ON_NATIVE_RVA, 0x70_6EE0);
+    assert_eq!(TERRAIN_PARTS_INVISIBLE_NATIVE_RVA, 0x70_B9A0);
 }

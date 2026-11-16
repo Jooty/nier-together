@@ -2,7 +2,7 @@ use replicant_proto::{DialogueLine, DialogueUpdate};
 
 use crate::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, FOLLOW_HOST_TALK_WAIT_MS,
-    MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
+    LINE_PRESS_GIVES_UP_AFTER_MS, MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
     OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS, TALK_LEAVE_EXTRA_UNITS,
 };
 
@@ -31,6 +31,9 @@ pub enum MirrorAction {
     ChainOwnTalk(DialogueLine),
     /// The host never showed this talk: the guest's own talk goes on by the guest's buttons.
     FollowGaveUp(u32),
+    /// The presses did not take the guest's copy on to the host's next talk in time: the copy
+    /// goes on by the guest's buttons.
+    ChainGaveUp(u32),
     /// The host left the talk while the guest's copy was at an answer prompt that never got the
     /// host's answer: the guest's copy goes on by the guest's buttons.
     ChoiceGaveUp(u32),
@@ -110,6 +113,8 @@ struct FollowedTalk {
     since_ms: u64,
     host_seen_on_it: bool,
     gave_up: bool,
+    /// The host went on to this talk at this time; the copy stays led while its presses take it there too.
+    chained_to: Option<(u32, u64)>,
     finish_deferred_since_ms: Option<u64>,
     answer_seen: bool,
 }
@@ -409,11 +414,19 @@ impl PartnerTalkMirror {
             .following
             .is_none_or(|followed| followed.talk_id != own.talk_id);
         if fresh {
+            // The copy arrived on the talk the host chained to: the host was on it, even if it
+            // has moved on since, so the copy chains on instead of waiting for the host to show it.
+            let host_was_on_it = self.following.is_some_and(|followed| {
+                followed
+                    .chained_to
+                    .is_some_and(|(next, _)| next == own.talk_id)
+            });
             self.following = Some(FollowedTalk {
                 talk_id: own.talk_id,
                 since_ms: now_ms,
-                host_seen_on_it: false,
+                host_seen_on_it: host_was_on_it,
                 gave_up: false,
+                chained_to: None,
                 finish_deferred_since_ms: None,
                 answer_seen: false,
             });
@@ -422,6 +435,13 @@ impl PartnerTalkMirror {
         followed.answer_seen |= answer_open;
         if followed.gave_up {
             return None;
+        }
+        if let Some((_, since_ms)) = followed.chained_to {
+            if now_ms.saturating_sub(since_ms) < LINE_PRESS_GIVES_UP_AFTER_MS {
+                return None;
+            }
+            followed.gave_up = true;
+            return Some(MirrorAction::ChainGaveUp(own.talk_id));
         }
         let host_left_before_open =
             fresh && partner_line.is_none() && partner_ended_talk == Some(own.talk_id);
@@ -459,10 +479,16 @@ impl PartnerTalkMirror {
         now_ms: u64,
     ) -> Option<MirrorAction> {
         if !answer_open {
-            followed.gave_up = true;
             return Some(match chained_to.filter(|_| !followed.answer_seen) {
-                Some(next) => MirrorAction::ChainOwnTalk(next),
-                None => MirrorAction::FinishOwnTalk(talk_id),
+                Some(next) => {
+                    // The copy stays led, so its buttons stay off while the presses take it on.
+                    followed.chained_to = Some((next.talk_id, now_ms));
+                    MirrorAction::ChainOwnTalk(next)
+                }
+                None => {
+                    followed.gave_up = true;
+                    MirrorAction::FinishOwnTalk(talk_id)
+                }
             });
         }
         let since_ms = *followed.finish_deferred_since_ms.get_or_insert(now_ms);

@@ -9,7 +9,11 @@ const NEXT_TALK: u32 = 2608;
 const OTHER_TALK: u32 = 1083;
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
-    DialogueLine { talk_id, line }
+    DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    }
 }
 
 fn far_guest_tick(

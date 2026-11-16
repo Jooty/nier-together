@@ -2,13 +2,14 @@ use std::cell::Cell;
 
 use replicant_game::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, ChoiceFollowInput, ChoiceFollower,
-    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS, MirrorAction, MirrorInput,
+    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS, LineSteps, MirrorAction, MirrorInput,
     OWN_ENDED_TALK_NOT_MIRRORED_MS, PartnerTalkMemory, PartnerTalkMirror, TALK_JOIN_RANGE_UNITS,
-    TALK_TABLE_SCAN_CHUNK_SLOTS, TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET,
-    TALK_WINDOW_RVA, TALK_WINDOW_TALK_TABLE_OFFSET, TalkCursor, TalkLeader, WATCHER_HOLD_MASK,
-    WatcherHold, WatcherHoldAction, WatcherHoldInput, find_talk_id, leader_for_own_talk,
-    open_prompt_kind, own_talk_started, read_talk_cursor, replace_player_name_tag,
-    speaker_name_to_show, talk_tags_run_here, within_talk_range,
+    TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK, TALK_TABLE_SCAN_CHUNK_SLOTS,
+    TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET, TALK_WINDOW_RVA,
+    TALK_WINDOW_TALK_TABLE_OFFSET, TalkCursor, TalkLeader, WATCHER_HOLD_MASK, WatcherHold,
+    WatcherHoldAction, WatcherHoldInput, find_talk_id, leader_for_own_talk, open_prompt_kind,
+    own_talk_started, read_talk_cursor, replace_player_name_tag, speaker_name_to_show,
+    talk_tags_run_here, within_talk_range,
 };
 use replicant_game::marker::{CONTROL_MASK_FIRST_RVA, EVENT_SCENE_BYTE_RVA, read_world_flags};
 use replicant_game::ui_scenes::PAUSE_MENU_SCENE_ID;
@@ -35,7 +36,11 @@ fn put_window(memory: &mut FakeMemory, state: i32, talk_address: u64, line: i32)
 }
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
-    DialogueLine { talk_id, line }
+    DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    }
 }
 
 #[test]
@@ -80,20 +85,20 @@ fn the_tracker_sends_each_new_line_once_and_ended_when_the_window_closes() {
         Some(42)
     };
     assert_eq!(
-        tracker.observe(cursor(0), true, find),
+        tracker.observe(cursor(0), 0, true, find),
         Some(DialogueUpdate::Line(line(42, 0)))
     );
-    assert_eq!(tracker.observe(cursor(0), true, find), None);
+    assert_eq!(tracker.observe(cursor(0), 0, true, find), None);
     assert_eq!(
-        tracker.observe(cursor(1), true, find),
+        tracker.observe(cursor(1), 0, true, find),
         Some(DialogueUpdate::Line(line(42, 1)))
     );
     assert_eq!(scans.get(), 1);
     assert_eq!(
-        tracker.observe(None, true, find),
+        tracker.observe(None, 0, true, find),
         Some(DialogueUpdate::Ended)
     );
-    assert_eq!(tracker.observe(None, true, find), None);
+    assert_eq!(tracker.observe(None, 0, true, find), None);
 }
 
 #[test]
@@ -103,9 +108,9 @@ fn a_partner_who_joins_mid_talk_gets_the_current_line() {
         talk_address: TALK_ADDRESS,
         line: 3,
     });
-    assert_eq!(tracker.observe(cursor, false, |_| Some(42)), None);
+    assert_eq!(tracker.observe(cursor, 0, false, |_| Some(42)), None);
     assert_eq!(
-        tracker.observe(cursor, true, |_| Some(42)),
+        tracker.observe(cursor, 0, true, |_| Some(42)),
         Some(DialogueUpdate::Line(line(42, 3)))
     );
 }
@@ -424,7 +429,10 @@ fn the_guest_follows_the_hosts_lines_through_a_talk_both_opened() {
         mirror.step(guest_with_own_talk(line(1002, 1), Some(line(2605, 0)), 30)),
         Some(MirrorAction::ChainOwnTalk(line(2605, 0)))
     );
-    assert!(!mirror.holds_own_talk());
+    assert!(
+        mirror.holds_own_talk(),
+        "the copy stays led while the presses take it on to the next talk"
+    );
     assert_eq!(
         mirror.step(guest_with_own_talk(line(2605, 0), Some(line(2605, 0)), 40)),
         Some(MirrorAction::FollowStarted(2605))
@@ -440,7 +448,7 @@ fn a_shared_talk_that_follows_a_shared_talk_is_stepped_into_on_the_guest() {
         mirror.step(guest_with_own_talk(line(1002, 1), Some(line(2605, 0)), 10)),
         Some(MirrorAction::ChainOwnTalk(line(2605, 0)))
     );
-    assert!(!mirror.holds_own_talk());
+    assert!(mirror.holds_own_talk());
     assert_eq!(
         mirror.step(guest_with_own_talk(line(2605, 0), Some(line(2605, 0)), 20)),
         Some(MirrorAction::FollowStarted(2605))
@@ -1005,4 +1013,55 @@ fn a_mirrored_talk_is_forgotten_after_the_expiry() {
         ..mirror_input(None, 700_000)
     };
     assert_eq!(mirror.step(late), Some(MirrorAction::FollowStarted(1290)));
+}
+
+#[test]
+fn a_press_inside_the_line_goes_to_the_partner_as_a_new_step_of_the_same_line() {
+    let mut tracker = DialogueTracker::new();
+    let cursor = Some(TalkCursor {
+        talk_address: TALK_ADDRESS,
+        line: 0,
+    });
+    assert_eq!(
+        tracker.observe(cursor, 0, true, |_| Some(1423)),
+        Some(DialogueUpdate::Line(line(1423, 0)))
+    );
+    assert_eq!(tracker.observe(cursor, 0, true, |_| Some(1423)), None);
+    assert_eq!(
+        tracker.observe(cursor, 1, true, |_| Some(1423)),
+        Some(DialogueUpdate::Line(DialogueLine {
+            talk_id: 1423,
+            line: 0,
+            step: 1,
+        })),
+        "run 1115j 01:48:22.764: the guest sat in player state 5 (a page break) of talk 1423 and the host's line number never changed"
+    );
+}
+
+#[test]
+fn the_line_steps_count_pages_and_page_break_waits_the_player_left() {
+    const PAGE_BREAK: i32 = TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK;
+    let mut steps = LineSteps::new();
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, 2), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, 3), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, PAGE_BREAK), 0);
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 0, 0, 3),
+        1,
+        "leaving the page break on a press is one step"
+    );
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 0, 1, 4),
+        2,
+        "a page turned is another"
+    );
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 1, 0, 2),
+        0,
+        "a new line starts over"
+    );
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, PAGE_BREAK), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, 3), 1);
+    steps.forget();
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, 3), 0);
 }

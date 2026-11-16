@@ -4,7 +4,10 @@ mod level;
 mod steps;
 
 pub use arrival::{ArrivalSpot, arrival_is_due, arrival_spot};
-pub use gate::{StoryJumpRefusal, StoryJumpView, check_story_jump, jump_waits_for_pause_menu};
+pub use gate::{
+    StoryJumpRefusal, StoryJumpView, check_story_jump, guest_reloads_in_place,
+    jump_waits_for_pause_menu,
+};
 pub use level::{
     LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, check_level, level_check_is_due,
     loadout_player_level,

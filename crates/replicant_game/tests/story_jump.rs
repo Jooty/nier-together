@@ -3,7 +3,8 @@ use replicant_game::host_led_stretch::stretch_the_story_is_inside;
 use replicant_game::story_jump::{
     JumpStep, LEVEL_CHECK_SETTLE_MS, LevelCheck, LevelWatcher, StoryJumpRefusal, StoryJumpView,
     arrival_is_due, arrival_spot, check_level, check_story_jump, destination,
-    jump_waits_for_pause_menu, level_check_is_due, loadout_player_level, loadout_steps,
+    guest_reloads_in_place, jump_waits_for_pause_menu, level_check_is_due, loadout_player_level,
+    loadout_steps,
 };
 use replicant_proto::StoryJumpPoint;
 
@@ -1135,4 +1136,16 @@ fn the_boss_fight_9_jump_enters_the_village_at_point_four_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::BossFight9, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::BossFight9, false).is_none());
+}
+
+#[test]
+fn a_guest_already_in_the_hosts_jump_phase_reloads_it_in_place_as_the_host_did() {
+    let (manor, _) = destination(StoryJumpPoint::ManorEmilFollows);
+    assert!(
+        guest_reloads_in_place(Some(manor), manor),
+        "run 1115j 01:54:06: the host reloaded its phase in place and its stage start placed the new companion; the guest applied the flags and kept its old actors"
+    );
+    let (field, _) = destination(StoryJumpPoint::ManorFront);
+    assert!(!guest_reloads_in_place(Some(field), manor));
+    assert!(!guest_reloads_in_place(None, manor));
 }

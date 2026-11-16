@@ -51,40 +51,23 @@ fn the_dreams_first_fade_out_reaches_the_guest_when_the_stretch_arms_the_sync_at
 }
 
 #[test]
-fn the_guest_runs_the_dreams_end_at_once_though_its_own_late_choice_still_pauses_it() {
+fn the_dream_is_no_stretch_the_guest_plays_its_own_copy_beside_the_host() {
     let mut guest = HostLedStretchState::new();
-    assert!(matches!(
-        guest.host_step(VILLAGE, DREAM_START, DREAM_START_POP_MS),
-        Some(StretchChange::Started(_))
-    ));
-    assert!(matches!(
-        guest.host_step(VILLAGE, DREAM_END, DREAM_END_MS),
-        Some(StretchChange::Ended(_, StretchEnd::LastStep))
-    ));
-    let paused = arrival(VILLAGE_PHASE, GUEST_SLOTS_AFTER_ITS_LATE_CHOICE);
     assert_eq!(
-        end_follow(&paused),
-        EndFollow::Drop(EndDrop::ControlMaskBusy),
-        "run 1115f: the End waited 60 s on the pause the guest's own late choice step left"
+        guest.host_step(VILLAGE, DREAM_START, DREAM_START_POP_MS),
+        None,
+        "run 1115j 01:47:57.019: the guest's own game fired the dream's start 114 ms before the host's reached it, so a watch on top of it drove the same window twice"
     );
-    assert_eq!(guest.place_of_end(DREAM_END), StretchPlace::ItsLastStep);
+    assert_eq!(guest.current(), None);
+    assert_eq!(guest.host_step(VILLAGE, DREAM_END, DREAM_END_MS), None);
+    assert_eq!(guest.place_of_end(DREAM_END), StretchPlace::NotInOne);
+    let paused = arrival(VILLAGE_PHASE, GUEST_SLOTS_AFTER_ITS_LATE_CHOICE);
     assert_eq!(
         end_follow_around_a_stretch(&paused, guest.place_of_end(DREAM_END)),
-        EndFollow::Mirror
+        EndFollow::Drop(EndDrop::ControlMaskBusy),
+        "the host's End copy waits on the guest's own pause, and the guest's own End pops in its place"
     );
-}
-
-#[test]
-fn the_morning_step_after_the_dream_follows_the_usual_rules() {
-    let mut guest = HostLedStretchState::new();
-    guest.host_step(VILLAGE, DREAM_START, DREAM_START_POP_MS);
-    guest.host_step(VILLAGE, DREAM_END, DREAM_END_MS);
-    let paused = arrival(VILLAGE_PHASE, GUEST_SLOTS_AFTER_ITS_LATE_CHOICE);
     assert_eq!(guest.place_of_end(MORNING_STEP), StretchPlace::NotInOne);
-    assert_eq!(
-        end_follow_around_a_stretch(&paused, StretchPlace::NotInOne),
-        end_follow(&paused)
-    );
 }
 
 #[test]

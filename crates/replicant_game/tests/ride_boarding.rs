@@ -13,7 +13,11 @@ const CHAINED_TALKS: [u32; 3] = [1238, 1239, 1240];
 const NATIVE_BLOCK: u64 = 0x7FF6_1234_5000;
 
 fn line(talk_id: u32, line: u16) -> DialogueUpdate {
-    DialogueUpdate::Line(DialogueLine { talk_id, line })
+    DialogueUpdate::Line(DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    })
 }
 
 fn poll_like_the_hook(

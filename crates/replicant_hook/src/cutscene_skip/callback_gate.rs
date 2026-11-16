@@ -844,6 +844,10 @@ pub(super) fn tick(build: &VerifiedBuild, net: &NetThread, view: &NetShared) {
                     partner_place.describe()
                 ));
             }
+            PartnerFire::RanHereAlready => log_line(&format!(
+                "callback follow: the host fired {}, your game ran it alone just before: the host's copy is not started on top of it",
+                fired.name
+            )),
             PartnerFire::Noted => log_line(&format!(
                 "callback follow: the partner fired {}, your game has not yet",
                 fired.name

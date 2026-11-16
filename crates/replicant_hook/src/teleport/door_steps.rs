@@ -4,10 +4,11 @@ use replicant_game::Replicant;
 use replicant_game::readiness::{classify, read_play_checks};
 use replicant_game::side_view::{
     ArrivalViewFix, DoorMoveAction, DoorMoveFacts, IndoorArrivalReading, IndoorArrivalWatch,
-    OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION, SCENE_ARRIVALS, SceneArrivalReading, SceneArrivalWatch,
-    SideViewDoor, ViewOffArg, door_action_for_a_move, view_off_calls,
+    OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION, SCENE_ARRIVALS, SCENE_VIEW_ONS, SceneArrivalReading,
+    SceneArrivalWatch, SideViewDoor, ViewArg, ViewCall, door_action_for_a_move, scene_view_on,
+    view_off_calls, view_on_calls,
 };
-use replicant_game::stay_together::local_phase_index;
+use replicant_game::stay_together::{FollowRole, local_phase_index};
 use replicant_proto::StoryCall;
 
 use crate::build_gate::VerifiedBuild;
@@ -62,16 +63,7 @@ fn run_view_off_routine(build: &VerifiedBuild, left_door: Option<&SideViewDoor>,
         "side view: {why}, turning the view off with the game's own calls"
     ));
     for call in view_off_calls(left_door) {
-        let arguments: Vec<NativeArg> = call
-            .args
-            .iter()
-            .map(|arg| match *arg {
-                ViewOffArg::Int(value) => NativeArg::Integer(value),
-                ViewOffArg::Real(value) => NativeArg::Real(value),
-                ViewOffArg::Text(text) => NativeArg::Text(text),
-            })
-            .collect();
-        call_native_with(build, call.native_rva, &arguments);
+        call_view_native(build, &call);
     }
     run_door_steps(build, &[OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION], why);
 }
@@ -137,6 +129,7 @@ pub(super) fn tick_indoor_arrival(build: &VerifiedBuild) {
 }
 
 pub(crate) fn note_scene_callback(build: &VerifiedBuild, name: &str) {
+    take_the_hosts_view_at_a_scene_step(build, name);
     if !SCENE_ARRIVALS
         .iter()
         .any(|arrival| arrival.callback == name)
@@ -150,6 +143,49 @@ pub(crate) fn note_scene_callback(build: &VerifiedBuild, name: &str) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .note_callback(&area, name, net_clock_ms());
+}
+
+fn take_the_hosts_view_at_a_scene_step(build: &VerifiedBuild, name: &str) {
+    if !SCENE_VIEW_ONS.iter().any(|scene| scene.callback == name) {
+        return;
+    }
+    let is_the_guest = crate::net::handle()
+        .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Guest);
+    if !is_the_guest {
+        return;
+    }
+    let game = Replicant::new(InProcessMemory::new(build));
+    let Ok(area) = game.current_phase() else {
+        return;
+    };
+    let host_door = local_phase_index(&game).map_or(0, announced_host_side_view_door);
+    let Some((scene, door)) = scene_view_on(&area, name, side_view_now(build), host_door) else {
+        log_line(&format!(
+            "side view: {name} ran here with the screen black; the host's view door is {host_door}, this game's side view is {}: nothing to take",
+            side_view_now(build)
+        ));
+        return;
+    };
+    for call in view_on_calls(scene, door) {
+        call_view_native(build, &call);
+    }
+    log_line(&format!(
+        "side view: {name} put you in door {}'s place behind the black screen and the host has that door's view: taken here now with the game's own calls (side view mode on, shell parts hidden, camera status {}), before the fade in",
+        door.id, scene.indoor_camera_status
+    ));
+}
+
+fn call_view_native(build: &VerifiedBuild, call: &ViewCall) {
+    let arguments: Vec<NativeArg> = call
+        .args
+        .iter()
+        .map(|arg| match *arg {
+            ViewArg::Int(value) => NativeArg::Integer(value),
+            ViewArg::Real(value) => NativeArg::Real(value),
+            ViewArg::Text(text) => NativeArg::Text(text),
+        })
+        .collect();
+    call_native_with(build, call.native_rva, &arguments);
 }
 
 pub(super) fn tick_scene_arrival(build: &VerifiedBuild) {

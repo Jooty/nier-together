@@ -1,6 +1,7 @@
 use crate::dialogue::{
     CHAINED_TALK_KEEPS_THE_STORY_STEP_WITHIN_MS, SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS,
-    STORY_CALLBACKS_THAT_FORCE_A_TALK, STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS,
+    STORY_CALLBACKS_THAT_FORCE_A_TALK, STORY_STEP_CALLS_WITHOUT_AN_EVENT_ID,
+    STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS,
 };
 use crate::own_ride::is_the_riders_own;
 use crate::story_calls::is_event_id_name;
@@ -211,5 +212,6 @@ pub fn talk_command_came_from_a_story_step(last_pop: Option<(&str, u64)>, now_ms
 }
 
 fn is_story_step_call(call: &str) -> bool {
-    is_event_id_name(call) && !is_the_riders_own(call)
+    (is_event_id_name(call) || STORY_STEP_CALLS_WITHOUT_AN_EVENT_ID.contains(&call))
+        && !is_the_riders_own(call)
 }

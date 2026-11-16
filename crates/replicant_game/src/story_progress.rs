@@ -3,6 +3,7 @@ mod changed_slot;
 mod ending_session;
 mod feed;
 mod header;
+mod load_settle;
 mod milestones;
 mod mirror;
 mod player_local_flags;
@@ -22,6 +23,7 @@ pub use header::{
     HeaderTooShort, apply_header_records, ending_records_are_empty, ending_records_gained,
     fix_header_checksum, header_checksum, merge_ending_records, read_ending_records,
 };
+pub use load_settle::{HostStoryApply, HostStoryApplyGate, HostStoryRelease};
 pub use milestones::milestone_ids;
 pub use mirror::{StoryMirror, StoryPlan};
 pub use player_local_flags::{is_player_local_flag, without_player_local_flags};
@@ -34,6 +36,8 @@ pub use seat_name::{SEAT_NAME_MAX_CHARS, seat_with_player_name};
 pub use sidecar::{decode_high_water_sidecar, encode_high_water_sidecar};
 pub use slot_story::{SlotStory, fix_slot_checksum, slot_checksum, slot_player_name};
 
+pub const HOST_STORY_WAITS_FOR_THE_STAGE_START_AT_MOST_MS: u64 = 15_000;
+pub const STAGE_START_SCRIPT_FUNCTION: &str = "StartStage";
 pub const GAME_FLAGS_BLOCK_OFFSET: usize = 0x500;
 pub const GAME_COUNTERS_BLOCK_OFFSET: usize = 0x600;
 pub const KEY_FRAGMENTS_BLOCK_OFFSET: usize = 0xBA8;
