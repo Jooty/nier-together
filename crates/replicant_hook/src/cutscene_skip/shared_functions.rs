@@ -114,6 +114,10 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
     if relay == TracedRelay::NotRelayed {
         return;
     }
+    if relay == TracedRelay::LoggedOnly {
+        log_line(&format!("trace: {name} ({label})"));
+        return;
+    }
     let newly = RAN
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -142,9 +146,6 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
         ));
     }
     if !newly {
-        return;
-    }
-    if relay == TracedRelay::LoggedOnly {
         return;
     }
     if crate::fight_sync::covers_phase(phase) {
