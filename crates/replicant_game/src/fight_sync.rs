@@ -64,7 +64,7 @@ pub use fixed_camera_reading::{
 };
 pub use guest::{
     GuestArrival, GuestFightStream, GuestNotice, GuestOpen, GuestPop, GuestRadioWaitCall,
-    GuestReceived, GuestRestart, GuestTapeRead, RefusedRequestStep, RestartWait,
+    GuestReceived, GuestRestart, GuestTapeRead, OwnSceneRelease, RefusedRequestStep, RestartWait,
 };
 pub use host::{HostFightStream, HostRequestOut, HostStreamOut, HostTapeOut};
 pub use object_calls::{ArmedBy, ObjectArmedCalls, is_pop_by_this_player, queued_call_name};
@@ -118,6 +118,7 @@ pub const REFUSED_REQUEST_RESEND_AFTER_MS: u64 = 1_000;
 pub const REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE: u32 = 3;
 pub const HOST_ENTRY_END_WAIT_LIMIT_MS: u64 = 10_000;
 pub const HOST_ENTRY_END_WAIT_LOGGED_FROM_MS: u64 = 1_000;
+pub const OWN_SCENE_SETTLE_CAP_MS: u64 = 1_000;
 pub const PARTNER_RESTART_EXPECTED_MS: u64 = 5_000;
 pub const ONE_RESTART_SIGNALS_SPAN_MS: u64 = 3_000;
 pub const LUA_STEP_RVA: u32 = 0x3E_FF30;

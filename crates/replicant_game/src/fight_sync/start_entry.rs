@@ -92,8 +92,8 @@ impl StartEntry {
     }
 
     /// The stream's copy may be queued now. It never starts in the middle of this game's own
-    /// event scene: the scene's own end runs first.
-    pub fn may_release(&self, name: &str, own_scene_playing: bool) -> bool {
-        !(self.is_waiting_for(name) && own_scene_playing)
+    /// event scene or before the scene's own end has run: `own_scene_holds` is true until then.
+    pub fn may_release(&self, name: &str, own_scene_holds: bool) -> bool {
+        !(self.is_waiting_for(name) && own_scene_holds)
     }
 }

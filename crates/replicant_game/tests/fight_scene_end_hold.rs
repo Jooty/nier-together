@@ -1,5 +1,6 @@
 use replicant_game::fight_sync::{
-    GuestFightStream, GuestNotice, GuestPop, HostFightStream, HostStreamOut, PopSource, SlotState,
+    GuestFightStream, GuestNotice, GuestPop, HostFightStream, HostStreamOut, OWN_SCENE_SETTLE_CAP_MS,
+    OwnSceneRelease, PopSource, SlotState,
 };
 use replicant_proto::{Message, decode, encode};
 
@@ -14,6 +15,9 @@ const STREAM_SLOT: u64 = 0x1_4130_2070;
 const SCENE_START_RAN_MS: u64 = 10_000;
 const HOST_SCENE_END_QUEUED_MS: u64 = 32_911;
 const GUEST_SCENE_OVER_MS: u64 = 32_928;
+const GUEST_SCENE_STILL_HELD_MS: u64 = 32_944;
+const GUEST_OWN_END_POPPED_MS: u64 = 32_996;
+const GUEST_OWN_END_SLOT: u64 = 0x1_4130_2990;
 
 fn over_the_wire(message: Message) -> Message {
     assert_eq!(message.validate(), Ok(()));
@@ -65,28 +69,70 @@ fn guest_in_the_scene_the_stream_started() -> GuestFightStream {
 }
 
 #[test]
-fn the_hosts_scene_end_waits_until_the_guests_own_scene_has_ended() {
+fn the_hosts_scene_end_waits_until_the_guests_own_scene_end_has_popped() {
     // L35 (build b1c7351525f0) guest 11:52:32.912: "fight stream: the host's EID_2000_a0080_End
-    // (seq 45) runs here" while the guest's own scene still played (its lend ended at 32.928). That
-    // end loads the next cut inline; at a0082 the guest died at rva 0x3FE7E0 with no cut loaded.
+    // (seq 45) runs here" while the guest's own scene still played (its lend ended at 32.928 and
+    // its own EID_2000_a0080_End popped at 32.996). The game restores the scene's actors between
+    // the two, so the host's end must not run before the own end popped.
     let mut guest = guest_in_the_scene_the_stream_started();
     guest.set_own_scene_playing(true);
     for now_ms in (HOST_SCENE_END_QUEUED_MS..GUEST_SCENE_OVER_MS).step_by(16) {
         assert_eq!(released(&mut guest, now_ms), None);
     }
+    guest.set_own_scene_playing(false);
+    for now_ms in (GUEST_SCENE_OVER_MS..GUEST_OWN_END_POPPED_MS).step_by(16) {
+        assert_eq!(released(&mut guest, now_ms), None);
+    }
+    assert_eq!(released(&mut guest, GUEST_SCENE_STILL_HELD_MS), None);
     assert!(matches!(
         guest.take_notices().as_slice(),
         [GuestNotice::EntryWaitsForOwnScene { name, .. }] if name == SCENE_END
     ));
-    guest.set_own_scene_playing(false);
     assert_eq!(
-        released(&mut guest, GUEST_SCENE_OVER_MS).as_deref(),
+        guest.pop(SCENE_END, PopSource::Queued, GUEST_OWN_END_SLOT, HERE, false),
+        GuestPop::Hold
+    );
+    assert_eq!(
+        released(&mut guest, GUEST_OWN_END_POPPED_MS).as_deref(),
         Some(SCENE_END)
     );
     assert!(matches!(
         guest.take_notices().as_slice(),
-        [GuestNotice::EntryGoesAfterOwnScene { name, waited_ms, .. }]
-            if name == SCENE_END && *waited_ms == GUEST_SCENE_OVER_MS - HOST_SCENE_END_QUEUED_MS
+        [GuestNotice::EntryGoesAfterOwnScene {
+            name,
+            waited_ms,
+            since_scene_cleared_ms,
+            by: OwnSceneRelease::OwnEndPopped,
+            ..
+        }] if name == SCENE_END
+            && *waited_ms == GUEST_OWN_END_POPPED_MS - HOST_SCENE_END_QUEUED_MS
+            && *since_scene_cleared_ms == GUEST_OWN_END_POPPED_MS - GUEST_SCENE_OVER_MS
+    ));
+}
+
+#[test]
+fn the_hosts_scene_end_goes_at_the_cap_when_the_guests_own_end_never_pops() {
+    let mut guest = guest_in_the_scene_the_stream_started();
+    guest.set_own_scene_playing(true);
+    assert_eq!(released(&mut guest, HOST_SCENE_END_QUEUED_MS), None);
+    guest.set_own_scene_playing(false);
+    assert_eq!(released(&mut guest, GUEST_SCENE_OVER_MS), None);
+    assert_eq!(
+        released(&mut guest, GUEST_SCENE_OVER_MS + OWN_SCENE_SETTLE_CAP_MS - 1),
+        None
+    );
+    guest.take_notices();
+    assert_eq!(
+        released(&mut guest, GUEST_SCENE_OVER_MS + OWN_SCENE_SETTLE_CAP_MS).as_deref(),
+        Some(SCENE_END)
+    );
+    assert!(matches!(
+        guest.take_notices().as_slice(),
+        [GuestNotice::EntryGoesAfterOwnScene {
+            since_scene_cleared_ms,
+            by: OwnSceneRelease::SettleCapReached,
+            ..
+        }] if *since_scene_cleared_ms == OWN_SCENE_SETTLE_CAP_MS
     ));
 }
 

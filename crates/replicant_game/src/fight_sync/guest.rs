@@ -9,7 +9,7 @@ use crate::fight_sync::{
     Arrival, EarlierQueuedCalls, FIGHT_WINDOWS, FightWindowData, GuestRadioWaits, GuestTape,
     HOST_ENTRY_END_WAIT_LIMIT_MS, HOST_ENTRY_END_WAIT_LOGGED_FROM_MS, InFlight,
     MAX_HELD_NEXT_WINDOW_MESSAGES, NEXT_WINDOW_HELD_AT_MOST_MS, ONE_RESTART_SIGNALS_SPAN_MS,
-    OWN_POP_HELD_FOR_HOST_COPY_MS, OwnQueuedCall, PARTNER_CALL_POP_EXPECTED_MS,
+    OWN_POP_HELD_FOR_HOST_COPY_MS, OWN_SCENE_SETTLE_CAP_MS, OwnQueuedCall, PARTNER_CALL_POP_EXPECTED_MS,
     PARTNER_RESTART_EXPECTED_MS, PopSource, PopVerdict, QUEUED_CALL_GIVEN_UP_AFTER_MS,
     QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS, REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE,
     RadioWaitContext, RadioWaitMark, RadioWaitPoll, RadioWaitRelease, RadioWaitRun, Replayer,
@@ -226,12 +226,40 @@ pub enum GuestNotice {
         seq: u64,
         name: String,
     },
-    /// The entry that waited for this game's own scene goes now, `waited_ms` after it was held.
+    /// The entry that waited for this game's own scene goes now, `waited_ms` after it was held
+    /// and `since_scene_cleared_ms` after the scene's lock byte cleared; `by` says which signal
+    /// let it go.
     EntryGoesAfterOwnScene {
         seq: u64,
         name: String,
         waited_ms: u64,
+        since_scene_cleared_ms: u64,
+        by: OwnSceneRelease,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnSceneRelease {
+    OwnEndPopped,
+    SettleCapReached,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OwnSceneHold {
+    NoScene,
+    Playing,
+    Settling,
+    Over {
+        by: OwnSceneRelease,
+        since_cleared_ms: u64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OwnSceneState {
+    NeverPlayed,
+    Playing,
+    ClearedAt(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,6 +353,8 @@ pub struct GuestFightStream {
     start_entry: StartEntry,
     popped_and_ran_outside_window: HashSet<String>,
     own_scene_playing: bool,
+    own_scene_state: OwnSceneState,
+    own_scene_end_popped: bool,
     entry_held_for_own_scene: Option<(u64, u64)>,
     earlier_queued: EarlierQueuedCalls,
     queued_waited_ms: u64,
@@ -369,6 +399,8 @@ impl GuestFightStream {
             start_entry: StartEntry::new(),
             popped_and_ran_outside_window: HashSet::new(),
             own_scene_playing: false,
+            own_scene_state: OwnSceneState::NeverPlayed,
+            own_scene_end_popped: false,
             entry_held_for_own_scene: None,
             earlier_queued: EarlierQueuedCalls::new(),
             queued_waited_ms: 0,
@@ -645,6 +677,7 @@ impl GuestFightStream {
         }
         self.replayer.drop_waiting();
         self.start_entry.forget();
+        self.entry_held_for_own_scene = None;
         self.keep_forgotten_calls();
         self.clear_tape();
         self.requests_unanswered.clear();
@@ -775,6 +808,14 @@ impl GuestFightStream {
             registered_player_local,
         );
         self.note_ran_outside_window(name, verdict, local_phase);
+        if name.ends_with("_End")
+            && !matches!(
+                verdict,
+                GuestPop::RunReplayed { .. } | GuestPop::RunStartEntry
+            )
+        {
+            self.own_scene_end_popped = true;
+        }
         verdict
     }
 
@@ -903,6 +944,38 @@ impl GuestFightStream {
         self.own_scene_playing = playing;
     }
 
+    fn own_scene_hold(&mut self, now_ms: u64) -> OwnSceneHold {
+        if self.own_scene_playing {
+            if self.own_scene_state != OwnSceneState::Playing {
+                self.own_scene_end_popped = false;
+            }
+            self.own_scene_state = OwnSceneState::Playing;
+            return OwnSceneHold::Playing;
+        }
+        if self.own_scene_state == OwnSceneState::Playing {
+            self.own_scene_state = OwnSceneState::ClearedAt(now_ms);
+        }
+        let OwnSceneState::ClearedAt(cleared_ms) = self.own_scene_state else {
+            return OwnSceneHold::NoScene;
+        };
+        let since_cleared_ms = now_ms.saturating_sub(cleared_ms);
+        // The game restores the scene's actors a few item steps after the byte clears and queues
+        // the scene's own end after that, so the host's end runs only after the own end popped.
+        if self.own_scene_end_popped {
+            return OwnSceneHold::Over {
+                by: OwnSceneRelease::OwnEndPopped,
+                since_cleared_ms,
+            };
+        }
+        if since_cleared_ms >= OWN_SCENE_SETTLE_CAP_MS {
+            return OwnSceneHold::Over {
+                by: OwnSceneRelease::SettleCapReached,
+                since_cleared_ms,
+            };
+        }
+        OwnSceneHold::Settling
+    }
+
     pub fn take_requests(&mut self) -> Vec<FightRequest> {
         std::mem::take(&mut self.requests_out)
     }
@@ -949,6 +1022,7 @@ impl GuestFightStream {
         now_ms: u64,
     ) -> Option<StreamEntry> {
         self.last_tick_ms = now_ms;
+        self.own_scene_hold(now_ms);
         if slot == SlotState::Idle {
             // An idle slot means the replayed handler ended.
             self.tape.end();
@@ -1272,6 +1346,7 @@ impl GuestFightStream {
         self.waiting_for_host_entry_end = None;
         self.held_pops_unmatched.clear();
         self.held_pops_logged.clear();
+        self.entry_held_for_own_scene = None;
     }
 
     fn release_after_host_entry_end(
@@ -1285,8 +1360,12 @@ impl GuestFightStream {
         let ended_through = self.host_entries_ended_through;
         let waiting = self.waiting_for_host_entry_end;
         let window = self.window();
+        let own_scene_hold = self.own_scene_hold(now_ms);
+        let own_scene_holds = matches!(
+            own_scene_hold,
+            OwnSceneHold::Playing | OwnSceneHold::Settling
+        );
         let start_entry = &self.start_entry;
-        let own_scene_playing = self.own_scene_playing;
         let mut blocked = None;
         let mut gave_up = false;
         let mut held_for_own_scene = None;
@@ -1294,10 +1373,11 @@ impl GuestFightStream {
             let seq = entry.seq;
             if seq == 0 && start_entry.is_expected(&entry.name) {
                 // Nothing of the host's start handler is taped, so its end is not waited for.
-                return start_entry.may_release(&entry.name, own_scene_playing);
+                return start_entry.may_release(&entry.name, own_scene_holds);
             }
-            if own_scene_playing && seq > 0 {
-                // Entry 0 opened the window, so it never follows a scene inside it.
+            if own_scene_holds && seq > 0 {
+                // Entry 0 waits only when it is the expected start entry (handled above); an
+                // entry 0 started by a scene's own end is not held here.
                 held_for_own_scene = Some((seq, entry.name.clone()));
                 return false;
             }
@@ -1318,7 +1398,7 @@ impl GuestFightStream {
             blocked = Some((seq, since_ms));
             false
         });
-        self.note_own_scene_hold(held_for_own_scene, entry.as_ref(), now_ms);
+        self.note_own_scene_hold(held_for_own_scene, entry.as_ref(), now_ms, own_scene_hold);
         let Some(entry) = entry else {
             if blocked.is_some() {
                 self.waiting_for_host_entry_end = blocked;
@@ -1349,6 +1429,7 @@ impl GuestFightStream {
         held: Option<(u64, String)>,
         released: Option<&StreamEntry>,
         now_ms: u64,
+        own_scene_hold: OwnSceneHold,
     ) {
         if let Some((seq, name)) = held {
             if self
@@ -1367,10 +1448,16 @@ impl GuestFightStream {
         if let Some((held_seq, since_ms)) = self.entry_held_for_own_scene.take()
             && held_seq == entry.seq
         {
+            let (by, since_scene_cleared_ms) = match own_scene_hold {
+                OwnSceneHold::Over { by, since_cleared_ms } => (by, since_cleared_ms),
+                _ => (OwnSceneRelease::OwnEndPopped, 0),
+            };
             self.notices.push(GuestNotice::EntryGoesAfterOwnScene {
                 seq: entry.seq,
                 name: entry.name.clone(),
                 waited_ms: now_ms.saturating_sub(since_ms),
+                since_scene_cleared_ms,
+                by,
             });
         }
     }
