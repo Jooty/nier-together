@@ -3,7 +3,7 @@ use nt_hook::net::{LinkAccess, NetGame, PlayerOf, log_readiness, net_clock_ms};
 use nt_net::Channel;
 use replicant_game::PHASE_TABLE;
 use replicant_game::carts::partner_wants_to_ride_text;
-use replicant_game::readiness::{HEARTBEAT_INTERVAL_MS, PartnerWatch};
+use replicant_game::readiness::{HEARTBEAT_INTERVAL_MS, PartnerWatch, ReadinessChangeLog};
 use replicant_proto::{GameReadiness, Message, PartnerNotice, PlayerState};
 
 use crate::event_log::post_event;
@@ -12,9 +12,25 @@ use crate::net::link_state::ReplicantLinkState;
 use crate::net::local_snapshot::LocalSnapshot;
 use crate::net::shared::RemotePlayer;
 
-#[derive(Debug, Default)]
+const READINESS_SENT: &str = "sent";
+const READINESS_SEND_REFUSED: &str = "refused by the link, retrying";
+const READINESS_NOT_SENT_YET: &str = "nothing sent yet";
+
+#[derive(Debug)]
 pub struct ReplicantNet {
     readiness_sent: Option<(GameReadiness, u64)>,
+    readiness_log: ReadinessChangeLog,
+    last_readiness_send: &'static str,
+}
+
+impl Default for ReplicantNet {
+    fn default() -> Self {
+        Self {
+            readiness_sent: None,
+            readiness_log: ReadinessChangeLog::default(),
+            last_readiness_send: READINESS_NOT_SENT_YET,
+        }
+    }
 }
 
 impl NetGame for ReplicantNet {
@@ -80,6 +96,8 @@ impl NetGame for ReplicantNet {
 
     fn on_launcher_linked(&mut self) {
         self.readiness_sent = None;
+        self.readiness_log.reset();
+        self.last_readiness_send = READINESS_NOT_SENT_YET;
     }
 
     fn on_idle(
@@ -138,9 +156,14 @@ impl ReplicantNet {
         link: &LinkAccess<'_, Self>,
         send: &mut dyn FnMut(&Message, Channel) -> bool,
     ) {
-        let (state, current) = {
+        let (state, current, waiting_on, reads) = {
             let shared = link.shared();
-            (shared.state.clone(), shared.effective_local_readiness())
+            (
+                shared.state.clone(),
+                shared.effective_local_readiness(),
+                shared.local_readiness_wait(),
+                shared.local_reads.describe(),
+            )
         };
         if state == NetState::WaitingForLauncher {
             return;
@@ -151,14 +174,22 @@ impl ReplicantNet {
             Some((sent, _)) if sent != current => true,
             Some((_, at_ms)) => now_ms.saturating_sub(at_ms) >= HEARTBEAT_INTERVAL_MS,
         };
-        if !due {
-            return;
-        }
-        if send(&Message::Readiness(current), Channel::ReliableOrdered) {
-            if self.readiness_sent.is_none_or(|(sent, _)| sent != current) {
-                log_readiness(&format!("readiness: this game {current:?}"));
+        if due {
+            if send(&Message::Readiness(current), Channel::ReliableOrdered) {
+                self.readiness_sent = Some((current, now_ms));
+                self.last_readiness_send = READINESS_SENT;
+            } else {
+                self.last_readiness_send = READINESS_SEND_REFUSED;
             }
-            self.readiness_sent = Some((current, now_ms));
+        }
+        if let Some(line) = self.readiness_log.observe(
+            now_ms,
+            current,
+            &waiting_on,
+            &reads,
+            self.last_readiness_send,
+        ) {
+            log_readiness(&line);
         }
     }
 }

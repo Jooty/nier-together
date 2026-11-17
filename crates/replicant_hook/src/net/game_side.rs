@@ -7,7 +7,7 @@ use replicant_game::offsets::BODY_MOTION_LAYER;
 use replicant_game::puppet::{
     LayerMotion, motion_name, read_layer_motion, read_ridden_boar, read_weapon_look,
 };
-use replicant_game::readiness::{REPORT_MIN_INTERVAL_MS, classify, read_play_checks};
+use replicant_game::readiness::{REPORT_MIN_INTERVAL_MS, classify, read_play_reads};
 use replicant_game::{PhaseEntry, Replicant};
 use replicant_proto::{NO_MOTION_NAME_HASH, PartnerActivity, RiddenBoar, motion_name_hash};
 
@@ -36,7 +36,8 @@ pub fn report_readiness(build: &VerifiedBuild) {
     }
     *last = Some(now);
     let game = Replicant::new(InProcessMemory::new(build));
-    net.report_readiness(classify(read_play_checks(&game)));
+    let reads = read_play_reads(&game);
+    net.report_readiness(classify(reads.checks()), reads);
 }
 
 pub fn quit_when_asked() {

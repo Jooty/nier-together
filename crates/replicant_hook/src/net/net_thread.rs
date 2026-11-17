@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use nt_hook::net::LinkPeer;
 use nt_net::Transport;
+use replicant_game::readiness::PlayReads;
 use replicant_proto::{GameReadiness, Message, PlayerSettings, SessionOptions};
 
 use crate::net::replicant_net::ReplicantNet;
@@ -52,9 +53,10 @@ impl NetThread {
             .send_to_launcher(Message::GameSaved { succeeded });
     }
 
-    pub fn report_readiness(&self, readiness: GameReadiness) {
+    pub fn report_readiness(&self, readiness: GameReadiness, reads: PlayReads) {
         self.inner.update(|shared| {
             shared.local_readiness = readiness;
+            shared.local_reads = reads;
             shared.local_readiness_at = Some(Instant::now());
         });
     }
