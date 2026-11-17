@@ -7,6 +7,7 @@ pub enum Action {
     GoToPartner,
     GoToPlayer(u8),
     TravelTo(TravelPoint),
+    SessionJump(usize),
 }
 
 impl Action {
@@ -16,6 +17,7 @@ impl Action {
             Self::GoToPartner => crate::travel_driver::run_go_to_partner(),
             Self::GoToPlayer(slot) => crate::travel_driver::run_go_to_player(slot),
             Self::TravelTo(point) => crate::travel_driver::run_local_jump(point),
+            Self::SessionJump(start_index) => crate::start_driver::run_session_jump(start_index),
         }
     }
 }

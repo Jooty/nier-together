@@ -1,5 +1,5 @@
 use automata_game::story_jump::{
-    Landing, OPEN_STORY_JUMPS, menu_label, press_outcome, story_jump_by_id,
+    Landing, OPEN_STORY_JUMPS, PressOutcome, menu_label, press_outcome, story_jump_by_id,
 };
 
 #[test]
@@ -58,11 +58,9 @@ fn a_not_ready_row_does_nothing_and_says_why() {
 }
 
 #[test]
-fn a_chapter_row_names_the_start_index_to_set_and_says_it_works_at_launch_only() {
-    let text = press_outcome(story_jump_by_id(120).unwrap(), Some(41)).unwrap();
-    assert!(text.contains("launch only"));
-    assert!(text.contains("start index 41"));
-    assert!(text.contains("chapter record 6"));
+fn a_chapter_row_asks_for_a_session_jump_to_its_start_index() {
+    let outcome = press_outcome(story_jump_by_id(120).unwrap(), Some(41)).unwrap();
+    assert_eq!(outcome, PressOutcome::SessionJump { start_index: 41 });
 }
 
 #[test]
@@ -72,7 +70,9 @@ fn a_chapter_row_before_the_table_is_read_is_refused() {
 
 #[test]
 fn the_first_row_is_the_new_game_and_needs_no_index() {
-    let text = press_outcome(story_jump_by_id(10).unwrap(), None).unwrap();
+    let Ok(PressOutcome::Said(text)) = press_outcome(story_jump_by_id(10).unwrap(), None) else {
+        panic!("the new game row only says how to start it");
+    };
     assert!(text.contains("new_game"));
 }
 

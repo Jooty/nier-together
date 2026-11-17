@@ -23,6 +23,7 @@ pub mod pickups;
 pub mod save_redirect;
 pub mod save_together;
 pub mod second_copy;
+pub mod session_jump;
 pub mod shared_defeat;
 pub mod start;
 pub mod story_follow;

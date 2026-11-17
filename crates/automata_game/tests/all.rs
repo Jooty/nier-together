@@ -98,6 +98,8 @@ mod save_redirect;
 mod save_together;
 #[path = "second_copy.rs"]
 mod second_copy;
+#[path = "session_jump.rs"]
+mod session_jump;
 #[path = "session_mode.rs"]
 mod session_mode;
 #[path = "shared_defeat.rs"]

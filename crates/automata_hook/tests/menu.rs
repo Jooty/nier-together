@@ -373,15 +373,21 @@ fn the_story_jump_section_lists_the_open_points_in_id_order_with_not_ready_marke
 }
 
 #[test]
-fn a_not_ready_story_jump_is_refused_and_a_chapter_row_names_its_start_index() {
+fn a_not_ready_story_jump_is_refused_and_a_chapter_row_asks_the_session_jump_with_its_start_index()
+{
     let menu = menu().with_start_index_of_record(|record| Some(record + 10));
     assert!(
         menu.run_story_jump(20)
             .is_err_and(|text| text.starts_with("not ready"))
     );
-    let text = menu.run_story_jump(140).unwrap();
-    assert!(text.contains("start index 18"), "{text}");
     assert!(menu.run_story_jump(999).is_err());
+    assert!(
+        menu.run_story_jump(140)
+            .is_err_and(|text| text.contains("not installed"))
+    );
+    let menu = menu.with_ask_session_jump(|start_index| Ok(format!("asked {start_index}")));
+    assert_eq!(menu.run_story_jump(140).unwrap(), "asked 18");
+    assert!(menu.run_story_jump(10).unwrap().contains("new_game"));
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use automata_game::exe::ExeVariant;
 use automata_game::save_redirect::SaveRedirectStatus;
 use automata_game::story_jump::{
-    Landing, OPEN_STORY_JUMPS, menu_label, press_outcome, story_jump_by_id,
+    Landing, OPEN_STORY_JUMPS, PressOutcome, menu_label, press_outcome, story_jump_by_id,
 };
 use automata_game::travel::{GoToPartnerRefusal, JumpRefusal, TravelPoint, TravelView};
 use nt_hook::menu::{
@@ -17,6 +17,7 @@ use crate::net::link_not_started_status;
 
 const NO_AREAS_YET_TEXT: &str = "no areas yet";
 const UNKNOWN_STORY_JUMP_TEXT: &str = "not a story jump";
+const NO_SESSION_JUMP_TEXT: &str = "the in-session jump is not installed";
 const NO_FIXES_TEXT: &str = "no fixes";
 const NO_START_STATUS_TEXT: &str = "start: not started";
 const NO_PARTNER_YET_TEXT: &str = "no partner yet";
@@ -32,6 +33,7 @@ pub struct AutomataMenu {
     save_status: fn() -> SaveRedirectStatus,
     start_status: fn() -> String,
     start_index_of_record: fn(usize) -> Option<usize>,
+    ask_session_jump: fn(usize) -> Result<String, String>,
     story_status: fn() -> String,
     partner_body_status: fn() -> String,
     co_op: fn() -> CoOpStatus,
@@ -47,6 +49,7 @@ impl AutomataMenu {
             save_status: || SaveRedirectStatus::NotRedirected,
             start_status: || NO_START_STATUS_TEXT.to_owned(),
             start_index_of_record: |_| None,
+            ask_session_jump: |_| Err(NO_SESSION_JUMP_TEXT.to_owned()),
             story_status: || NO_STORY_STATUS_TEXT.to_owned(),
             partner_body_status: || NO_PARTNER_BODY_STATUS_TEXT.to_owned(),
             co_op: link_not_started_status,
@@ -80,6 +83,14 @@ impl AutomataMenu {
         start_index_of_record: fn(usize) -> Option<usize>,
     ) -> Self {
         self.start_index_of_record = start_index_of_record;
+        self
+    }
+
+    pub fn with_ask_session_jump(
+        mut self,
+        ask_session_jump: fn(usize) -> Result<String, String>,
+    ) -> Self {
+        self.ask_session_jump = ask_session_jump;
         self
     }
 
@@ -179,7 +190,10 @@ impl GameMenu for AutomataMenu {
             Landing::ChapterRecord(record) => (self.start_index_of_record)(record),
             Landing::NewGame | Landing::NotReady(_) => None,
         };
-        press_outcome(jump, start_index)
+        match press_outcome(jump, start_index)? {
+            PressOutcome::Said(text) => Ok(text),
+            PressOutcome::SessionJump { start_index } => (self.ask_session_jump)(start_index),
+        }
     }
 
     fn fixes(&self) -> Vec<FixEntry> {

@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use automata_game::load_gate::{BootScreenKeep, LoadGate, LoadWatch, LoadingScreenReading};
 use automata_game::partner::{PartnerDataWait, ReadyLatch};
+use automata_game::session_jump::{SessionJumpCharacters, SessionJumpMachine, SessionJumpOrder};
 use automata_game::start::{StartCall, StartMachine};
 
 use crate::game_calls::GameCalls;
@@ -31,4 +32,7 @@ pub(super) struct Driver {
     pub campaign_loads_hooked: bool,
     pub hold_waiting_since_ms: Option<u64>,
     pub hold_waiting_logged_at_ms: Option<u64>,
+    pub session_jump: SessionJumpMachine,
+    pub session_jump_characters: SessionJumpCharacters,
+    pub session_jump_to_tell: Option<SessionJumpOrder>,
 }

@@ -12,6 +12,8 @@ mod member_wire;
 mod pickup_wire;
 #[path = "save_wire.rs"]
 mod save_wire;
+#[path = "session_jump_wire.rs"]
+mod session_jump_wire;
 #[path = "skip_vote_wire.rs"]
 mod skip_vote_wire;
 #[path = "story_step_wire.rs"]

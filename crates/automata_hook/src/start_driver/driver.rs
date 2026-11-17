@@ -17,6 +17,7 @@ use automata_game::load_gate::{
     campaign_loads_note, load_hold_waiting_line,
 };
 use automata_game::partner::{PartnerDataWait, ReadyLatch, not_free_reason};
+use automata_game::session_jump::{SessionJumpCharacters, SessionJumpMachine};
 use automata_game::start::{
     ArrivalReadings, NEW_GAME_NORMAL_DIFFICULTY_INDEX, NEW_GAME_OPENING_PHASE_NAME,
     OPENING_MISSION_PHASE_ID, PhaseStartCall, RUNNING_SCENE_STATE, SUB_PHASE_NAME_BUFFER_LEN,
@@ -53,7 +54,8 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings, saves_redirected: 
         log_line("start: image size matches no known exe, nothing started");
         return;
     };
-    let (mut machine, logs) = StartMachine::new(settings.start_config(), saves_redirected);
+    let start_config = settings.start_config();
+    let (mut machine, logs) = StartMachine::new(start_config, saves_redirected);
     log_all(logs);
     if !machine.is_finished() && !install_story_gate(build, settings.story) {
         log_all(machine.call_failed("the story gate could not be hooked"));
@@ -127,6 +129,13 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings, saves_redirected: 
         campaign_loads_hooked,
         hold_waiting_since_ms: None,
         hold_waiting_logged_at_ms: None,
+        session_jump: SessionJumpMachine::default(),
+        session_jump_characters: SessionJumpCharacters {
+            hero: start_config.hero,
+            partner: start_config.partner,
+            route_lead: start_config.route_lead,
+        },
+        session_jump_to_tell: None,
     });
 }
 
@@ -159,6 +168,7 @@ pub fn tick() {
     driver.publish_story_place();
     if driver.machine.is_finished() {
         driver.watch_play();
+        driver.step_session_jump();
         driver.step_campaign_load();
         return;
     }
@@ -178,7 +188,7 @@ fn set_status(machine: &StartMachine, gate: &LoadGate, gate_now_ms: u64) {
     }
 }
 
-fn log_all(lines: Vec<String>) {
+pub(super) fn log_all(lines: Vec<String>) {
     for line in lines {
         log_line(&line);
     }
@@ -466,18 +476,7 @@ impl Driver {
         let arrival = self
             .machine
             .wants_arrival_readings()
-            .then(|| ArrivalReadings {
-                scene_state,
-                phase_id,
-                phase_name: calls.read_c_string_at(
-                    calls.address_value(SAVED_PHASE_NAME_VALUE),
-                    SCENE_NAME_READ_LIMIT,
-                ),
-                scene_loaded,
-                player_present: calls.current_hero_present(),
-                player_held_by: not_free_reason(&calls.read_free())
-                    .map(|reason| reason.to_string()),
-            });
+            .then(|| self.read_arrival(scene_state, phase_id, scene_loaded));
         StartReadings {
             title,
             arrival,
@@ -488,6 +487,26 @@ impl Driver {
             newest_slot: (self.machine.wants_newest_slot() && looks_idle)
                 .then(|| newest_slot(&coop_save_slot_times()))
                 .flatten(),
+        }
+    }
+
+    pub(super) fn read_arrival(
+        &self,
+        scene_state: i32,
+        phase_id: i32,
+        scene_loaded: i32,
+    ) -> ArrivalReadings {
+        let calls = &self.calls;
+        ArrivalReadings {
+            scene_state,
+            phase_id,
+            phase_name: calls.read_c_string_at(
+                calls.address_value(SAVED_PHASE_NAME_VALUE),
+                SCENE_NAME_READ_LIMIT,
+            ),
+            scene_loaded,
+            player_present: calls.current_hero_present(),
+            player_held_by: not_free_reason(&calls.read_free()).map(|reason| reason.to_string()),
         }
     }
 
@@ -511,7 +530,10 @@ impl Driver {
                     &plan.phase_start.phase_name,
                 ));
             }
-            StartAction::TryPhaseStart(call) => self.try_phase_start(&call, now_ms),
+            StartAction::TryPhaseStart(call) => {
+                let accepted = self.call_phase_start(&call);
+                log_all(self.machine.phase_start_returned(now_ms, accepted));
+            }
             StartAction::LoadSlot(slot) => {
                 run_as_ours(|| self.calls.request_load_slot(slot));
                 // The request returns nothing; a request that was taken shows as busy at once.
@@ -549,7 +571,7 @@ impl Driver {
         }
     }
 
-    fn try_phase_start(&mut self, call: &PhaseStartCall, now_ms: u64) {
+    pub(super) fn call_phase_start(&mut self, call: &PhaseStartCall) -> bool {
         self.phase_name_buffer = call.phase_name.as_bytes().to_vec();
         self.phase_name_buffer.push(0);
         let accepted = run_as_ours(|| {
@@ -564,7 +586,7 @@ impl Driver {
                 }
             }
         }
-        log_all(self.machine.phase_start_returned(now_ms, accepted));
+        accepted
     }
 
     fn enter_saved_scene(&mut self, now_ms: u64) {
@@ -608,7 +630,7 @@ impl Driver {
         self.machine.saved_scene_requested(now_ms, phase_id, name);
     }
 
-    fn write_the_watched_hero(&self, target: &StoryPlace) {
+    pub(super) fn write_the_watched_hero(&self, target: &StoryPlace) {
         let Some(host) = character_for_a_start(target) else {
             return;
         };
@@ -619,7 +641,7 @@ impl Driver {
         note_the_start_hero(target, host, written);
     }
 
-    fn run_call(&self, call: &StartCall) -> Result<(), String> {
+    pub(super) fn run_call(&self, call: &StartCall) -> Result<(), String> {
         log_line(&format!("start: call: {}", call.describe()));
         let calls = &self.calls;
         let write_failed = |error| format!("a memory write failed ({error})");
