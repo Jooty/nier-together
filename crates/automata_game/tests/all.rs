@@ -132,6 +132,8 @@ mod system_data_band;
 mod travel;
 #[path = "unforced_defeat.rs"]
 mod unforced_defeat;
+#[path = "wall_limit.rs"]
+mod wall_limit;
 #[path = "watch_pause.rs"]
 mod watch_pause;
 #[path = "watched_hero_flight.rs"]

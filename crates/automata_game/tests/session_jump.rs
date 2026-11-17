@@ -2,7 +2,7 @@ use automata_game::character::Character;
 use automata_game::session_jump::{
     SessionJumpAction, SessionJumpCharacters, SessionJumpMachine, SessionJumpOrder,
     SessionJumpOrigin, SessionJumpReadings, SessionJumpRefusal, decide_session_jump,
-    record_of_start_index,
+    landing_company_line, record_of_start_index,
 };
 use automata_game::start::{ArrivalReadings, ChapterRecord, PlayReadings, StartCall};
 use automata_game::travel::JumpRole;
@@ -336,4 +336,16 @@ fn an_order_names_a_start_index_inside_the_table_only() {
     assert!(SessionJumpOrder::of_start_index(41).is_some());
     assert!(SessionJumpOrder::of_start_index(1024).is_none());
     assert!(SessionJumpOrder::of_start_index(70_000).is_none());
+}
+
+#[test]
+fn the_landing_line_says_why_no_partner_body_is_made_when_the_partner_watches() {
+    let watched = landing_company_line(1, true, true, false);
+    assert!(watched.contains("by the watching rule"), "{watched}");
+    let plain = landing_company_line(2, true, false, false);
+    assert!(plain.contains("not here yet"), "{plain}");
+    assert!(plain.starts_with("session jump #2"));
+    let present = landing_company_line(3, true, true, true);
+    assert!(present.ends_with("present"), "{present}");
+    assert!(landing_company_line(4, false, false, false).contains("not linked"));
 }

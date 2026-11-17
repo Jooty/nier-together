@@ -1,8 +1,10 @@
+mod landing_line;
 mod record_choice;
 mod session_jump_gate;
 mod session_jump_machine;
 mod session_jump_order;
 
+pub use landing_line::landing_company_line;
 pub use record_choice::record_of_start_index;
 pub use session_jump_gate::{
     SessionJumpOrigin, SessionJumpReadings, SessionJumpRefusal, decide_session_jump,

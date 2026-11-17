@@ -3,7 +3,7 @@ use automata_game::defeat::DefeatFlow;
 use automata_game::partner::not_free_reason;
 use automata_game::session_jump::{
     SessionJumpAction, SessionJumpOrder, SessionJumpOrigin, SessionJumpReadings,
-    decide_session_jump, record_of_start_index,
+    decide_session_jump, landing_company_line, record_of_start_index,
 };
 use automata_game::travel::JumpRole;
 use automata_proto::Message;
@@ -173,19 +173,11 @@ impl Driver {
 
     fn log_the_landing_company(&self) {
         let link = link_reading();
-        log_line(&format!(
-            "session jump #{}: after the landing the partner is {} and its body is {}",
+        log_line(&landing_company_line(
             self.session_jump.number(),
-            if link.partner_present {
-                "linked"
-            } else {
-                "not linked"
-            },
-            if held_partner_body().is_some() {
-                "present"
-            } else {
-                "not here yet"
-            }
+            link.partner_present,
+            link.partner_watching,
+            held_partner_body().is_some(),
         ));
     }
 }
