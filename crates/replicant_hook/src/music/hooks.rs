@@ -1,9 +1,10 @@
 use core::ffi::c_void;
 use core::ptr;
 use std::panic;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
+use replicant_game::music::{DroppedCall, DroppedCalls};
 use replicant_game::offsets::{
     PLAY_BGM_FUNCTION_RVA, SET_BGM_LAYER_VOLUME_FUNCTION_RVA, SET_BGM_MASTER_VOLUME_FUNCTION_RVA,
     STOP_BGM_FUNCTION_RVA,
@@ -20,6 +21,7 @@ static ORIGINAL_SET_MASTER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_SET_LAYER: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static HOST_OWNS_LOCAL_MUSIC: AtomicBool = AtomicBool::new(false);
 static APPLYING_HOST_MUSIC: AtomicBool = AtomicBool::new(false);
+static DROPPED_CALLS: Mutex<DroppedCalls> = Mutex::new(DroppedCalls::new());
 
 type PlayBgm = unsafe extern "system" fn(*mut c_void, i32, f32, f32) -> u64;
 type StopBgm = unsafe extern "system" fn(*mut c_void, f32) -> u64;
@@ -41,6 +43,20 @@ pub(super) fn applying() -> ApplyingGuard {
 
 pub(super) fn set_host_owns_local_music(owns: bool) {
     HOST_OWNS_LOCAL_MUSIC.store(owns, Ordering::Relaxed);
+}
+
+pub(super) fn forget_dropped_calls() {
+    DROPPED_CALLS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+}
+
+pub(super) fn take_dropped_calls() -> Vec<DroppedCall> {
+    DROPPED_CALLS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_replay()
 }
 
 pub fn install(build: VerifiedBuild) {
@@ -84,20 +100,26 @@ pub fn install(build: VerifiedBuild) {
     }
 }
 
-fn local_call_is_ignored(what: &str, detail: i64) -> bool {
+fn local_call_is_ignored(call: DroppedCall) -> bool {
     if !HOST_OWNS_LOCAL_MUSIC.load(Ordering::Relaxed) || APPLYING_HOST_MUSIC.load(Ordering::Relaxed)
     {
         return false;
     }
     count_ignored_call();
+    DROPPED_CALLS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .record(call);
     log_limited(&format!(
-        "music: ignored the game's own {what} ({detail}), the host's music is playing"
+        "music: ignored the game's own {} ({}), the host's music is playing",
+        call.name(),
+        call.detail()
     ));
     true
 }
 
-fn ignored(what: &str, detail: i64) -> bool {
-    panic::catch_unwind(|| local_call_is_ignored(what, detail)).unwrap_or(false)
+fn ignored(call: DroppedCall) -> bool {
+    panic::catch_unwind(|| local_call_is_ignored(call)).unwrap_or(false)
 }
 
 #[expect(
@@ -105,7 +127,11 @@ fn ignored(what: &str, detail: i64) -> bool {
     reason = "calls the original PlayBgm through the trampoline MinHook built"
 )]
 extern "system" fn play_bgm_detour(this: *mut c_void, track: i32, volume: f32, fade: f32) -> u64 {
-    if ignored("PlayBgm", i64::from(track)) {
+    if ignored(DroppedCall::Play {
+        track,
+        volume,
+        fade_seconds: fade,
+    }) {
         return 0;
     }
     let original = ORIGINAL_PLAY_BGM.load(Ordering::Acquire);
@@ -121,7 +147,7 @@ extern "system" fn play_bgm_detour(this: *mut c_void, track: i32, volume: f32, f
     reason = "calls the original StopBgm through the trampoline MinHook built"
 )]
 extern "system" fn stop_bgm_detour(this: *mut c_void, fade: f32) -> u64 {
-    if ignored("StopBgm", 0) {
+    if ignored(DroppedCall::Stop { fade_seconds: fade }) {
         return 0;
     }
     let original = ORIGINAL_STOP_BGM.load(Ordering::Acquire);
@@ -137,7 +163,7 @@ extern "system" fn stop_bgm_detour(this: *mut c_void, fade: f32) -> u64 {
     reason = "calls the original SetBgmMasterVolume through the trampoline MinHook built"
 )]
 extern "system" fn set_master_detour(this: *mut c_void, volume: f32, seconds: f32) {
-    if ignored("SetBgmMasterVolume", 0) {
+    if ignored(DroppedCall::Master { volume, seconds }) {
         return;
     }
     let original = ORIGINAL_SET_MASTER.load(Ordering::Acquire);
@@ -153,7 +179,11 @@ extern "system" fn set_master_detour(this: *mut c_void, volume: f32, seconds: f3
     reason = "calls the original SetBgmLayerVolume through the trampoline MinHook built"
 )]
 extern "system" fn set_layer_detour(this: *mut c_void, layer: i32, volume: f32, seconds: f32) {
-    if ignored("SetBgmLayerVolume", i64::from(layer)) {
+    if ignored(DroppedCall::Layer {
+        layer,
+        volume,
+        seconds,
+    }) {
         return;
     }
     let original = ORIGINAL_SET_LAYER.load(Ordering::Acquire);
