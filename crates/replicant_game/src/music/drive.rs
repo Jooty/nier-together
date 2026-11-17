@@ -14,3 +14,12 @@ pub fn host_music_drives(
 ) -> bool {
     host_music_fresh && !local_world_paused && local_in_play && !host_in_scene
 }
+
+pub fn drive_release_replays_dropped_calls(
+    host_music_fresh: bool,
+    local_world_paused: bool,
+    local_in_play: bool,
+    host_in_scene: bool,
+) -> bool {
+    host_music_fresh && !local_world_paused && local_in_play && host_in_scene
+}

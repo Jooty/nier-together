@@ -3,8 +3,9 @@ use std::time::Instant;
 
 use replicant_game::marker::read_world_flags;
 use replicant_game::music::{
-    DroppedCall, GuestSync, LocalMusic, MusicChannel, MusicSender, MusicStep, host_music_drives,
-    host_reports_a_scene, read_music_channel,
+    DroppedCall, GuestSync, LocalMusic, MusicChannel, MusicSender, MusicStep,
+    drive_release_replays_dropped_calls, host_music_drives, host_reports_a_scene,
+    read_music_channel,
 };
 use replicant_game::offsets::BGM_CHANNEL_STATE_EVENT_POSTED;
 use replicant_game::stay_together::FollowRole;
@@ -152,7 +153,10 @@ impl MusicTick {
             self.guest.forget();
         }
         if !controlling {
-            self.replay_dropped_calls(build);
+            let in_play = view.effective_local_readiness().is_in_play();
+            if drive_release_replays_dropped_calls(fresh, paused, in_play, host_in_scene) {
+                self.replay_dropped_calls(build);
+            }
             return;
         }
         let Ok(channel) = read_music_channel(&memory) else {

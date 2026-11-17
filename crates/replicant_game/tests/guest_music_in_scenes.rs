@@ -1,4 +1,7 @@
-use replicant_game::music::{DroppedCall, DroppedCalls, host_music_drives, host_reports_a_scene};
+use replicant_game::music::{
+    DroppedCall, DroppedCalls, drive_release_replays_dropped_calls, host_music_drives,
+    host_reports_a_scene,
+};
 use replicant_proto::PartnerActivity;
 
 const FIGHT_TRACK: i32 = 100_047;
@@ -130,4 +133,30 @@ fn a_layer_outside_the_known_layers_is_not_kept() {
     dropped.record(own_layer(LAYER_COUNT));
     dropped.record(own_layer(-1));
     assert!(dropped.take_replay().is_empty());
+}
+
+#[test]
+fn a_pause_release_replays_nothing() {
+    assert!(!drive_release_replays_dropped_calls(
+        true, true, true, false
+    ));
+}
+
+#[test]
+fn a_not_in_play_release_replays_nothing() {
+    assert!(!drive_release_replays_dropped_calls(
+        true, false, false, false
+    ));
+}
+
+#[test]
+fn a_stale_host_release_replays_nothing() {
+    assert!(!drive_release_replays_dropped_calls(
+        false, false, true, false
+    ));
+}
+
+#[test]
+fn a_host_scene_release_replays() {
+    assert!(drive_release_replays_dropped_calls(true, false, true, true));
 }
