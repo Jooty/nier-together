@@ -11,7 +11,7 @@ use crate::fight_sync::{
     QUEUED_CALL_GIVEN_UP_AFTER_MS, QueueRefusal, QueuedCallNotice, RadioWaitPoll, RadioWaitRun,
     RequestAnswer, RequestCall, RequestReceipt, SceneHoldChange, SlotState, StreamEntry,
     StreamRecorder, TapeValue, WindowArming, WindowCloseCause, WindowEvent, WindowState,
-    counted_wait_ms, fight_windows_of_pack,
+    counted_wait_ms, fight_windows_of_pack, is_start_chain_of,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +96,7 @@ pub struct HostFightStream {
     answers_out: Vec<FightRequestAnswer>,
     radio_waits: HostRadioWaits,
     start_pop: Option<(&'static str, Vec<StoryCallArg>)>,
+    start_chain_ran_this_epoch: bool,
 }
 
 impl HostStreamOut {
@@ -182,6 +183,7 @@ impl HostFightStream {
             answers_out: Vec::new(),
             radio_waits: HostRadioWaits::new(),
             start_pop: None,
+            start_chain_ran_this_epoch: false,
         }
     }
 
@@ -234,6 +236,7 @@ impl HostFightStream {
             self.tape.end();
             self.tape_logged.clear();
             self.restarted_with_no_entry_since = true;
+            self.start_chain_ran_this_epoch = false;
             outs.push(HostStreamOut::Restarted {
                 phase,
                 epoch,
@@ -255,6 +258,7 @@ impl HostFightStream {
             self.tape.end();
             self.tape_logged.clear();
             self.restarted_with_no_entry_since = true;
+            self.start_chain_ran_this_epoch = false;
             return vec![HostStreamOut::Restarted {
                 phase: self.phase.unwrap_or_default(),
                 epoch,
@@ -313,6 +317,20 @@ impl HostFightStream {
         let pop = self.requests.pop(name, source, arguments, streamed);
         self.collect_answers();
         pop
+    }
+
+    /// A pop of the open window's start or of a function that calls it, after the start chain
+    /// already ran in this epoch: the host's own game repeating the chain, which is not run.
+    pub fn repeats_start_chain(&mut self, name: &str) -> Option<&'static FightWindowData> {
+        let window = self.window.open_window()?;
+        if !is_start_chain_of(window, name) {
+            return None;
+        }
+        if self.start_chain_ran_this_epoch {
+            return Some(window);
+        }
+        self.start_chain_ran_this_epoch = true;
+        None
     }
 
     /// The answers to the guest's requests since the last call, to send to the guest.
@@ -561,6 +579,7 @@ impl HostFightStream {
             && !fight_windows_of_pack(self.window.pack())
                 .any(|row| row != window && row.start_ids.contains(&name))
         {
+            self.start_chain_ran_this_epoch = false;
             return Vec::new();
         }
         let event = self.window.function_ran(name);
@@ -642,6 +661,7 @@ impl HostFightStream {
         self.tape.end();
         self.tape_logged.clear();
         self.restarted_with_no_entry_since = false;
+        self.start_chain_ran_this_epoch = true;
         HostStreamOut::Opened {
             phase,
             epoch,
