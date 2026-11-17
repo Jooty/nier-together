@@ -1,6 +1,6 @@
 use std::panic;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::PoisonError;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use replicant_game::cutscene_skip::TRIGGER_MANAGER_RVA;
 use replicant_game::fight_sync::{
