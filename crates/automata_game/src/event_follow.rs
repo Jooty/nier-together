@@ -37,8 +37,9 @@ pub use event_lines::{
     follow_start_line, follow_start_while_watching_line, follow_waits_line, held_gave_up_line,
     held_released_line, held_waiting_line, host_end_heard_line, host_start_heard_line,
     link_lost_line, outlast_skip_line, outlast_started_line, play_held_line, play_passed_line,
-    replay_skipped_line, run_gave_up_line, run_released_line, skip_ask_gave_up_line,
-    skip_swallowed_line, skipped_for_the_host_line, started_here_line, told_line,
+    replay_skipped_line, run_gave_up_line, run_released_line, scene_ended_line, scene_started_line,
+    skip_ask_gave_up_line, skip_swallowed_line, skipped_for_the_host_line, started_here_line,
+    told_line,
 };
 pub use event_machine::EventMachine;
 pub use event_pause::EventPause;

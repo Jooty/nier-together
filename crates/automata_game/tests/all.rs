@@ -96,6 +96,8 @@ mod route_lead;
 mod save_redirect;
 #[path = "save_together.rs"]
 mod save_together;
+#[path = "scene_lines.rs"]
+mod scene_lines;
 #[path = "second_copy.rs"]
 mod second_copy;
 #[path = "session_jump.rs"]

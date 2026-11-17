@@ -7,6 +7,7 @@ pub struct PlayingHere {
     pub since_ms: u64,
     pub origin: StartOrigin,
     pub told: bool,
+    pub scene_number: u32,
 }
 
 pub fn mirrored_event_playing(playing: &[PlayingHere], id: EventId) -> bool {

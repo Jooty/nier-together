@@ -5,7 +5,8 @@ use crate::event_follow::{
     MOST_SCRIPT_PLAY_REQUESTS_REMEMBERED, PARTNER_REPORT_STALE_FOR_A_SKIP_VOTE_MS, PartnerReport,
     PauseView, PlayVerdict, PlayedHere, PlayingHere, ProgressNotes, RunsForThePartner,
     SCRIPT_PLAY_REQUEST_COUNTS_FOR_ITS_START_MS, SeenEvents, SkipPrompt, SkipVerdict, SkipVote,
-    StartOrigin, VoteView, ended_here_line, replay_skipped_line, started_here_line,
+    StartOrigin, VoteView, ended_here_line, replay_skipped_line, scene_ended_line,
+    scene_started_line, started_here_line,
 };
 use crate::load_gate::StoryPlace;
 use crate::travel::JumpRole;
@@ -32,6 +33,7 @@ pub struct EventMachine {
     event_pause_on: bool,
     event_pause: EventPause,
     progress: ProgressNotes,
+    scenes_started: u32,
 }
 
 impl EventMachine {
@@ -97,13 +99,16 @@ impl EventMachine {
         self.script_asked.retain(|(asked, _)| *asked != id);
         let told = origin.is_mirrored() && self.linked_role == JumpRole::Host;
         self.playing.retain(|here| here.id != id);
+        self.scenes_started += 1;
         self.playing.push(PlayingHere {
             id,
             since_ms: now_ms,
             origin,
             told,
+            scene_number: self.scenes_started,
         });
         step.logs.push(started_here_line(id, origin));
+        step.logs.push(scene_started_line(self.scenes_started, id));
         if origin.is_mirrored() {
             self.vote.event_started(id);
         }
@@ -132,6 +137,9 @@ impl EventMachine {
             skipped,
             ended.map(|here| now_ms.saturating_sub(here.since_ms)),
         ));
+        if let Some(here) = ended {
+            step.logs.push(scene_ended_line(here.scene_number));
+        }
         if ended.is_some_and(|here| here.told) && self.linked_role == JumpRole::Host {
             step.sends.push(EventSend::Ended { id, skipped });
         }
