@@ -26,6 +26,7 @@ pub fn jump_stat_level(point: StoryJumpPoint) -> i32 {
         | StoryJumpPoint::ManorEmilFollows => 36,
         StoryJumpPoint::ManorBoss8 => 38,
         StoryJumpPoint::VillageBoss9 => 40,
+        StoryJumpPoint::LibraryBoss10 | StoryJumpPoint::LibraryBoss11 => 42,
     }
 }
 
