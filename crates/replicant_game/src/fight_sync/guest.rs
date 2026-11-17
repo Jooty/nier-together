@@ -1153,6 +1153,15 @@ impl GuestFightStream {
         true
     }
 
+    /// The slot the host's queued entry named `name` sits in, when one is queued.
+    pub fn queued_replay_arguments(&self, name: &str) -> Option<u64> {
+        if self.replayer.in_flight_name() == Some(name) {
+            self.replayer.queued_arguments()
+        } else {
+            None
+        }
+    }
+
     /// The next host entry this game has not run: the one in the engine queue, else the lowest
     /// pending one.
     pub fn next_waiting_entry(&self) -> Option<(u64, &str)> {

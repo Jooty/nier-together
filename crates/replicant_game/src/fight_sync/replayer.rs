@@ -292,6 +292,10 @@ impl Replayer {
         self.next_seq
     }
 
+    pub const fn queued_arguments(&self) -> Option<u64> {
+        self.queued_arguments
+    }
+
     pub fn in_flight_name(&self) -> Option<&str> {
         match self.in_flight {
             InFlight::Queued { .. } => self
