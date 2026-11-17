@@ -14,10 +14,7 @@ pub use arrival::{
     FunctionArrival, FunctionArrivalFacts, FunctionDrop, function_arrival, judge_function,
 };
 pub use drain::{DrainStep, plan_forced_drain};
-pub use fill_in::{
-    FillInArrival, FillInCopy, FillInReach, FillInRelay, fill_in_reach,
-    fill_in_reach_given_own_call,
-};
+pub use fill_in::{FillInArrival, FillInCopy, FillInReach, FillInRelay, fill_in_reach};
 pub use host_talk_steps::{STEPS_THE_HOSTS_OWN_TALK_STARTS, is_started_by_the_hosts_own_talk};
 pub use lookup::{
     ScriptFunction, is_called_only_from_local_state, is_callee_of, is_music_only, relayed_function,

@@ -13,9 +13,6 @@ pub enum FillInReach {
     /// only the host's guide reaches, or one the host's own talk starts: this game may never run
     /// it, so the partner's copy runs as soon as its turn comes.
     CannotReachHere,
-    /// This game's own copy is parked by the scene hold and the engine never resumes it, so the
-    /// partner's copy is the one that starts the scene, as soon as its turn comes.
-    OwnCopyParkedForThisOne,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +41,7 @@ impl FillInCopy {
     pub const fn due_ms(&self) -> u64 {
         match self.reach {
             FillInReach::OwnCopyExpected => self.arrived_ms.saturating_add(FILL_IN_GRACE_MS),
-            FillInReach::CannotReachHere | FillInReach::OwnCopyParkedForThisOne => self.arrived_ms,
+            FillInReach::CannotReachHere => self.arrived_ms,
         }
     }
 }
@@ -127,17 +124,6 @@ impl FillInRelay {
             .iter()
             .position(|copy| copy.phase == phase && copy.name == name)
     }
-}
-
-pub fn fill_in_reach_given_own_call(
-    phase_label: &str,
-    name: &str,
-    own_call_is_parked: bool,
-) -> FillInReach {
-    if own_call_is_parked {
-        return FillInReach::OwnCopyParkedForThisOne;
-    }
-    fill_in_reach(phase_label, name)
 }
 
 pub fn fill_in_reach(phase_label: &str, name: &str) -> FillInReach {

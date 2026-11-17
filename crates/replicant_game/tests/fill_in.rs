@@ -2,7 +2,7 @@ use replicant_game::fight_sync::SlotState;
 use replicant_game::script_functions::{
     FILL_IN_GRACE_MS, FUNCTIONS_CALLED_ONLY_FROM_LOCAL_STATE, FillInArrival, FillInReach,
     FillInRelay, FunctionArrival, FunctionArrivalFacts, FunctionDrop, FunctionsRan, TracedRelay,
-    fill_in_reach, fill_in_reach_given_own_call, function_arrival, script_function, traced_relay,
+    fill_in_reach, function_arrival, script_function, traced_relay,
 };
 use replicant_game::story_relay::RelayCallGate;
 use replicant_proto::StoryCall;
@@ -353,33 +353,4 @@ fn a_claimed_function_that_is_not_a_script_event_stays_unlogged() {
         traced_relay(BOSS9_PACK, "AttackCount_Talk", false, false, true),
         TracedRelay::NotRelayed
     );
-}
-
-const RUN_N7_HOST_START_ARRIVED_MS: u64 = 26_041;
-const BOTH_STARTS_WITHIN_MS: u64 = 300;
-const SCENE_START_FUNCTION: &str = "EID_2000_a0042_Start";
-const SCENE_START_PHASE_LABEL: &str = "A_CENTER_VILLAGE_01";
-const SCENE_START_PHASE: u16 = 1;
-
-#[test]
-fn the_hosts_start_runs_at_once_while_the_guests_own_call_is_parked() {
-    let reach = fill_in_reach_given_own_call(SCENE_START_PHASE_LABEL, SCENE_START_FUNCTION, true);
-    let mut relay = FillInRelay::new();
-    relay.arrive(
-        SCENE_START_PHASE,
-        SCENE_START_FUNCTION,
-        reach,
-        RUN_N7_HOST_START_ARRIVED_MS,
-    );
-    let ran_at = (RUN_N7_HOST_START_ARRIVED_MS..)
-        .step_by(16)
-        .find(|now| relay.tick(true, *now).is_some())
-        .expect("the copy becomes due");
-    assert!(ran_at - RUN_N7_HOST_START_ARRIVED_MS <= BOTH_STARTS_WITHIN_MS);
-}
-
-#[test]
-fn without_a_parked_own_call_the_start_still_waits_for_the_games_own_copy() {
-    let reach = fill_in_reach_given_own_call(SCENE_START_PHASE_LABEL, SCENE_START_FUNCTION, false);
-    assert_eq!(reach, FillInReach::OwnCopyExpected);
 }

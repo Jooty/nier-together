@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::cutscene_skip::{
-    EVENT_CUT_LOADED_BYTE_RVA, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS, ParkedOwnStart,
+    EVENT_CUT_LOADED_BYTE_RVA, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS,
     SCENE_ITEM_SCENE_ID_OFFSET, SCENE_ITEM_STATE_NOT_STARTED, SCENE_ITEM_STATE_OFFSET,
     SCENE_ITEM_STATE_STARTING, SCENE_ITEM_UPDATE_RVA, SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate,
     StartVerdict,
@@ -27,14 +27,8 @@ static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_ITEM_UPDATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static GATE: Mutex<SceneStartGate> = Mutex::new(SceneStartGate::new());
 static FUNCTION_GATE: Mutex<SceneStartGate> = Mutex::new(SceneStartGate::new());
-static HELD_FUNCTION: Mutex<Option<HeldFunction>> = Mutex::new(None);
+static HELD_FUNCTION: Mutex<Option<(u64, String)>> = Mutex::new(None);
 static ANNOUNCED_WHILE_HELD: Mutex<Option<String>> = Mutex::new(None);
-
-struct HeldFunction {
-    name: String,
-    phase: u16,
-    parked: ParkedOwnStart,
-}
 
 type ItemUpdate = unsafe extern "system" fn(*mut c_void);
 
@@ -72,9 +66,6 @@ pub(super) fn observe_host(build: &VerifiedBuild, view: &NetShared) {
 }
 
 pub(super) fn note_host_function_start(phase_label: &str, name: &str) {
-    if own_call_is_parked(name) {
-        return;
-    }
     if script_function(phase_label, name).is_some_and(|function| function.starts_scene) {
         FUNCTION_GATE
             .lock()
@@ -94,71 +85,19 @@ pub(super) fn take_announced_while_held(name: &str) -> bool {
     false
 }
 
-pub(super) fn own_call_is_parked(name: &str) -> bool {
-    HELD_FUNCTION
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .is_some_and(|held| held.name == name && !held.parked.is_replaced())
-}
-
-pub(super) fn note_partner_copy_ran(name: &str) {
-    let mut held = HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(held) = held.as_mut().filter(|held| held.name == name) else {
-        return;
-    };
-    held.parked.replace_with_partner_copy();
-    take_announced_while_held(name);
-}
-
-pub(super) fn start_scene_function_the_host_never_started(build: &VerifiedBuild) {
-    let now = net_clock_ms();
-    let (phase, name) = {
-        let mut held = HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner);
-        let Some(held) = held
-            .as_mut()
-            .filter(|held| held.parked.host_never_started(now))
-        else {
-            return;
-        };
-        held.parked.replace_with_partner_copy();
-        (held.phase, held.name.clone())
-    };
-    log_line(&format!(
-        "scene hold: the host did not start its {name} within {GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS} ms, your {name} starts without the host"
-    ));
-    super::shared_functions::start_scene_function_here(build, phase, &name);
-}
-
-pub(super) fn forget_held_function_outside(phase: Option<u16>) {
-    let mut held = HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner);
-    if held.as_ref().is_some_and(|held| Some(held.phase) != phase) {
-        *held = None;
-    }
-}
-
-pub(super) fn forget_held_function() {
-    *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) = None;
-    *ANNOUNCED_WHILE_HELD
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner) = None;
-}
-
 pub(crate) fn hold_own_scene_function(build: &VerifiedBuild, name: &str, args: u64) -> bool {
-    let already_parked = HELD_FUNCTION
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .as_ref()
-        .is_some_and(|held| held.name == name && held.parked.is_call(args));
-    if already_parked {
-        return true;
-    }
     let Some(net) = net::handle() else {
         return false;
     };
     if !guest_waits_for_host(build, &net.view()) {
+        forget_held_function();
         return false;
     }
+    let held_already = HELD_FUNCTION
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|(held_args, held_name)| *held_args == args && held_name == name);
     let game = Replicant::new(InProcessMemory::new(build));
     let Some(label) = game.current_phase().ok() else {
         return false;
@@ -167,31 +106,45 @@ pub(crate) fn hold_own_scene_function(build: &VerifiedBuild, name: &str, args: u
     else {
         return false;
     };
-    if !is_a_first_scene_start_nobody_popped(phase, &label, name) {
+    if !held_already && !is_a_first_scene_start_nobody_popped(phase, &label, name) {
         return false;
     }
-    let now = net_clock_ms();
+    let cap_ms = GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS;
     let verdict = FUNCTION_GATE
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .ask_with_cap(now, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS);
+        .ask_with_cap(net_clock_ms(), cap_ms);
     match verdict {
-        StartVerdict::Hold { .. } => {
-            *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) = Some(HeldFunction {
-                name: name.to_owned(),
-                phase,
-                parked: ParkedOwnStart::new(args, now),
-            });
-            log_line(&format!(
-                "scene hold: your {name} waits for the host to start its own (at most {GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS} ms), the host's copy starts it here"
-            ));
-            *ANNOUNCED_WHILE_HELD
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Some(name.to_owned());
-            super::shared_functions::send_to_partner(phase, name);
+        StartVerdict::Hold { first } => {
+            if first {
+                *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) =
+                    Some((args, name.to_owned()));
+                log_line(&format!(
+                    "scene hold: your {name} waits for the host to start its own (at most {cap_ms} ms)"
+                ));
+                *ANNOUNCED_WHILE_HELD
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) = Some(name.to_owned());
+                super::shared_functions::send_to_partner(phase, name);
+            }
             true
         }
-        StartVerdict::Start { .. } | StartVerdict::StartAfterTimeout { .. } => false,
+        StartVerdict::Start { waited_ms } => {
+            if waited_ms > 0 {
+                log_line(&format!(
+                    "scene hold: the host started its {name}, yours starts after {waited_ms} ms"
+                ));
+            }
+            forget_held_function();
+            false
+        }
+        StartVerdict::StartAfterTimeout { waited_ms } => {
+            log_line(&format!(
+                "scene hold: timed out after {waited_ms} ms, your {name} starts without the host"
+            ));
+            forget_held_function();
+            false
+        }
     }
 }
 
@@ -200,6 +153,10 @@ fn is_a_first_scene_start_nobody_popped(phase: u16, label: &str, name: &str) -> 
         && phase_name(phase) == Some(label)
         && !super::shared_functions::popped_callback_is_pending(name)
         && !super::shared_functions::function_ran_here(phase, name)
+}
+
+fn forget_held_function() {
+    *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }
 
 #[expect(
