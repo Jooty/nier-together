@@ -276,6 +276,16 @@ fn judge_host_pop(manager: u64, name: &str, arguments: u64, phase: u16) -> Fight
     if !open {
         return FightPop::Outside;
     }
+    if source != PopSource::Queued
+        && let Some(window) = host.repeats_start_chain(name)
+    {
+        drop(host);
+        log_line(&format!(
+            "fight stream: {name} repeats the start chain of fight window {} after it already ran, not run here and not sent",
+            window.page
+        ));
+        return FightPop::Hold;
+    }
     let verdict = host.judge_pop(name, source, arguments);
     drop(host);
     match verdict {

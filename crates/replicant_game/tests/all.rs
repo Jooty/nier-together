@@ -139,6 +139,8 @@ mod fight_requests;
 mod fight_scene_end_hold;
 #[path = "fight_start_entry.rs"]
 mod fight_start_entry;
+#[path = "fight_start_once.rs"]
+mod fight_start_once;
 #[path = "fight_stream.rs"]
 mod fight_stream;
 #[path = "fight_sync.rs"]

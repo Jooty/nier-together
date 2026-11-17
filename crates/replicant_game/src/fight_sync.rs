@@ -14,6 +14,7 @@ mod radio_waits;
 mod replayer;
 mod requests;
 mod scripted_camera;
+mod start_chain;
 mod start_entry;
 mod stream;
 mod stream_stall;
@@ -88,6 +89,7 @@ pub use scripted_camera::{
     camera_call_line, direction_text, forward_of_world_matrix, look_angles_degrees,
     read_native_numbers,
 };
+pub use start_chain::is_start_chain_of;
 pub use start_entry::{StartEntry, StartStreamPop};
 pub use stream::{StreamEntry, StreamRecorder};
 pub use stream_stall::{
