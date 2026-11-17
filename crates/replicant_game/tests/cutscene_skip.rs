@@ -1,6 +1,6 @@
 use replicant_game::cutscene_skip::{
     ASK_RESEND_INTERVAL_MS, CutsceneSkipTracker,
-    GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS, PARTNER_ASK_LIFETIME_MS,
+    GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS, PARTNER_ASK_LIFETIME_MS, ParkedOwnStart,
     SCENE_START_HOLD_RESTART_GAP_MS, SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate, SkipVerdict,
     StartVerdict,
 };
@@ -244,37 +244,23 @@ fn resetting_forgets_the_hosts_scenes() {
     assert_eq!(gate.ask(0), StartVerdict::Hold { first: true });
 }
 
-const RUN_195006_HOST_START_AFTER_GUEST_READY_MS: u64 = 3_898;
-const BOTH_STARTS_WITHIN_MS: u64 = 300;
 const FRAME_MS: u64 = 16;
 
 #[test]
-fn run_195006_the_guests_own_start_waits_for_the_hosts_start_to_run() {
-    let mut gate = primed_gate();
-    let guest_ready = 0;
-    assert_eq!(
-        gate.ask_with_cap(
-            guest_ready,
-            GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS
-        ),
-        StartVerdict::Hold { first: true }
-    );
-    let host_start = guest_ready + RUN_195006_HOST_START_AFTER_GUEST_READY_MS;
-    let mut now = guest_ready;
-    let guest_start = loop {
-        now += FRAME_MS;
-        if now >= host_start {
-            gate.note_host_function_start();
-        }
-        match gate.ask_with_cap(now, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS) {
-            StartVerdict::Hold { .. } => {}
-            StartVerdict::Start { .. } => break now,
-            StartVerdict::StartAfterTimeout { waited_ms } => {
-                panic!("the guest gave up after {waited_ms} ms, the host started at {host_start}")
-            }
-        }
-    };
-    assert!(guest_start.abs_diff(host_start) <= BOTH_STARTS_WITHIN_MS);
+fn a_parked_own_start_is_not_given_up_before_the_cap() {
+    let parked = ParkedOwnStart::new(0xA0, 1_000);
+    let cap = GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS;
+    assert!(!parked.host_never_started(1_000 + cap - FRAME_MS));
+    assert!(parked.host_never_started(1_000 + cap));
+}
+
+#[test]
+fn a_parked_own_start_the_partner_copy_replaced_is_never_given_up_or_run_again() {
+    let mut parked = ParkedOwnStart::new(0xA0, 1_000);
+    parked.replace_with_partner_copy();
+    assert!(parked.is_replaced());
+    assert!(parked.is_call(0xA0));
+    assert!(!parked.host_never_started(1_000_000));
 }
 
 #[test]
@@ -284,28 +270,6 @@ fn a_host_start_that_came_first_lets_the_guests_own_start_run_at_once() {
     assert_eq!(
         gate.ask_with_cap(9_000, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS),
         StartVerdict::Start { waited_ms: 0 }
-    );
-}
-
-#[test]
-fn a_host_that_never_starts_does_not_hold_the_guests_own_start_past_the_cap() {
-    let mut gate = primed_gate();
-    let cap = GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS;
-    assert_eq!(
-        gate.ask_with_cap(0, cap),
-        StartVerdict::Hold { first: true }
-    );
-    let mut now = 0;
-    while now + FRAME_MS < cap {
-        now += FRAME_MS;
-        assert_eq!(
-            gate.ask_with_cap(now, cap),
-            StartVerdict::Hold { first: false }
-        );
-    }
-    assert_eq!(
-        gate.ask_with_cap(cap, cap),
-        StartVerdict::StartAfterTimeout { waited_ms: cap }
     );
 }
 

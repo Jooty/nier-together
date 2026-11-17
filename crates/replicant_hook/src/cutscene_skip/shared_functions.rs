@@ -8,8 +8,8 @@ use replicant_game::readiness::{classify, read_play_checks};
 use replicant_game::script_functions::{
     DrainStep, FILL_IN_GRACE_MS, FillInArrival, FillInCopy, FillInReach, FillInRelay,
     FunctionArrival, FunctionArrivalFacts, FunctionDrop, FunctionsRan, LateCopy, TracedRelay,
-    fill_in_reach, function_arrival, is_restart_function, judge_function, late_copy_verdict,
-    plan_forced_drain, script_function, shows_modal_ui, traced_relay,
+    fill_in_reach_given_own_call, function_arrival, is_restart_function, judge_function,
+    late_copy_verdict, plan_forced_drain, script_function, shows_modal_ui, traced_relay,
 };
 use replicant_game::shared_events::phase_name;
 use replicant_game::{PhaseEntry, Replicant};
@@ -56,6 +56,7 @@ pub(crate) fn note_claimed_by_a_stream(name: &str) {
 }
 
 pub(super) fn set_local_phase(phase: Option<u16>) {
+    start_hold::forget_held_function_outside(phase);
     RAN.lock()
         .unwrap_or_else(PoisonError::into_inner)
         .enter_phase(phase);
@@ -71,6 +72,7 @@ pub(super) fn set_local_phase(phase: Option<u16>) {
 }
 
 pub(super) fn reset_shared_functions() {
+    start_hold::forget_held_function();
     RAN.lock().unwrap_or_else(PoisonError::into_inner).reset();
     INJECTED
         .lock()
@@ -135,6 +137,7 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
                 "shared function: {name} ran here on its own while the partner's copy still waited for the script slot, the waiting copy is dropped ({withdrawn})"
             ));
         }
+        start_hold::note_partner_copy_ran(name);
         send_the_hosts_start_back_to_the_guest(phase, &label, name);
         return;
     }
@@ -226,7 +229,11 @@ pub(super) fn receive_shared_function(
     if role == GateRole::Guest {
         start_hold::note_host_function_start(label, &ran.name);
     }
-    let reach = fill_in_reach(label, &ran.name);
+    let reach = fill_in_reach_given_own_call(
+        label,
+        &ran.name,
+        role == GateRole::Guest && start_hold::own_call_is_parked(&ran.name),
+    );
     let arrival = FILL_IN
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -242,7 +249,10 @@ pub(super) fn receive_shared_function(
                 ran.name
             ));
         }
-        (FillInArrival::Waiting { position, .. }, FillInReach::CannotReachHere) => {
+        (
+            FillInArrival::Waiting { position, .. },
+            FillInReach::CannotReachHere | FillInReach::OwnCopyParkedForThisOne,
+        ) => {
             log_line(&format!(
                 "shared function: {} from the {partner} runs when its turn comes, your game cannot reach it on its own (fill-in position {position})",
                 ran.name
@@ -252,6 +262,7 @@ pub(super) fn receive_shared_function(
 }
 
 pub(super) fn run_due_fill_ins(build: &VerifiedBuild, role: GateRole) {
+    start_hold::start_scene_function_the_host_never_started(build);
     let now = net_clock_ms();
     let due = FILL_IN
         .lock()
@@ -262,6 +273,16 @@ pub(super) fn run_due_fill_ins(build: &VerifiedBuild, role: GateRole) {
     }
 }
 
+pub(super) fn start_scene_function_here(build: &VerifiedBuild, phase: u16, name: &str) {
+    let call = StoryCall {
+        phase,
+        pack: 0,
+        function: name.to_owned(),
+        args: Vec::new(),
+    };
+    queue_shared_function(build, &call);
+}
+
 fn run_fill_in(build: &VerifiedBuild, partner: &str, copy: &FillInCopy, now: u64) {
     let name = copy.name.as_str();
     let why = match copy.reach {
@@ -270,6 +291,9 @@ fn run_fill_in(build: &VerifiedBuild, partner: &str, copy: &FillInCopy, now: u64
             now.saturating_sub(copy.arrived_ms)
         ),
         FillInReach::CannotReachHere => "your game cannot reach it on its own".to_owned(),
+        FillInReach::OwnCopyParkedForThisOne => {
+            "your own copy is parked until the host's copy starts it".to_owned()
+        }
     };
     let (verdict, label) = arrival_verdict(build, copy.phase, name);
     let call = StoryCall {
