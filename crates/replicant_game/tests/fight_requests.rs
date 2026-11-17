@@ -1203,7 +1203,7 @@ fn a_scene_on_the_host_with_no_request_waiting_tells_nothing() {
 
 #[test]
 fn the_guests_load_right_after_joining_is_the_hosts_entry_load_and_asks_for_no_restart() {
-    let (mut host, mut guest) = open_fight();
+    let (_, mut guest) = open_fight();
     assert!(guest.tick(SlotState::Idle, HERE, false, 100).is_none());
     assert_eq!(guest.own_restart(260), GuestRestart::EntryLoad);
     assert_eq!(guest.restart_wait(), RestartWait::None);

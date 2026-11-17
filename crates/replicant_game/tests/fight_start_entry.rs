@@ -2,7 +2,7 @@ use replicant_game::callback_gate::{
     CALLBACK_GATE_GUEST_GIVE_UP_MS, CallbackGate, GateRole, LocalFire, PartnerFire,
 };
 use replicant_game::fight_sync::{
-    GuestArrival, GuestFightStream, GuestNotice, GuestOpen, GuestPop, GuestReceived,
+    GuestArrival, GuestFightStream, GuestNotice, GuestOpen, GuestPop, GuestReceived, GuestRestart,
     HostFightStream, HostStreamOut, PopSource, Replayer, SlotState, StartEntry, StartStreamPop,
     StreamEntry, TapeValue, WindowArming,
 };
@@ -573,4 +573,26 @@ fn the_gate_keeps_copies_of_other_names_when_the_stream_ran_a_start() {
     );
     gate.ran_from_the_fight_stream(FIGHT_START);
     assert!(gate.holds_any());
+}
+
+#[test]
+fn the_guests_own_start_after_its_entry_load_runs_once_from_the_stream_and_is_not_held_for_a_new_copy()
+ {
+    let mut guest = guest_in_the_hosts_fight();
+    guest.take_notices();
+    assert_eq!(guest.own_restart(264), GuestRestart::EntryLoad);
+    assert_eq!(
+        guest.pop(FIGHT_START, PopSource::Fired, 0, HERE, false),
+        GuestPop::Hold
+    );
+    assert_eq!(released(&mut guest, 300).as_deref(), Some(FIGHT_START));
+    assert_eq!(
+        guest.pop(FIGHT_START, PopSource::Queued, STREAM_SLOT, HERE, false),
+        GuestPop::RunStartEntry
+    );
+    guest.partner_call_queued(FIGHT_START, 0);
+    assert_eq!(
+        guest.pop(FIGHT_START, PopSource::Queued, OTHER_SLOT, HERE, false),
+        GuestPop::StartAlreadyRan
+    );
 }

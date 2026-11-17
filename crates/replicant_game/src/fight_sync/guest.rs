@@ -699,8 +699,13 @@ impl GuestFightStream {
             self.restart_wait = RestartWait::None;
             return GuestRestart::Paired { epoch };
         }
-        self.replayer.drop_waiting();
-        self.start_entry.forget();
+        let is_entry_load = self
+            .joined_by_open_at_ms
+            .is_some_and(|at| now_ms.saturating_sub(at) <= ENTRY_LOAD_AFTER_JOIN_MS);
+        if !is_entry_load {
+            self.replayer.drop_waiting();
+            self.start_entry.forget();
+        }
         self.entry_held_for_own_scene = None;
         self.music_run_in_own_scene.clear();
         self.keep_forgotten_calls();
@@ -708,9 +713,6 @@ impl GuestFightStream {
         self.requests_unanswered.clear();
         self.refused_to_run_here.clear();
         self.player_pops_held.clear();
-        let is_entry_load = self
-            .joined_by_open_at_ms
-            .is_some_and(|at| now_ms.saturating_sub(at) <= ENTRY_LOAD_AFTER_JOIN_MS);
         if is_entry_load {
             return GuestRestart::EntryLoad;
         }
