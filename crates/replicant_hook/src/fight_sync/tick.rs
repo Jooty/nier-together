@@ -447,6 +447,9 @@ fn send_guest_requests() {
             GuestNotice::HeldPopNeverMatched { name, epoch } => format!(
                 "fight stream: your game's {name} was held and the host's stream never ran it (epoch {epoch}), nor was it sent to the host"
             ),
+            GuestNotice::HeldPopDroppedAtFightEnd { name, epoch } => format!(
+                "fight stream: your game's {name} was held through the fight and dropped when the host ended it (epoch {epoch})"
+            ),
             GuestNotice::PlayerPopPairedWithHostCopy { name, held_ms } => format!(
                 "fight request: your player's {name} paired with the host's copy after {held_ms} ms, not sent"
             ),

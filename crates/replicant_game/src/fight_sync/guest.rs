@@ -175,6 +175,12 @@ pub enum GuestNotice {
         name: String,
         epoch: u32,
     },
+    /// This game's own pop `name` was held for the whole fight, the host's stream never carried a
+    /// copy, and the host ended the fight: dropped with the fight (logged once per name and epoch).
+    HeldPopDroppedAtFightEnd {
+        name: String,
+        epoch: u32,
+    },
     /// This game's player pop `name` waited `held_ms` and the host's copy of it came: paired,
     /// no request.
     PlayerPopPairedWithHostCopy {
@@ -752,9 +758,13 @@ impl GuestFightStream {
             self.earlier_queued.add(call);
         }
         self.keep_forgotten_calls();
-        if let Joined::Yes { epoch, .. } = self.joined {
+        if let Joined::Yes { epoch, end_seq, .. } = self.joined {
             let held = std::mem::take(&mut self.held_pops_unmatched);
-            self.note_held_pops_never_matched(held, epoch);
+            if end_seq.is_some() {
+                self.note_held_pops_dropped_at_fight_end(held, epoch);
+            } else {
+                self.note_held_pops_never_matched(held, epoch);
+            }
             self.ran_outside_window.clear();
             self.popped_and_ran_outside_window.clear();
         }
@@ -1702,6 +1712,15 @@ impl GuestFightStream {
         self.host_copies.clear();
         self.own_copies.clear();
         self.player_pops_held.clear();
+    }
+
+    fn note_held_pops_dropped_at_fight_end(&mut self, held: Vec<String>, epoch: u32) {
+        for name in held {
+            if self.held_pops_logged.insert(name.clone()) {
+                self.notices
+                    .push(GuestNotice::HeldPopDroppedAtFightEnd { name, epoch });
+            }
+        }
     }
 
     fn note_held_pops_never_matched(&mut self, held: Vec<String>, epoch: u32) {
