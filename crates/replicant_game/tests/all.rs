@@ -137,6 +137,8 @@ mod fight_player_traps;
 mod fight_requests;
 #[path = "fight_scene_end_hold.rs"]
 mod fight_scene_end_hold;
+#[path = "fight_wave_replay_claim.rs"]
+mod fight_wave_replay_claim;
 #[path = "fight_start_entry.rs"]
 mod fight_start_entry;
 #[path = "fight_start_once.rs"]
