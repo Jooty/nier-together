@@ -449,7 +449,7 @@ fn a_window_an_arm_id_opened_keeps_its_own_rule() {
 fn a_restart_of_either_game_forgets_the_start_entry() {
     let mut guest = guest_in_the_hosts_fight();
     guest.take_notices();
-    guest.own_restart(0);
+    guest.own_restart(replicant_game::fight_sync::ENTRY_LOAD_AFTER_JOIN_MS + 1);
     guest.partner_call_queued(FIGHT_START, 0);
     assert_eq!(
         guest.pop(FIGHT_START, PopSource::Queued, OTHER_SLOT, HERE, false),

@@ -6,12 +6,12 @@ use replicant_proto::{
 };
 
 use crate::fight_sync::{
-    Arrival, EarlierQueuedCalls, FIGHT_WINDOWS, FightWindowData, GuestRadioWaits, GuestTape,
-    HOST_ENTRY_END_WAIT_LIMIT_MS, HOST_ENTRY_END_WAIT_LOGGED_FROM_MS, InFlight,
-    MAX_HELD_NEXT_WINDOW_MESSAGES, NEXT_WINDOW_HELD_AT_MOST_MS, ONE_RESTART_SIGNALS_SPAN_MS,
-    OWN_POP_HELD_FOR_HOST_COPY_MS, OWN_SCENE_SETTLE_CAP_MS, OwnQueuedCall,
-    PARTNER_CALL_POP_EXPECTED_MS, PARTNER_RESTART_EXPECTED_MS, PopSource, PopVerdict,
-    QUEUED_CALL_GIVEN_UP_AFTER_MS, QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS,
+    Arrival, ENTRY_LOAD_AFTER_JOIN_MS, EarlierQueuedCalls, FIGHT_WINDOWS, FightWindowData,
+    GuestRadioWaits, GuestTape, HOST_ENTRY_END_WAIT_LIMIT_MS, HOST_ENTRY_END_WAIT_LOGGED_FROM_MS,
+    InFlight, MAX_HELD_NEXT_WINDOW_MESSAGES, NEXT_WINDOW_HELD_AT_MOST_MS,
+    ONE_RESTART_SIGNALS_SPAN_MS, OWN_POP_HELD_FOR_HOST_COPY_MS, OWN_SCENE_SETTLE_CAP_MS,
+    OwnQueuedCall, PARTNER_CALL_POP_EXPECTED_MS, PARTNER_RESTART_EXPECTED_MS, PopSource,
+    PopVerdict, QUEUED_CALL_GIVEN_UP_AFTER_MS, QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS,
     REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE, RadioWaitContext, RadioWaitMark, RadioWaitPoll,
     RadioWaitRelease, RadioWaitRun, Replayer, RequestCall, SlotState, StartEntry, StartStreamPop,
     StreamEntry, StreamStallWatch, TapeKey, TapeValue, TapedResult, counted_wait_ms,
@@ -129,6 +129,8 @@ pub enum GuestRestart {
     WaitingForOwnRestart {
         epoch: u32,
     },
+    /// This game's own load of the phase right after it joined: the host loaded before it opened.
+    EntryLoad,
     /// Another restart signal of a restart already counted.
     SameRestart,
     /// A host restart mark for a window this game had not joined: joined now at its epoch.
@@ -355,6 +357,7 @@ pub struct GuestFightStream {
     player_pops_held: Vec<PlayerPopHeld>,
     restart_wait: RestartWait,
     last_own_restart_ms: Option<u64>,
+    joined_by_open_at_ms: Option<u64>,
     notices: Vec<GuestNotice>,
     last_tick_ms: u64,
     tape: GuestTape,
@@ -402,6 +405,7 @@ impl GuestFightStream {
             player_pops_held: Vec::new(),
             restart_wait: RestartWait::None,
             last_own_restart_ms: None,
+            joined_by_open_at_ms: None,
             notices: Vec::new(),
             last_tick_ms: 0,
             tape: GuestTape::new(),
@@ -592,6 +596,7 @@ impl GuestFightStream {
             window,
             end_seq: None,
         };
+        self.joined_by_open_at_ms = Some(self.last_tick_ms);
         if let Some(start_id) = armed_by.filter(|name| window.start_ids.contains(name)) {
             let ran_here_already = self.ran_outside_window_phase == Some(phase)
                 && self.popped_and_ran_outside_window.contains(start_id);
@@ -664,6 +669,7 @@ impl GuestFightStream {
         self.forget_copies();
         self.arming_entry_to_skip = None;
         self.start_entry.forget();
+        self.joined_by_open_at_ms = None;
         if let RestartWait::ForHost { .. } = self.restart_wait {
             self.restart_wait = RestartWait::None;
             return GuestRestart::Paired { epoch };
@@ -702,6 +708,12 @@ impl GuestFightStream {
         self.requests_unanswered.clear();
         self.refused_to_run_here.clear();
         self.player_pops_held.clear();
+        let is_entry_load = self
+            .joined_by_open_at_ms
+            .is_some_and(|at| now_ms.saturating_sub(at) <= ENTRY_LOAD_AFTER_JOIN_MS);
+        if is_entry_load {
+            return GuestRestart::EntryLoad;
+        }
         self.restart_wait = RestartWait::ForHost {
             since_ms: now_ms,
             request_sent: false,
@@ -779,6 +791,7 @@ impl GuestFightStream {
         self.start_entry.forget();
         self.restart_wait = RestartWait::None;
         self.last_own_restart_ms = None;
+        self.joined_by_open_at_ms = None;
         self.clear_tape();
         dropped
     }

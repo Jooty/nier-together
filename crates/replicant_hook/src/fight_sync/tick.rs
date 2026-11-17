@@ -542,6 +542,9 @@ fn log_restart(restart: GuestRestart, why: &str) {
             "fight stream: {why}, the replay waits for your game's own restart (epoch {epoch})"
         )),
         GuestRestart::Joined(open) => log_open(open),
+        GuestRestart::EntryLoad => log_line(&format!(
+            "fight stream: {why} right after joining the host's fight, that is the host's own load of the phase, your game does not ask the host to restart"
+        )),
         GuestRestart::SameRestart | GuestRestart::NotInFight => {}
     }
 }

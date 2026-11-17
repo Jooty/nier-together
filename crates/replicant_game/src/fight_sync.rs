@@ -123,6 +123,7 @@ pub const HOST_ENTRY_END_WAIT_LOGGED_FROM_MS: u64 = 1_000;
 pub const OWN_SCENE_SETTLE_CAP_MS: u64 = 1_000;
 pub const PARTNER_RESTART_EXPECTED_MS: u64 = 5_000;
 pub const ONE_RESTART_SIGNALS_SPAN_MS: u64 = 3_000;
+pub const ENTRY_LOAD_AFTER_JOIN_MS: u64 = 2_000;
 pub const LUA_STEP_RVA: u32 = 0x3E_FF30;
 pub const TAPED_NATIVE_RVAS: [(&str, u32); 10] = [
     ("_GetRandI", 0x6E_BE80),
