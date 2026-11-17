@@ -3,7 +3,6 @@ use core::ptr;
 use std::panic;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use replicant_game::quiet_end::{LUA_NATIVE_DONE, LUA_NATIVE_STILL_RUNNING};
 use replicant_game::script_functions::{
     DEBUG_PRINT_NATIVE_RVA, debug_print_tag_range, debug_print_text_range,
     traced_bare_unreachable_function, traced_function_name, traced_function_text_from_parts,
@@ -11,14 +10,14 @@ use replicant_game::script_functions::{
 use replicant_game::{GameMemory, Replicant};
 
 use crate::build_gate::VerifiedBuild;
-use crate::cutscene_skip::{hold_own_scene_function, on_function_traced};
+use crate::cutscene_skip::on_function_traced;
 use crate::game_hooks::{hook_address, note_native};
 use crate::memory::InProcessMemory;
 use crate::story_relay::state::HOOKED_BUILD;
 
 static ORIGINAL_DEBUG_PRINT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 
-type LuaNative = unsafe extern "system" fn(*mut c_void) -> i32;
+type LuaNative = unsafe extern "system" fn(*mut c_void);
 
 pub(super) fn install(build: VerifiedBuild) {
     #[expect(
@@ -41,30 +40,25 @@ pub(super) fn install(build: VerifiedBuild) {
     unsafe_code,
     reason = "calls the original native through the trampoline"
 )]
-extern "system" fn debug_print_detour(args: *mut c_void) -> i32 {
+extern "system" fn debug_print_detour(args: *mut c_void) {
     let args_address = args as u64;
-    let hold = panic::catch_unwind(|| {
+    let _ = panic::catch_unwind(|| {
         note_native("_DebugPrint");
-        note_printed_text(args_address)
-    })
-    .unwrap_or(false);
-    if hold {
-        return LUA_NATIVE_STILL_RUNNING;
-    }
+        note_printed_text(args_address);
+    });
     let trampoline = ORIGINAL_DEBUG_PRINT.load(Ordering::Acquire);
-    if trampoline.is_null() {
-        return LUA_NATIVE_DONE;
+    if !trampoline.is_null() {
+        // SAFETY: the trampoline continues into the original native, which has this signature.
+        unsafe { core::mem::transmute::<*mut c_void, LuaNative>(trampoline)(args) };
     }
-    // SAFETY: the trampoline continues into the original native, which has this signature.
-    unsafe { core::mem::transmute::<*mut c_void, LuaNative>(trampoline)(args) }
 }
 
-fn note_printed_text(args_address: u64) -> bool {
+fn note_printed_text(args_address: u64) {
     if args_address == 0 {
-        return false;
+        return;
     }
     let Some(build) = HOOKED_BUILD.get() else {
-        return false;
+        return;
     };
     let memory = InProcessMemory::new(build);
     let tag_range = debug_print_tag_range();
@@ -73,7 +67,7 @@ fn note_printed_text(args_address: u64) -> bool {
         .read(args_address + tag_range.start as u64, &mut tag)
         .is_err()
     {
-        return false;
+        return;
     }
     // the text is read only after the tag says this call really has a text argument
     let text_range = debug_print_text_range();
@@ -82,23 +76,19 @@ fn note_printed_text(args_address: u64) -> bool {
         .read(args_address + text_range.start as u64, &mut text)
         .is_err()
     {
-        return false;
+        return;
     }
     let Some(text) = traced_function_text_from_parts(&tag, &text) else {
-        return false;
+        return;
     };
     if let Some(name) = traced_function_name(&text) {
-        if hold_own_scene_function(build, name, args_address) {
-            return true;
-        }
         on_function_traced(build, name);
-        return false;
+        return;
     }
     let Ok(label) = Replicant::new(memory).current_phase() else {
-        return false;
+        return;
     };
     if let Some(name) = traced_bare_unreachable_function(&label, &text) {
         on_function_traced(build, name);
     }
-    false
 }

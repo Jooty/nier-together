@@ -31,7 +31,6 @@ pub use scene_follow::{is_injected_duplicate, note_fired_callback};
 pub(crate) use shared_functions::{
     close_menus_for_modal_entry, note_claimed_by_a_stream, on_function_traced, run_shared_function,
 };
-pub(crate) use start_hold::hold_own_scene_function;
 pub(crate) use state::event_scene_running;
 pub use state::local_in_cutscene;
 pub(crate) use state::partner_in_cutscene;
