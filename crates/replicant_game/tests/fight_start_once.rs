@@ -1,6 +1,7 @@
 use replicant_game::fight_sync::{
-    GuestFightStream, GuestPop, HostFightStream, HostStreamOut, PopSource, SlotState,
+    FIGHT_WINDOWS, GuestFightStream, GuestPop, HostFightStream, HostStreamOut, PopSource, SlotState,
 };
+use replicant_game::script_functions::SCRIPT_FUNCTIONS;
 use replicant_proto::Message;
 
 const PACK: &str = "A_CENTER_LIBRARY_01";
@@ -137,6 +138,7 @@ fn a_defeat_reload_runs_the_chain_again() {
     hooked.pops(WAVE_END);
     assert_eq!(hooked.dropped, [WAVE_END], "{:?}", hooked.dropped);
     assert_eq!(hooked.streamed_names().last(), Some(&WAVE_END));
+    hooked.pops(OTHER_PACK_FUNCTION);
     hooked.pops(WAVE_END);
     assert_eq!(hooked.dropped, [WAVE_END, WAVE_END]);
 }
@@ -152,6 +154,37 @@ fn a_new_window_after_the_old_one_closed_runs_its_chain() {
     hooked.pops(FIGHT_START);
     hooked.registers_a_callback();
     assert!(hooked.dropped.is_empty(), "{:?}", hooked.dropped);
+    hooked.pops(OTHER_PACK_FUNCTION);
     hooked.pops(WAVE_END);
     assert_eq!(hooked.dropped, [WAVE_END]);
+}
+
+#[test]
+fn no_window_drops_a_pop_of_its_own_first_pass_start_chain() {
+    for window in FIGHT_WINDOWS.iter().filter(|row| !row.start_ids.is_empty()) {
+        let mut host = HostFightStream::new();
+        host.enter_phase(PHASE, window.pack);
+        host.popped(window.start_ids[0], Vec::new(), false);
+        host.callback_registered();
+        let callers = SCRIPT_FUNCTIONS
+            .iter()
+            .filter(|(pack, _, _, _, callees)| {
+                *pack == window.pack && callees.iter().any(|id| window.start_ids.contains(id))
+            })
+            .map(|(_, name, ..)| *name);
+        let chain: Vec<&str> = window.start_ids[1..]
+            .iter()
+            .copied()
+            .chain(callers)
+            .collect();
+        for name in chain {
+            assert!(
+                host.repeats_start_chain(name).is_none(),
+                "{} {}: first pass {name}",
+                window.number,
+                window.part
+            );
+            host.popped(name, Vec::new(), false);
+        }
+    }
 }
