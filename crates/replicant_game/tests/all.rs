@@ -251,6 +251,8 @@ mod minimap;
 mod mirror_window_size;
 #[path = "move_log.rs"]
 mod move_log;
+#[path = "guest_music_in_scenes.rs"]
+mod guest_music_in_scenes;
 #[path = "music.rs"]
 mod music;
 #[path = "new_game.rs"]

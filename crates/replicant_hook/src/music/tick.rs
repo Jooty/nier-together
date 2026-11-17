@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use replicant_game::marker::read_world_flags;
 use replicant_game::music::{
-    GuestSync, LocalMusic, MusicChannel, MusicSender, MusicStep, read_music_channel,
+    DroppedCall, GuestSync, LocalMusic, MusicChannel, MusicSender, MusicStep, host_music_drives,
+    host_reports_a_scene, read_music_channel,
 };
 use replicant_game::offsets::BGM_CHANNEL_STATE_EVENT_POSTED;
 use replicant_game::stay_together::FollowRole;
@@ -15,7 +16,7 @@ use crate::music::calls::{
     music_init_position_ms, play, seek, set_layer_volume, set_master_volume, source_position_ms,
     stop,
 };
-use crate::music::hooks::set_host_owns_local_music;
+use crate::music::hooks::{forget_dropped_calls, set_host_owns_local_music, take_dropped_calls};
 use crate::music::report::{log_limited, take_ignored_calls};
 use crate::music::{DIAGNOSTIC_INTERVAL, PLAY_FADE_SECONDS, VOLUME_RAMP_SECONDS};
 use crate::net::{self, NetShared, NetState, net_clock_ms};
@@ -123,12 +124,23 @@ impl MusicTick {
             .map(|flags| flags.activity().world_paused())
             .unwrap_or(true);
         let fresh = self.guest.is_fresh(now_ms);
-        let controlling = fresh && !paused && view.effective_local_readiness().is_in_play();
+        let host_in_scene = view.partner_state().is_some_and(|remote| {
+            host_reports_a_scene(remote.state.activity, remote.age().as_millis() as u64)
+        });
+        let controlling = host_music_drives(
+            fresh,
+            paused,
+            view.effective_local_readiness().is_in_play(),
+            host_in_scene,
+        );
         set_host_owns_local_music(controlling);
         if self.was_controlling != controlling {
             self.was_controlling = controlling;
+            if controlling {
+                forget_dropped_calls();
+            }
             log_limited(&format!(
-                "music: the host's music {} (fresh {fresh}, local pause {paused})",
+                "music: the host's music {} (fresh {fresh}, local pause {paused}, host in a scene {host_in_scene})",
                 if controlling {
                     "now drives this game"
                 } else {
@@ -140,6 +152,7 @@ impl MusicTick {
             self.guest.forget();
         }
         if !controlling {
+            self.replay_dropped_calls(build);
             return;
         }
         let Ok(channel) = read_music_channel(&memory) else {
@@ -168,6 +181,35 @@ impl MusicTick {
                 take_ignored_calls(),
                 music_init_position_ms(build),
             ));
+        }
+    }
+
+    fn replay_dropped_calls(&self, build: &VerifiedBuild) {
+        let calls = take_dropped_calls();
+        if calls.is_empty() {
+            return;
+        }
+        log_limited(&format!(
+            "music: the drive let go, replaying the game's {} dropped music calls",
+            calls.len()
+        ));
+        for call in calls {
+            match call {
+                DroppedCall::Play {
+                    track,
+                    volume,
+                    fade_seconds,
+                } => play(build, track, volume, fade_seconds),
+                DroppedCall::Stop { fade_seconds } => stop(build, fade_seconds),
+                DroppedCall::Master { volume, seconds } => {
+                    set_master_volume(build, volume, seconds)
+                }
+                DroppedCall::Layer {
+                    layer,
+                    volume,
+                    seconds,
+                } => set_layer_volume(build, layer, volume, seconds),
+            }
         }
     }
 

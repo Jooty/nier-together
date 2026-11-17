@@ -1,8 +1,12 @@
 mod channel;
+mod drive;
+mod dropped_calls;
 mod guest_sync;
 mod sender;
 
 pub use channel::{MusicChannel, read_music_channel};
+pub use drive::{host_music_drives, host_reports_a_scene};
+pub use dropped_calls::{DroppedCall, DroppedCalls};
 pub use guest_sync::{GuestSync, LocalMusic, MusicStep};
 pub use sender::MusicSender;
 
