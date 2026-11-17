@@ -41,7 +41,15 @@ impl SceneStartGate {
         self.host_in_scene = host_in_scene;
     }
 
+    pub const fn note_host_function_start(&mut self) {
+        self.host_entries += 1;
+    }
+
     pub fn ask(&mut self, now_ms: u64) -> StartVerdict {
+        self.ask_with_cap(now_ms, SCENE_START_HOLD_TIMEOUT_MS)
+    }
+
+    pub fn ask_with_cap(&mut self, now_ms: u64, cap_ms: u64) -> StartVerdict {
         let stale = now_ms.saturating_sub(self.last_asked_ms) > SCENE_START_HOLD_RESTART_GAP_MS;
         self.last_asked_ms = now_ms;
         if stale {
@@ -55,7 +63,7 @@ impl SceneStartGate {
             self.holding_since_ms = None;
             return StartVerdict::Start { waited_ms };
         }
-        if waited_ms >= SCENE_START_HOLD_TIMEOUT_MS {
+        if waited_ms >= cap_ms {
             self.holding_since_ms = None;
             return StartVerdict::StartAfterTimeout { waited_ms };
         }

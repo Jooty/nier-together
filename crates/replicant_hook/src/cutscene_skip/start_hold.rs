@@ -5,10 +5,13 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::cutscene_skip::{
-    EVENT_CUT_LOADED_BYTE_RVA, SCENE_ITEM_SCENE_ID_OFFSET, SCENE_ITEM_STATE_NOT_STARTED,
-    SCENE_ITEM_STATE_OFFSET, SCENE_ITEM_STATE_STARTING, SCENE_ITEM_UPDATE_RVA,
-    SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate, StartVerdict,
+    EVENT_CUT_LOADED_BYTE_RVA, GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS,
+    SCENE_ITEM_SCENE_ID_OFFSET, SCENE_ITEM_STATE_NOT_STARTED, SCENE_ITEM_STATE_OFFSET,
+    SCENE_ITEM_STATE_STARTING, SCENE_ITEM_UPDATE_RVA, SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate,
+    StartVerdict,
 };
+use replicant_game::script_functions::script_function;
+use replicant_game::shared_events::phase_name;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::{GameMemory, PhaseEntry, Replicant};
 
@@ -23,6 +26,9 @@ use crate::net::{self, NetShared, NetState, net_clock_ms};
 static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_ITEM_UPDATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static GATE: Mutex<SceneStartGate> = Mutex::new(SceneStartGate::new());
+static FUNCTION_GATE: Mutex<SceneStartGate> = Mutex::new(SceneStartGate::new());
+static HELD_FUNCTION: Mutex<Option<(u64, String)>> = Mutex::new(None);
+static ANNOUNCED_WHILE_HELD: Mutex<Option<String>> = Mutex::new(None);
 
 type ItemUpdate = unsafe extern "system" fn(*mut c_void);
 
@@ -52,7 +58,105 @@ pub(super) fn observe_host(build: &VerifiedBuild, view: &NetShared) {
         gate.observe_host(partner_in_cutscene(view));
     } else {
         gate.reset();
+        FUNCTION_GATE
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .reset();
     }
+}
+
+pub(super) fn note_host_function_start(phase_label: &str, name: &str) {
+    if script_function(phase_label, name).is_some_and(|function| function.starts_scene) {
+        FUNCTION_GATE
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .note_host_function_start();
+    }
+}
+
+pub(super) fn take_announced_while_held(name: &str) -> bool {
+    let mut announced = ANNOUNCED_WHILE_HELD
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if announced.as_deref() == Some(name) {
+        *announced = None;
+        return true;
+    }
+    false
+}
+
+pub(crate) fn hold_own_scene_function(build: &VerifiedBuild, name: &str, args: u64) -> bool {
+    let Some(net) = net::handle() else {
+        return false;
+    };
+    if !guest_waits_for_host(build, &net.view()) {
+        forget_held_function();
+        return false;
+    }
+    let held_already = HELD_FUNCTION
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|(held_args, held_name)| *held_args == args && held_name == name);
+    let game = Replicant::new(InProcessMemory::new(build));
+    let Some(label) = game.current_phase().ok() else {
+        return false;
+    };
+    let Some(phase) = PhaseEntry::index_of(&label).and_then(|index| u16::try_from(index).ok())
+    else {
+        return false;
+    };
+    if !held_already && !is_a_first_scene_start_nobody_popped(phase, &label, name) {
+        return false;
+    }
+    let cap_ms = GUEST_OWN_START_HOLD_CAP_WHEN_HOST_NEVER_STARTS_MS;
+    let verdict = FUNCTION_GATE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .ask_with_cap(net_clock_ms(), cap_ms);
+    match verdict {
+        StartVerdict::Hold { first } => {
+            if first {
+                *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) =
+                    Some((args, name.to_owned()));
+                log_line(&format!(
+                    "scene hold: your {name} waits for the host to start its own (at most {cap_ms} ms)"
+                ));
+                *ANNOUNCED_WHILE_HELD
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) = Some(name.to_owned());
+                super::shared_functions::send_to_partner(phase, name);
+            }
+            true
+        }
+        StartVerdict::Start { waited_ms } => {
+            if waited_ms > 0 {
+                log_line(&format!(
+                    "scene hold: the host started its {name}, yours starts after {waited_ms} ms"
+                ));
+            }
+            forget_held_function();
+            false
+        }
+        StartVerdict::StartAfterTimeout { waited_ms } => {
+            log_line(&format!(
+                "scene hold: timed out after {waited_ms} ms, your {name} starts without the host"
+            ));
+            forget_held_function();
+            false
+        }
+    }
+}
+
+fn is_a_first_scene_start_nobody_popped(phase: u16, label: &str, name: &str) -> bool {
+    script_function(label, name).is_some_and(|function| function.starts_scene)
+        && phase_name(phase) == Some(label)
+        && !super::shared_functions::popped_callback_is_pending(name)
+        && !super::shared_functions::function_ran_here(phase, name)
+}
+
+fn forget_held_function() {
+    *HELD_FUNCTION.lock().unwrap_or_else(PoisonError::into_inner) = None;
 }
 
 #[expect(
