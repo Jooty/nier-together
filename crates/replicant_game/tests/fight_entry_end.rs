@@ -320,6 +320,34 @@ fn a_held_own_pop_the_hosts_stream_never_pairs_with_is_logged_once_per_name_when
 }
 
 #[test]
+fn a_held_own_pop_left_over_when_the_host_ends_the_fight_is_dropped_plainly_not_as_a_stall() {
+    let (mut host, mut guest) = open_fight();
+    guest.tick(SlotState::Idle, HERE, false, 0);
+    assert_eq!(
+        guest.pop(GUEST_ONLY_GIMMICK, PopSource::Queued, 0, HERE, false),
+        GuestPop::Hold
+    );
+    let mut sent = messages(&host.popped(FIGHT_END, Vec::new(), false));
+    sent.extend(host_slot_idle(&mut host));
+    for message in sent {
+        guest.receive_message(message, HERE);
+    }
+    let mut now_ms = 0;
+    while let Some(entry) = guest.tick(SlotState::Idle, HERE, false, now_ms) {
+        guest.pop(&entry.name, PopSource::Queued, 0, HERE, false);
+        now_ms += 33;
+    }
+    assert!(!guest.is_active_in(HERE));
+    assert_eq!(
+        guest.take_notices(),
+        [GuestNotice::HeldPopDroppedAtFightEnd {
+            name: GUEST_ONLY_GIMMICK.to_owned(),
+            epoch: host.epoch()
+        }]
+    );
+}
+
+#[test]
 fn a_held_own_pop_still_unmatched_when_the_guest_leaves_the_fight_is_logged() {
     let (_, mut guest) = open_fight();
     guest.tick(SlotState::Idle, HERE, false, 0);

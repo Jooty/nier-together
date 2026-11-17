@@ -447,6 +447,9 @@ fn send_guest_requests() {
             GuestNotice::HeldPopNeverMatched { name, epoch } => format!(
                 "fight stream: your game's {name} was held and the host's stream never ran it (epoch {epoch}), nor was it sent to the host"
             ),
+            GuestNotice::HeldPopDroppedAtFightEnd { name, epoch } => format!(
+                "fight stream: your game's {name} was held through the fight and dropped when the host ended it (epoch {epoch})"
+            ),
             GuestNotice::PlayerPopPairedWithHostCopy { name, held_ms } => format!(
                 "fight request: your player's {name} paired with the host's copy after {held_ms} ms, not sent"
             ),
@@ -539,6 +542,9 @@ fn log_restart(restart: GuestRestart, why: &str) {
             "fight stream: {why}, the replay waits for your game's own restart (epoch {epoch})"
         )),
         GuestRestart::Joined(open) => log_open(open),
+        GuestRestart::EntryLoad => log_line(&format!(
+            "fight stream: {why} right after joining the host's fight, that is the host's own load of the phase, your game does not ask the host to restart"
+        )),
         GuestRestart::SameRestart | GuestRestart::NotInFight => {}
     }
 }

@@ -1,10 +1,11 @@
 use replicant_game::fight_sync::{
-    GuestFightStream, GuestNotice, GuestPop, GuestReceived, GuestRestart, HostFightStream, HostPop,
-    HostRequestOut, HostStreamOut, MAX_WAITING_GUEST_REQUESTS, OWN_POP_HELD_FOR_HOST_COPY_MS,
-    PARTNER_RESTART_EXPECTED_MS, PopSource, QUEUED_CALL_GIVEN_UP_AFTER_MS, QueueRefusal,
-    QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS, REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE,
-    RefusedRequestStep, RequestReceipt, RestartWait, SceneHoldChange, SlotState, StreamEntry,
-    fight_windows_of_pack, fired_registry_index, is_player_tested_callback_kind,
+    ENTRY_LOAD_AFTER_JOIN_MS, GuestFightStream, GuestNotice, GuestPop, GuestReceived, GuestRestart,
+    HostFightStream, HostPop, HostRequestOut, HostStreamOut, MAX_WAITING_GUEST_REQUESTS,
+    OWN_POP_HELD_FOR_HOST_COPY_MS, PARTNER_RESTART_EXPECTED_MS, PopSource,
+    QUEUED_CALL_GIVEN_UP_AFTER_MS, QueueRefusal, QueuedCallNotice, REFUSED_REQUEST_RESEND_AFTER_MS,
+    REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE, RefusedRequestStep, RequestReceipt, RestartWait,
+    SceneHoldChange, SlotState, StreamEntry, fight_windows_of_pack, fired_registry_index,
+    is_player_tested_callback_kind,
 };
 use replicant_game::story_relay::RELAY_CALL_QUEUE_TRIES;
 use replicant_proto::{
@@ -18,6 +19,7 @@ const FIGHT_ARM_POP: &str = "EID_0200_a0030g_Talk01";
 const ATTACK_COUNT: &str = "AttackCount_Talk";
 const GUEST_TRAP: &str = "Radio_Trap_01";
 const OTHER_TRAP: &str = "Radio_Trap_02";
+const REAL_RETRY_MS: u64 = ENTRY_LOAD_AFTER_JOIN_MS + 1;
 const MANAGER: u64 = 0x1_4122_D440;
 const REQUEST_SLOT: u64 = 0x1_4130_2070;
 const OTHER_SLOT: u64 = 0x1_4130_2818;
@@ -592,7 +594,10 @@ fn guest_restarts_first_and_the_host_restart_resumes_the_replay_at_the_new_epoch
     deliver(&mut guest, &before);
     host_handler_ends(&mut host, &mut guest);
     assert!(guest.tick(SlotState::Idle, HERE, false, 0).is_some());
-    assert_eq!(guest.own_restart(100), GuestRestart::WaitingForHost);
+    assert_eq!(
+        guest.own_restart(REAL_RETRY_MS),
+        GuestRestart::WaitingForHost
+    );
     assert_eq!(guest.pending_len(), 0);
     let tail = host.popped(ATTACK_COUNT, Vec::new(), false);
     deliver(&mut guest, &tail);
@@ -672,8 +677,14 @@ fn a_host_restart_the_guest_never_follows_lets_the_replay_go_on_after_the_wait()
 #[test]
 fn a_guest_only_restart_asks_the_host_to_restart_once_and_both_go_on_at_the_new_epoch() {
     let (mut host, mut guest) = open_fight();
-    assert_eq!(guest.own_restart(0), GuestRestart::WaitingForHost);
-    assert_eq!(guest.own_restart(500), GuestRestart::SameRestart);
+    assert_eq!(
+        guest.own_restart(REAL_RETRY_MS),
+        GuestRestart::WaitingForHost
+    );
+    assert_eq!(
+        guest.own_restart(REAL_RETRY_MS + 500),
+        GuestRestart::SameRestart
+    );
     assert_eq!(
         guest.tick(SlotState::Idle, HERE, false, PARTNER_RESTART_EXPECTED_MS),
         None
@@ -683,13 +694,13 @@ fn a_guest_only_restart_asks_the_host_to_restart_once_and_both_go_on_at_the_new_
         SlotState::Idle,
         HERE,
         false,
-        PARTNER_RESTART_EXPECTED_MS + 1,
+        REAL_RETRY_MS + PARTNER_RESTART_EXPECTED_MS + 1,
     );
     guest.tick(
         SlotState::Idle,
         HERE,
         false,
-        PARTNER_RESTART_EXPECTED_MS + 100,
+        REAL_RETRY_MS + PARTNER_RESTART_EXPECTED_MS + 100,
     );
     let requests = guest.take_requests();
     assert_eq!(requests.len(), 1);
@@ -722,19 +733,19 @@ fn a_guest_only_restart_asks_the_host_to_restart_once_and_both_go_on_at_the_new_
 #[test]
 fn a_guest_whose_restart_request_is_never_answered_leaves_the_stream() {
     let (_, mut guest) = open_fight();
-    guest.own_restart(0);
+    guest.own_restart(REAL_RETRY_MS);
     guest.tick(
         SlotState::Idle,
         HERE,
         false,
-        PARTNER_RESTART_EXPECTED_MS + 1,
+        REAL_RETRY_MS + PARTNER_RESTART_EXPECTED_MS + 1,
     );
     guest.take_notices();
     guest.tick(
         SlotState::Idle,
         HERE,
         false,
-        2 * PARTNER_RESTART_EXPECTED_MS + 1,
+        REAL_RETRY_MS + 2 * PARTNER_RESTART_EXPECTED_MS + 1,
     );
     assert!(!guest.is_active_in(HERE));
     assert!(matches!(
@@ -746,7 +757,7 @@ fn a_guest_whose_restart_request_is_never_answered_leaves_the_stream() {
 #[test]
 fn the_host_closing_the_fight_while_the_guest_waits_for_its_restart_leaves_the_stream() {
     let (mut host, mut guest) = open_fight();
-    guest.own_restart(0);
+    guest.own_restart(REAL_RETRY_MS);
     let mut closing = host.popped(ATTACK_COUNT, Vec::new(), false);
     closing.extend(host.popped("EID_0200_a0080_End", Vec::new(), false));
     for out in &closing {
@@ -1188,4 +1199,48 @@ fn a_scene_on_the_host_with_no_request_waiting_tells_nothing() {
     assert_eq!(host.tick_requests(SlotState::Idle, false, true), None);
     assert_eq!(host.tick_requests(SlotState::Idle, false, false), None);
     assert_eq!(host.take_request_scene_hold_change(), None);
+}
+
+#[test]
+fn the_guests_load_right_after_joining_is_the_hosts_entry_load_and_asks_for_no_restart() {
+    let (_, mut guest) = open_fight();
+    assert!(guest.tick(SlotState::Idle, HERE, false, 100).is_none());
+    assert_eq!(guest.own_restart(260), GuestRestart::EntryLoad);
+    assert_eq!(guest.restart_wait(), RestartWait::None);
+    guest.tick(
+        SlotState::Idle,
+        HERE,
+        false,
+        260 + PARTNER_RESTART_EXPECTED_MS + 1,
+    );
+    guest.tick(
+        SlotState::Idle,
+        HERE,
+        false,
+        260 + 2 * PARTNER_RESTART_EXPECTED_MS + 1,
+    );
+    assert!(guest.take_requests().is_empty());
+    assert!(guest.is_active_in(HERE));
+}
+
+#[test]
+fn a_load_after_the_joined_epoch_moved_on_is_a_real_restart_not_an_entry_load() {
+    let (mut host, mut guest) = open_fight();
+    guest.tick(SlotState::Idle, HERE, false, 100);
+    let restarted = host.restart();
+    guest.receive_message(message_of(&restarted), HERE);
+    assert!(matches!(
+        guest.own_restart(200),
+        GuestRestart::Paired { .. }
+    ));
+}
+
+#[test]
+fn a_guest_defeat_retry_after_the_entry_span_still_asks_the_host_to_restart() {
+    let (_, mut guest) = open_fight();
+    guest.tick(SlotState::Idle, HERE, false, 100);
+    assert_eq!(
+        guest.own_restart(REAL_RETRY_MS + 100),
+        GuestRestart::WaitingForHost
+    );
 }
