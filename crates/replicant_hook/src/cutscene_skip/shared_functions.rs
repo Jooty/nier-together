@@ -21,6 +21,7 @@ use crate::cutscene_skip::callback_gate::{
 };
 use crate::cutscene_skip::restart_signals::note_restart;
 use crate::cutscene_skip::scene_follow::note_injected;
+use crate::cutscene_skip::start_hold;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
 use crate::net::NetSharedExt;
@@ -30,6 +31,7 @@ use crate::story_relay::{
     RelayPath, is_message_handler, note_step_sent_to_partner, relay_calls_are_clear,
     shared_story_events, submit_relay_call, withdraw_waiting_shared_function,
 };
+use replicant_game::stay_together::FollowRole;
 
 const POPPED_CALLBACK_MATCH_MS: u64 = 5_000;
 const INJECTED_FUNCTION_PENDING_MS: u64 = 20_000;
@@ -133,6 +135,7 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
                 "shared function: {name} ran here on its own while the partner's copy still waited for the script slot, the waiting copy is dropped ({withdrawn})"
             ));
         }
+        send_the_hosts_start_back_to_the_guest(phase, &label, name);
         return;
     }
     let replaced = FILL_IN
@@ -160,7 +163,19 @@ pub(crate) fn on_function_traced(build: &VerifiedBuild, name: &str) {
         ));
         return;
     }
+    if start_hold::take_announced_while_held(name) {
+        return;
+    }
     send_to_partner(phase, name);
+}
+
+fn send_the_hosts_start_back_to_the_guest(phase: u16, label: &str, name: &str) {
+    let starts_scene = script_function(label, name).is_some_and(|function| function.starts_scene);
+    let is_host = net::handle()
+        .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Host);
+    if starts_scene && is_host {
+        send_to_partner(phase, name);
+    }
 }
 
 pub(super) fn send_to_partner(phase: u16, name: &str) {
@@ -207,6 +222,9 @@ pub(super) fn receive_shared_function(
             crate::own_ride::note_dropped_ride_step(&ran.name);
         }
         return;
+    }
+    if role == GateRole::Guest {
+        start_hold::note_host_function_start(label, &ran.name);
     }
     let reach = fill_in_reach(label, &ran.name);
     let arrival = FILL_IN
@@ -485,6 +503,16 @@ fn take_pending_injected(name: &str) -> bool {
     };
     injected.remove(index);
     true
+}
+
+pub(super) fn popped_callback_is_pending(name: &str) -> bool {
+    LAST_POPPED
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .as_ref()
+        .is_some_and(|(popped_name, at)| {
+            popped_name == name && net_clock_ms().saturating_sub(*at) <= POPPED_CALLBACK_MATCH_MS
+        })
 }
 
 fn take_popped_callback(name: &str) -> bool {
