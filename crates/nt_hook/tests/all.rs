@@ -12,6 +12,8 @@ mod line_budget;
 mod link_config_files;
 #[path = "loading_text.rs"]
 mod loading_text;
+#[path = "log_file.rs"]
+mod log_file;
 #[path = "log_stamp.rs"]
 mod log_stamp;
 #[path = "menu_model.rs"]
