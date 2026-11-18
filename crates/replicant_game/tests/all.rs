@@ -127,6 +127,8 @@ mod eye_set_tally;
 mod far_guest_follow;
 #[path = "fight_doors.rs"]
 mod fight_doors;
+#[path = "fight_end_once.rs"]
+mod fight_end_once;
 #[path = "fight_entry_end.rs"]
 mod fight_entry_end;
 #[path = "fight_own_scene_music.rs"]
