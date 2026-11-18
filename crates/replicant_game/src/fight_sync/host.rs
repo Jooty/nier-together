@@ -5,6 +5,7 @@ use replicant_proto::{
     FightTape, FightWindowChange, FightWindowMark, Message, StoryCallArg,
 };
 
+use crate::callback_gate::is_end_callback;
 use crate::fight_sync::{
     EarlierQueuedCalls, FightWindow, FightWindowData, HOST_TAPE_LOGGED_KEYS_KEPT,
     HOST_TAPE_LOGGED_SEQS_BACK, HostPop, HostRadioWaits, HostRequests, HostTape, PopSource,
@@ -98,6 +99,7 @@ pub struct HostFightStream {
     start_pop: Option<(&'static str, Vec<StoryCallArg>)>,
     moved_past_start_chain: bool,
     start_ids_ran: HashSet<String>,
+    ends_ran_before_window: HashSet<String>,
 }
 
 impl HostStreamOut {
@@ -186,6 +188,7 @@ impl HostFightStream {
             start_pop: None,
             moved_past_start_chain: false,
             start_ids_ran: HashSet::new(),
+            ends_ran_before_window: HashSet::new(),
         }
     }
 
@@ -236,6 +239,7 @@ impl HostFightStream {
             self.forget_requests();
         }
         self.phase = Some(phase);
+        self.ends_ran_before_window.clear();
         let epoch = self.recorder.enter_phase(phase);
         self.fewest_registered_since_armed = None;
         if let Some(window) = self.window.open_window() {
@@ -489,6 +493,9 @@ impl HostFightStream {
             outs.extend(self.function_ran(name));
             return outs;
         }
+        if is_end_callback(name) {
+            self.ends_ran_before_window.insert(name.to_owned());
+        }
         let armed = self.function_ran(name);
         let armed_by_this_pop = armed.iter().find_map(|out| match out {
             HostStreamOut::Armed {
@@ -639,6 +646,7 @@ impl HostFightStream {
             }
             WindowEvent::Closed(window, cause) => {
                 self.forget_requests();
+                self.ends_ran_before_window.clear();
                 self.start_ids_ran.clear();
                 // The window closes as its end id pops, so nothing that handler reads is taped.
                 let ended = self
@@ -775,7 +783,9 @@ impl HostFightStream {
             && !self.streamed_names.contains(&call.name)
         {
             RequestReceipt::NotAWindowFunction
-        } else if self.streamed_copies(&call.name) >= call.copy_number {
+        } else if self.streamed_copies(&call.name) >= call.copy_number
+            || self.ends_ran_before_window.contains(&call.name)
+        {
             RequestReceipt::AlreadyRanHere
         } else {
             let answer_if_refused = RequestAnswer::refused(&call, FightRequestRefusal::Full);

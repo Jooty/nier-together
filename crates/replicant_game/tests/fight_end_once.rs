@@ -1,6 +1,8 @@
 use replicant_game::fight_sync::{
-    FIGHT_WINDOWS, HostFightStream, HostStreamOut, PopSource, Replayer, SlotState, StreamEntry,
+    FIGHT_WINDOWS, HostFightStream, HostRequestOut, HostStreamOut, PopSource, Replayer,
+    RequestReceipt, SlotState, StreamEntry,
 };
+use replicant_proto::{FightRequest, FightRequestKind};
 
 const PHASE: u16 = 6;
 const EPOCH: u32 = 3;
@@ -58,4 +60,34 @@ fn the_host_knows_a_name_its_stream_already_ran_in_this_fight() {
     let outs = host.popped(SCENE_END, Vec::new(), false);
     assert!(outs.iter().any(|out| matches!(out, HostStreamOut::Entry(_))));
     assert!(host.streamed_in_this_fight(SCENE_END));
+}
+
+#[test]
+fn run_135601_the_host_does_not_run_a_guest_request_for_an_end_it_ran_just_before_the_window_opened() {
+    const LIBRARY_PHASE: u16 = 7;
+    const FIGHT_END: &str = "EID_2000_a0100_End";
+    let window = FIGHT_WINDOWS
+        .iter()
+        .find(|window| window.window_functions.contains(&FIGHT_END))
+        .expect("a fight window lists the library fight's End");
+    let mut host = HostFightStream::new();
+    host.enter_phase(LIBRARY_PHASE, window.pack);
+    host.popped(FIGHT_END, Vec::new(), false);
+    let start = window.start_ids.first().copied().expect("a start id");
+    host.popped(start, Vec::new(), false);
+    host.callback_registered();
+    assert!(host.is_open_in(LIBRARY_PHASE));
+    let request = FightRequest {
+        phase: LIBRARY_PHASE,
+        epoch: host.epoch(),
+        kind: FightRequestKind::RunPop {
+            name: FIGHT_END.to_owned(),
+            args: Vec::new(),
+            copy_number: 1,
+        },
+    };
+    assert_eq!(
+        host.receive_request(request),
+        HostRequestOut::Run(RequestReceipt::AlreadyRanHere)
+    );
 }
