@@ -941,6 +941,13 @@ impl GuestFightStream {
         if self.runs_as_own_scene_music(name, local_phase) {
             return GuestPop::RunMusicInOwnScene;
         }
+        if let Some(seq) = self.replayer.claim_queued_entry_named(name) {
+            self.tape.begin(seq);
+            return GuestPop::RunReplayed { seq };
+        }
+        if self.replayer.has_queued_entry_named(name) {
+            return GuestPop::Hold;
+        }
         let copy_number = self.count_own_copy(name);
         if copy_number <= self.host_copies_of(name) {
             return GuestPop::Hold;
@@ -1151,6 +1158,15 @@ impl GuestFightStream {
                 .map_or(seq, |through| through.max(seq)),
         );
         true
+    }
+
+    /// The slot the host's queued entry named `name` sits in, when one is queued.
+    pub fn queued_replay_arguments(&self, name: &str) -> Option<u64> {
+        if self.replayer.in_flight_name() == Some(name) {
+            self.replayer.queued_arguments()
+        } else {
+            None
+        }
     }
 
     /// The next host entry this game has not run: the one in the engine queue, else the lowest

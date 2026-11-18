@@ -1,5 +1,6 @@
 use std::panic;
 use std::sync::PoisonError;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use replicant_game::cutscene_skip::TRIGGER_MANAGER_RVA;
 use replicant_game::fight_sync::{
@@ -343,6 +344,35 @@ fn fired_by_this_player(manager: u64, arguments: u64) -> bool {
         .is_some_and(|kind| is_player_tested_callback_kind(*kind))
 }
 
+const HOLD_DIAGNOSTIC_EVERY_MS: u64 = 1000;
+static HOLD_DIAGNOSTIC_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+fn log_hold_against_queued_replay(
+    name: &str,
+    source: PopSource,
+    arguments: u64,
+    fired_by_player: bool,
+    queued_by_object: bool,
+) {
+    let Some(queued) = GUEST
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .queued_replay_arguments(name)
+    else {
+        return;
+    };
+    let now = net_clock_ms();
+    let last = HOLD_DIAGNOSTIC_LAST_MS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < HOLD_DIAGNOSTIC_EVERY_MS {
+        return;
+    }
+    HOLD_DIAGNOSTIC_LAST_MS.store(now, Ordering::Relaxed);
+    log_line(&format!(
+        "fight stream: hold diagnostic: {name} popped {source:?} at {arguments:#x}, the queued replay sits at {queued:#x}, same slot {}, armed by object {queued_by_object}, fired by this player {fired_by_player}",
+        queued == arguments
+    ));
+}
+
 fn judge_guest_pop(
     manager: u64,
     name: &str,
@@ -430,6 +460,13 @@ fn judge_guest_pop(
             log_line(&format!(
                 "fight stream: your game's {name} not run, the host's stream runs the fight"
             ));
+            log_hold_against_queued_replay(
+                name,
+                source,
+                arguments,
+                fired_by_player,
+                queued_by_object,
+            );
             FightPop::Hold
         }
         GuestPop::RunMusicInOwnScene => {
