@@ -21,6 +21,8 @@ pub enum StoryJumpPoint {
     ManorEmilFollows,
     ManorBoss8,
     VillageBoss9,
+    LibraryBoss10,
+    LibraryBoss11,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +34,7 @@ pub struct StoryJumpRow {
     pub former_codes: &'static [&'static str],
 }
 
-pub const STORY_JUMP_ROWS: [StoryJumpRow; 21] = [
+pub const STORY_JUMP_ROWS: [StoryJumpRow; 23] = [
     StoryJumpRow {
         point: StoryJumpPoint::VillageAfterPrologue,
         id: 30,
@@ -179,6 +181,20 @@ pub const STORY_JUMP_ROWS: [StoryJumpRow; 21] = [
         code: "VillageBoss9",
         name: "Village, boss 9",
         former_codes: &["BossFight9"],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::LibraryBoss10,
+        id: 410,
+        code: "LibraryBoss10",
+        name: "Library, boss 10",
+        former_codes: &[],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::LibraryBoss11,
+        id: 420,
+        code: "LibraryBoss11",
+        name: "Library, boss 11",
+        former_codes: &[],
     },
 ];
 

@@ -338,6 +338,8 @@ fn every_jump_point_has_the_stat_level_of_its_row() {
         (370, 36),
         (380, 38),
         (400, 40),
+        (410, 42),
+        (420, 42),
     ] {
         let point = StoryJumpPoint::from_id(id).expect("the id is a point");
         assert_eq!(jump_stat_level(point), level, "R-{id:03}");
@@ -1171,6 +1173,63 @@ fn the_boss_fight_9_jump_enters_the_village_at_point_four_and_places_nobody() {
     assert!(PhaseEntry::find(name).is_some());
     assert!(arrival_spot(StoryJumpPoint::VillageBoss9, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::VillageBoss9, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_10_jump_is_the_library_with_the_village_chain_done_and_no_fight_flag_on() {
+    let steps = loadout_steps(StoryJumpPoint::LibraryBoss10);
+    let (flags, _, _) = final_story_state(steps.clone());
+    for id in [533, 540, 541, 542, 543, 544, 545, 546, 547, 548, 549] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [550, 551, 552, 553, 554, 555, 556, 1298, 1330] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [7, 10] {
+        assert!(steps.contains(&JumpStep::LearnMagic { id }), "{id}");
+    }
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_boss_fight_10_jump_enters_the_library_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::LibraryBoss10);
+    assert_eq!(name, "A_CENTER_LIBRARY_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::LibraryBoss10, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::LibraryBoss10, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_second_not_started() {
+    let steps = loadout_steps(StoryJumpPoint::LibraryBoss11);
+    let (flags, _, _) = final_story_state(steps.clone());
+    for id in [541, 549, 550, 551, 552, 554] {
+        assert_eq!(flags.get(&id), Some(&true), "{id}");
+    }
+    for id in [553, 555, 556] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_boss_fight_11_jump_enters_the_library_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::LibraryBoss11);
+    assert_eq!(name, "A_CENTER_LIBRARY_01");
+    assert_eq!(point, 1);
+    assert!(arrival_spot(StoryJumpPoint::LibraryBoss11, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::LibraryBoss11, false).is_none());
+}
+
+#[test]
+fn the_library_jumps_land_inside_no_host_led_stretch() {
+    for point in [StoryJumpPoint::LibraryBoss10, StoryJumpPoint::LibraryBoss11] {
+        let (flags, _, _) = final_story_state(loadout_steps(point));
+        let flag_on = |id: u16| flags.get(&id) == Some(&true);
+        assert!(stretch_the_story_is_inside("A_CENTER_LIBRARY_01", flag_on).is_none());
+    }
 }
 
 #[test]
