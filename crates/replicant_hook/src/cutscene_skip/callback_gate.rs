@@ -1017,6 +1017,12 @@ fn drop_covered_by_the_fight_stream(messages: Vec<Message>) -> Vec<Message> {
 }
 
 pub(super) fn start(build: &VerifiedBuild, phase: u16, name: &str, now: u64) {
+    if is_end_callback(name) && crate::fight_sync::streamed_in_this_fight(name) {
+        log_line(&format!(
+            "callback follow: the partner's {name} not run here, the fight stream already ran it in this fight"
+        ));
+        return;
+    }
     close_menus_for_modal_entry(build, phase, name);
     if is_end_callback(name) {
         let shared_event = phase_name(phase).is_some_and(|label| is_shared_event(label, name));

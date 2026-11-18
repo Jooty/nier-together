@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::fight_sync::{BASE_PLAYER_LOCAL_HANDLERS, OwnQueuedCall, StreamEntry};
+
+const ENDS_RUN_ONCE_PER_FIGHT: [&str; 1] = ["EID_1450_a0080_End"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotState {
@@ -50,6 +52,7 @@ pub struct Replayer {
     in_flight_entry: Option<StreamEntry>,
     queued_arguments: Option<u64>,
     forgotten: Vec<OwnQueuedCall>,
+    ends_released: BTreeSet<String>,
     player_local_names: Vec<String>,
     held_own_pops: u64,
     dropped_stale: u64,
@@ -74,6 +77,7 @@ impl Replayer {
             in_flight_entry: None,
             queued_arguments: None,
             forgotten: Vec::new(),
+            ends_released: BTreeSet::new(),
             player_local_names,
             held_own_pops: 0,
             dropped_stale: 0,
@@ -111,6 +115,7 @@ impl Replayer {
         let dropped = self.pending.len();
         self.dropped_stale += dropped as u64;
         self.pending.clear();
+        self.ends_released.clear();
         self.epoch = epoch;
         self.next_seq = 0;
         self.forget_in_flight();
@@ -123,6 +128,7 @@ impl Replayer {
         let dropped = self.pending.len() + usize::from(self.in_flight != InFlight::Idle);
         self.dropped_stale += dropped as u64;
         self.pending.clear();
+        self.ends_released.clear();
         self.forget_in_flight();
         dropped
     }
@@ -192,14 +198,18 @@ impl Replayer {
             return None;
         }
         let mut entry = self.pending.remove(&self.next_seq)?;
-        while self.is_player_local(&entry.name) {
-            // The guest's engine fires its own copy of a player-local call.
+        while self.is_player_local(&entry.name) || self.is_repeated_end(&entry.name) {
+            // The guest's engine fires its own copy of a player-local call; a scene's End that
+            // already ran in this epoch is not run a second time.
             self.next_seq += 1;
             entry = self.pending.remove(&self.next_seq)?;
         }
         if !may_release(&entry) {
             self.pending.insert(entry.seq, entry);
             return None;
+        }
+        if ENDS_RUN_ONCE_PER_FIGHT.contains(&entry.name.as_str()) {
+            self.ends_released.insert(entry.name.clone());
         }
         self.in_flight = InFlight::Queued { seq: entry.seq };
         self.in_flight_entry = Some(entry.clone());
@@ -274,6 +284,10 @@ impl Replayer {
             self.pending.insert(seq, entry);
         }
         Some(seq)
+    }
+
+    fn is_repeated_end(&self, name: &str) -> bool {
+        self.ends_released.contains(name)
     }
 
     pub fn is_player_local(&self, name: &str) -> bool {

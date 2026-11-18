@@ -50,6 +50,12 @@ pub(crate) fn covers_phase(phase: u16) -> bool {
             .is_active_in(Some(phase))
 }
 
+pub(crate) fn streamed_in_this_fight(name: &str) -> bool {
+    HOST.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .streamed_in_this_fight(name)
+}
+
 pub(crate) fn own_call_queued() -> bool {
     let host_queued = HOST
         .lock()

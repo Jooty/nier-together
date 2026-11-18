@@ -197,6 +197,10 @@ impl HostFightStream {
         self.phase
     }
 
+    pub fn streamed_in_this_fight(&self, name: &str) -> bool {
+        self.streamed_names.contains(name)
+    }
+
     pub fn is_open_in(&self, phase: u16) -> bool {
         self.phase == Some(phase) && self.window.open_window().is_some()
     }
