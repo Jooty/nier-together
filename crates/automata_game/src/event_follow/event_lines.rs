@@ -204,3 +204,11 @@ pub fn link_lost_line(held: usize, skip_asked: bool) -> String {
     };
     format!("event: the partner is gone or not in play, {held} held plays are released{skip}")
 }
+
+pub fn scene_started_line(number: u32, id: EventId) -> String {
+    format!("scene: #{number} started {}", id.describe())
+}
+
+pub fn scene_ended_line(number: u32) -> String {
+    format!("scene: #{number} ended")
+}

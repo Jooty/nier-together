@@ -253,6 +253,7 @@ fn samples() -> Vec<Message> {
             id: event(),
             paused: true,
         },
+        Message::SessionJump(SessionJumpOrder { start_index: 41 }),
     ]
 }
 
@@ -270,7 +271,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 1036);
+    assert_eq!(PROTOCOL_VERSION, 1037);
 }
 
 #[test]

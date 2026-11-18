@@ -96,8 +96,12 @@ mod route_lead;
 mod save_redirect;
 #[path = "save_together.rs"]
 mod save_together;
+#[path = "scene_lines.rs"]
+mod scene_lines;
 #[path = "second_copy.rs"]
 mod second_copy;
+#[path = "session_jump.rs"]
+mod session_jump;
 #[path = "session_mode.rs"]
 mod session_mode;
 #[path = "shared_defeat.rs"]
@@ -128,6 +132,8 @@ mod system_data_band;
 mod travel;
 #[path = "unforced_defeat.rs"]
 mod unforced_defeat;
+#[path = "wall_limit.rs"]
+mod wall_limit;
 #[path = "watch_pause.rs"]
 mod watch_pause;
 #[path = "watched_hero_flight.rs"]

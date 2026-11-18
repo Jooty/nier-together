@@ -15,7 +15,7 @@ use automata_hook::net::{
 };
 use automata_proto::{
     CharacterHello, GameReadiness, LoadSignal, Member, Message, PROTOCOL_VERSION, PathInfo,
-    PlayerState, TeleportRequest, Welcome,
+    PlayerState, SessionJumpOrder, TeleportRequest, Welcome,
 };
 use nt_hook::net::{LinkPeer, NetState, NetThread, Player, RemotePlayer, net_clock_ms};
 use nt_net::{LoopbackNetwork, Transport};
@@ -183,6 +183,19 @@ fn a_teleport_request_waits_in_the_inbox_for_the_game_thread() {
         a.take_relayed(|message| matches!(message, Message::Teleport(_)))
             .is_empty()
     );
+}
+
+#[test]
+fn a_session_jump_order_waits_in_the_guests_inbox_for_the_game_thread() {
+    let (a, b) = connected_pair();
+    let order = Message::SessionJump(SessionJumpOrder { start_index: 3 });
+    a.send_relayed(order.clone());
+    let mut taken = Vec::new();
+    assert!(wait_until(|| {
+        taken = b.take_relayed(|message| matches!(message, Message::SessionJump(_)));
+        !taken.is_empty()
+    }));
+    assert_eq!(taken, vec![order]);
 }
 
 #[test]

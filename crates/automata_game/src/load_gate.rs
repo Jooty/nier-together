@@ -10,6 +10,7 @@ mod place_relation;
 mod still_loading_code;
 mod story_place;
 mod system_data_band;
+mod wall_limit;
 
 pub use boot_screen::{
     BootLoadEndAction, BootLoadPass, BootScreenInputs, BootScreenKeep, BootScreenState,
@@ -33,6 +34,7 @@ pub use system_data_band::{
     BootScreenDialogs, SystemDialogAnswer, system_dialog_open_code_is_the_noted_one,
     title_system_data_step_code_is_the_noted_one,
 };
+pub use wall_limit::wall_limit_passed;
 
 pub const PARTNER_READY_WAIT_LIMIT_MS: u64 = 45_000;
 pub const RELEASE_LEAD_MS: u64 = 500;
@@ -55,6 +57,7 @@ pub const LOADING_SCREEN_ANSWERED: i32 = 1;
 pub const LOADING_SCREEN_NOT_ANSWERED: i32 = 0;
 pub const SCENE_STATE_WHILE_A_LOAD_RUNS: i32 = 0;
 pub const BOOT_SCREEN_KEPT_PAST_THE_BOOT_LOAD_AT_MOST_MS: u64 = 45_000;
+pub const BOOT_SCREEN_KEEP_WALL_CLOCK_HARD_LIMIT_MS: u64 = 60_000;
 pub const SCENE_LOADER_FUNCTION_START: [u8; 34] = [
     0x40, 0x55, 0x53, 0x56, 0x57, 0x41, 0x56, 0x48, 0x8D, 0x6C, 0x24, 0xD0, 0x48, 0x81, 0xEC, 0x30,
     0x01, 0x00, 0x00, 0x48, 0xC7, 0x45, 0x28, 0xFE, 0xFF, 0xFF, 0xFF, 0x45, 0x33, 0xF6, 0x44, 0x89,

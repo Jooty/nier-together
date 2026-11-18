@@ -1,7 +1,7 @@
 use core::cell::Cell;
 use core::ffi::c_void;
 use core::ptr;
-use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use automata_game::address::{
@@ -11,14 +11,16 @@ use automata_game::address::{
 };
 use automata_game::exe::ExeVariant;
 use automata_game::load_gate::{
-    BootLoadEndAction, BootLoadPass, BootScreenDialogs, LOAD_DONE_NOT_REQUESTED,
-    LOADING_SCREEN_ANSWERED, LOADING_SCREEN_NOT_ANSWERED, LoaderReading,
+    BOOT_SCREEN_KEEP_WALL_CLOCK_HARD_LIMIT_MS, BootLoadEndAction, BootLoadPass, BootScreenDialogs,
+    LOAD_DONE_NOT_REQUESTED, LOADING_SCREEN_ANSWERED, LOADING_SCREEN_NOT_ANSWERED, LoaderReading,
     STILL_LOADING_TEST_CODE_CHECKED_LEN, SYSTEM_DIALOG_NOT_OPENED_HANDLE,
     SYSTEM_DIALOG_OPEN_FUNCTION_START, SystemDialogAnswer, TITLE_SYSTEM_DATA_STEP_CODE_CHECKED_LEN,
     boot_load_end_action, still_loading_test_code_is_the_noted_one,
     system_dialog_open_code_is_the_noted_one, title_system_data_step_code_is_the_noted_one,
+    wall_limit_passed,
 };
 use nt_hook::diagnostics::log_line;
+use nt_hook::net::net_clock_ms;
 
 use crate::game_calls::GameCalls;
 
@@ -29,6 +31,8 @@ const THE_GAME_SAYS_STILL_LOADING: u64 = 1;
 
 static ORIGINAL_STILL_LOADING_TEST: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static SCREEN_WANTED_KEPT: AtomicBool = AtomicBool::new(false);
+static SCREEN_KEPT_SINCE_MS: AtomicU64 = AtomicU64::new(0);
+static SCREEN_KEEP_RAN_OUT: AtomicBool = AtomicBool::new(false);
 static BOOT_LOAD_PASS: AtomicU8 = AtomicU8::new(NOT_YET);
 static ORIGINAL_TITLE_SYSTEM_DATA_STEP: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_SYSTEM_DIALOG_OPEN: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -151,6 +155,7 @@ pub fn install_boot_screen_band_hold(calls: GameCalls, variant: ExeVariant) -> b
 /// While wanted, the first load that ends does so behind its loading screen, and the screen stays
 /// up as if that load were still going.
 pub fn set_boot_screen_kept(wanted: bool) {
+    let wanted = wanted && !SCREEN_KEEP_RAN_OUT.load(Ordering::Acquire);
     let was_kept = SCREEN_WANTED_KEPT.swap(wanted, Ordering::AcqRel);
     if was_kept
         && !wanted
@@ -206,6 +211,25 @@ pub(super) fn after_a_loader_step_of_the_boot(calls: &GameCalls, loader_finished
     }
 }
 
+fn the_keep_ran_out_by_the_wall_clock() -> bool {
+    let now_ms = net_clock_ms().max(1);
+    let _ = SCREEN_KEPT_SINCE_MS.compare_exchange(0, now_ms, Ordering::AcqRel, Ordering::Acquire);
+    let since = SCREEN_KEPT_SINCE_MS.load(Ordering::Acquire);
+    let ran_out = wall_limit_passed(
+        Some(since),
+        now_ms,
+        BOOT_SCREEN_KEEP_WALL_CLOCK_HARD_LIMIT_MS,
+    );
+    if ran_out && !SCREEN_KEEP_RAN_OUT.swap(true, Ordering::AcqRel) {
+        SCREEN_WANTED_KEPT.store(false, Ordering::Release);
+        log_line(&format!(
+            "start: the boot's loading screen was kept for {} ms by the wall clock (the game tick never let it go), it is let go",
+            now_ms.saturating_sub(since)
+        ));
+    }
+    ran_out
+}
+
 #[expect(
     unsafe_code,
     reason = "calls the original test through the trampoline MinHook built"
@@ -219,7 +243,8 @@ extern "system" fn still_loading_test_detour(loading_screen: *mut c_void) -> u64
     let still_loading =
         unsafe { core::mem::transmute::<*mut c_void, StillLoadingTest>(original)(loading_screen) };
     let kept = SCREEN_WANTED_KEPT.load(Ordering::Acquire)
-        && BOOT_LOAD_PASS.load(Ordering::Acquire) != NOT_YET;
+        && BOOT_LOAD_PASS.load(Ordering::Acquire) != NOT_YET
+        && !the_keep_ran_out_by_the_wall_clock();
     if kept {
         THE_GAME_SAYS_STILL_LOADING
     } else {

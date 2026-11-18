@@ -4,6 +4,7 @@ use automata_game::enemies::{
 use automata_game::enemy_lead::EnemyLead;
 use automata_game::event_follow::{EventAsk, EventId};
 use automata_game::pickups::ItemPickup;
+use automata_game::session_jump::SessionJumpOrder;
 use automata_game::shared_defeat::DefeatNote;
 use automata_game::story_follow::{StoryAsk, StoryAskAnswer, StoryMove};
 use automata_game::story_steps::{StoryStepAnswer, StoryStepAsk, StoryStepDone};
@@ -61,6 +62,7 @@ pub enum Message {
     StoryStepAsk(StoryStepAsk),
     StoryStepAnswer(StoryStepAnswer),
     EventPause { id: EventId, paused: bool },
+    SessionJump(SessionJumpOrder),
 }
 
 impl Message {
@@ -106,6 +108,7 @@ impl Message {
             Message::StoryStepAsk(_) => "StoryStepAsk",
             Message::StoryStepAnswer(_) => "StoryStepAnswer",
             Message::EventPause { .. } => "EventPause",
+            Message::SessionJump(_) => "SessionJump",
         }
     }
 
@@ -145,6 +148,7 @@ impl Message {
                 | Message::StoryStepAsk(_)
                 | Message::StoryStepAnswer(_)
                 | Message::EventPause { .. }
+                | Message::SessionJump(_)
         )
     }
 
@@ -280,6 +284,15 @@ impl Message {
                 } else {
                     Err(WireError::OutOfRange {
                         field: "story_step_ask",
+                    })
+                }
+            }
+            Message::SessionJump(order) => {
+                if order.is_valid() {
+                    Ok(())
+                } else {
+                    Err(WireError::OutOfRange {
+                        field: "session_jump",
                     })
                 }
             }
