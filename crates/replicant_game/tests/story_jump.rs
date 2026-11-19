@@ -340,6 +340,7 @@ fn every_jump_point_has_the_stat_level_of_its_row() {
         (400, 40),
         (410, 42),
         (420, 42),
+        (430, 42),
     ] {
         let point = StoryJumpPoint::from_id(id).expect("the id is a point");
         assert_eq!(jump_stat_level(point), level, "R-{id:03}");
@@ -1202,7 +1203,8 @@ fn the_boss_fight_10_jump_enters_the_library_at_point_one_and_places_nobody() {
 }
 
 #[test]
-fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_intro_chain_left_to_the_stage_start() {
+fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_intro_chain_left_to_the_stage_start()
+ {
     let steps = loadout_steps(StoryJumpPoint::LibraryBoss11);
     let (flags, _, _) = final_story_state(steps.clone());
     for id in [541, 549, 550, 551, 552] {
@@ -1221,6 +1223,54 @@ fn the_boss_fight_11_jump_enters_the_library_at_point_one_and_places_nobody() {
     assert_eq!(point, 1);
     assert!(arrival_spot(StoryJumpPoint::LibraryBoss11, true).is_none());
     assert!(arrival_spot(StoryJumpPoint::LibraryBoss11, false).is_none());
+}
+
+#[test]
+fn the_part_2_start_jump_has_every_story_change_the_l39_host_sent_from_the_end_of_fight_11_to_the_first_scene_end()
+ {
+    let (flags, counters, snow) = final_story_state(loadout_steps(StoryJumpPoint::Part2Start));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    for id in [541, 549, 550, 551, 552, 553, 554, 555, 556, 72, 626, 627] {
+        assert!(flag_on(id), "{id}");
+    }
+    assert_eq!(flags.get(&125), Some(&false));
+    assert_eq!(counters.get(&71), Some(&13));
+    assert_eq!(counters.get(&74), Some(&7));
+    assert!(snow.contains(&1071));
+}
+
+#[test]
+fn the_part_2_start_jump_leaves_out_what_the_village_scripts_write_after_the_first_scene() {
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2Start));
+    for id in [628, 630, 840, 1346, 845] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+}
+
+#[test]
+fn the_part_2_start_jump_ends_with_the_mp_step_and_changes_nothing_of_the_boss_fight_11_jump_before_it()
+ {
+    let before = loadout_steps(StoryJumpPoint::LibraryBoss11);
+    let steps = loadout_steps(StoryJumpPoint::Part2Start);
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+    assert_eq!(steps[..before.len() - 1], before[..before.len() - 1]);
+}
+
+#[test]
+fn the_part_2_start_jump_enters_the_part_2_village_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::Part2Start);
+    assert_eq!(name, "B_CENTER_VILLAGE_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::Part2Start, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::Part2Start, false).is_none());
+}
+
+#[test]
+fn the_part_2_start_jump_lands_inside_no_host_led_stretch() {
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2Start));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    assert!(stretch_the_story_is_inside("B_CENTER_VILLAGE_01", flag_on).is_none());
 }
 
 #[test]

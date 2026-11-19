@@ -1,6 +1,6 @@
 use replicant_proto::{Message, StoryJump, StoryJumpPoint, decode, encode};
 
-const ID_CODE_NAME_ALIAS: [(u16, &str, &str, &str); 23] = [
+const ID_CODE_NAME_ALIAS: [(u16, &str, &str, &str); 24] = [
     (
         30,
         "VillageAfterPrologue",
@@ -69,6 +69,7 @@ const ID_CODE_NAME_ALIAS: [(u16, &str, &str, &str); 23] = [
     (400, "VillageBoss9", "Village, boss 9", "BossFight9"),
     (410, "LibraryBoss10", "Library, boss 10", "LibraryBoss10"),
     (420, "LibraryBoss11", "Library, boss 11", "LibraryBoss11"),
+    (430, "Part2Start", "Part 2, start", "Part2Start"),
 ];
 
 #[test]
@@ -267,7 +268,7 @@ fn the_points_are_in_id_order_with_no_repeats() {
     sorted.sort_unstable();
     sorted.dedup();
     assert_eq!(ids, sorted);
-    assert_eq!(ids.len(), 23);
+    assert_eq!(ids.len(), 24);
 }
 
 #[test]

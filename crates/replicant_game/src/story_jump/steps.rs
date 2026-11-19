@@ -686,6 +686,20 @@ const BOSS_FIGHT_10_TO_BOSS_FIGHT_11_EXTRA_STEPS: [JumpStep; 3] = [
     JumpStep::SetFlag { id: 552 },
 ];
 
+const BOSS_FIGHT_11_TO_PART_2_START_EXTRA_STEPS: [JumpStep; 11] = [
+    JumpStep::SetSnowFlag { id: 1071 },
+    JumpStep::SetFlag { id: 553 },
+    JumpStep::SetFlag { id: 554 },
+    JumpStep::SetFlag { id: 555 },
+    JumpStep::SetFlag { id: 556 },
+    JumpStep::ClearFlag { id: 125 },
+    JumpStep::SetFlag { id: 72 },
+    JumpStep::SetGameCounter { id: 71, value: 13 },
+    JumpStep::SetGameCounter { id: 74, value: 7 },
+    JumpStep::SetFlag { id: 626 },
+    JumpStep::SetFlag { id: 627 },
+];
+
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
 const AFTER_PROLOGUE_PHASE: &str = "A_CENTER_VILLAGE_01";
 const AFTER_PROLOGUE_POINT: i32 = 8;
@@ -733,6 +747,8 @@ const BOSS_FIGHT_11_PHASE: &str = "A_CENTER_LIBRARY_01";
 const BOSS_FIGHT_11_POINT: i32 = 1;
 const FOREST_INSIDE_PHASE: &str = "C_FOREST_FIELD_01";
 const FOREST_INSIDE_POINT: i32 = 1;
+const PART_2_START_PHASE: &str = "B_CENTER_VILLAGE_01";
+const PART_2_START_POINT: i32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpStep {
@@ -915,6 +931,13 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::Part2Start => {
+            let mut steps = loadout_steps(StoryJumpPoint::LibraryBoss11);
+            steps.pop();
+            steps.extend_from_slice(&BOSS_FIGHT_11_TO_PART_2_START_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -953,5 +976,6 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
         StoryJumpPoint::VillageBoss9 => (BOSS_FIGHT_9_PHASE, BOSS_FIGHT_9_POINT),
         StoryJumpPoint::LibraryBoss10 => (BOSS_FIGHT_10_PHASE, BOSS_FIGHT_10_POINT),
         StoryJumpPoint::LibraryBoss11 => (BOSS_FIGHT_11_PHASE, BOSS_FIGHT_11_POINT),
+        StoryJumpPoint::Part2Start => (PART_2_START_PHASE, PART_2_START_POINT),
     }
 }
