@@ -6,7 +6,8 @@ use crate::offsets::{
     MAP_MANAGER_RVA, PHASE_NAME_BUFFER_LEN,
 };
 use crate::phase_request::{
-    LOADED_TALK_SET_NAME_READ_LEN, NEXT_PHASE_NAME_RVA, TALK_WINDOW_LOADED_SET_NAME_OFFSET,
+    LOADED_TALK_SET_NAME_READ_LEN, LoadedPartSets, NEXT_PHASE_NAME_RVA,
+    RADIO_MANAGER_LOADED_SET_NAME_OFFSET, RADIO_MANAGER_RVA, TALK_WINDOW_LOADED_SET_NAME_OFFSET,
     TALK_WINDOW_RVA, loaded_talk_set_letter,
 };
 
@@ -50,5 +51,19 @@ impl<M: GameMemory> Replicant<M> {
         buffer[0] = letter;
         self.memory_mut().write(address, &buffer)?;
         Ok(())
+    }
+
+    pub fn loaded_part_sets(&self) -> Result<LoadedPartSets, GameError> {
+        let talk = self.memory().read_array::<LOADED_TALK_SET_NAME_READ_LEN>(
+            self.module_address(TALK_WINDOW_RVA) + TALK_WINDOW_LOADED_SET_NAME_OFFSET,
+        )?;
+        let radio = self.memory().read_array::<LOADED_TALK_SET_NAME_READ_LEN>(
+            self.module_address(RADIO_MANAGER_RVA) + RADIO_MANAGER_LOADED_SET_NAME_OFFSET,
+        )?;
+        Ok(LoadedPartSets {
+            talk_set: text_up_to_nul(&talk),
+            radio_set: text_up_to_nul(&radio),
+            next_phase_name: self.current_phase()?,
+        })
     }
 }

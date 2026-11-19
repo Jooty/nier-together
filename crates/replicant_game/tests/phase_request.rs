@@ -1,7 +1,8 @@
 use replicant_game::Replicant;
 use replicant_game::phase_request::{
-    NEXT_PHASE_NAME_RVA, TALK_WINDOW_LOADED_SET_NAME_OFFSET, TALK_WINDOW_RVA,
-    loaded_talk_set_letter, part_sets_registered_by_request,
+    LoadedPartSetsWatch, NEXT_PHASE_NAME_RVA, RADIO_MANAGER_RVA,
+    TALK_WINDOW_LOADED_SET_NAME_OFFSET, TALK_WINDOW_RVA, loaded_talk_set_letter,
+    part_sets_registered_by_request,
 };
 
 use crate::fake_memory::{FAKE_MODULE_BASE, FakeMemory};
@@ -97,4 +98,28 @@ fn the_third_and_fourth_parts_share_the_first_two_parts_radio_sets() {
     assert_eq!(third.radio_set, "radio_A");
     let fourth = part_sets_registered_by_request("B_X", "D_X").unwrap();
     assert_eq!(fourth.radio_set, "radio_B");
+}
+
+#[test]
+fn the_loaded_sets_line_is_logged_once_per_change() {
+    let mut memory = FakeMemory::new();
+    for (rva, text) in [
+        (
+            TALK_WINDOW_RVA + TALK_WINDOW_LOADED_SET_NAME_OFFSET as u32,
+            "talk_B",
+        ),
+        (RADIO_MANAGER_RVA, "radio_B"),
+        (NEXT_PHASE_NAME_RVA, PART_TWO_HUB_PHASE),
+    ] {
+        let mut buffer = [0_u8; 0x20];
+        buffer[..text.len()].copy_from_slice(text.as_bytes());
+        memory.put_at_rva(rva, &buffer);
+    }
+    let sets = Replicant::new(memory).loaded_part_sets().unwrap();
+    let mut watch = LoadedPartSetsWatch::default();
+    assert_eq!(
+        watch.observe(&sets).as_deref(),
+        Some("part sets: talk window holds talk_B, radio holds radio_B, phase B_CENTER_VILLAGE_01")
+    );
+    assert_eq!(watch.observe(&sets), None);
 }

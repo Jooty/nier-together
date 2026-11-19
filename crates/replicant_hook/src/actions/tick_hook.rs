@@ -14,6 +14,7 @@ use crate::gimmick_probe::tick_gimmick_probe;
 use crate::move_log::tick_move_log;
 use crate::net;
 use crate::npcs::tick_npc_sync;
+use crate::part_sets_log::tick_part_sets_log;
 use crate::sky::tick_sky_sync;
 use crate::world_objects::tick_world_objects;
 
@@ -34,6 +35,7 @@ fn run_game_tick(build: &VerifiedBuild) {
         ("game tick: sky sync", tick_sky_sync),
         ("game tick: desync", tick_desync),
         ("game tick: move log", tick_move_log),
+        ("game tick: part sets log", tick_part_sets_log),
         #[cfg(feature = "probes")]
         ("game tick: gimmick probe", tick_gimmick_probe),
         ("game tick: world objects", tick_world_objects),
