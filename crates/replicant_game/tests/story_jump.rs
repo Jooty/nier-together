@@ -1267,10 +1267,10 @@ fn the_part_2_start_jump_enters_the_part_2_village_at_point_one_and_places_nobod
 }
 
 #[test]
-fn the_part_2_start_jump_lands_inside_no_host_led_stretch() {
+fn the_part_2_start_jump_lands_inside_the_part_2_watch_stretch() {
     let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2Start));
     let flag_on = |id: u16| flags.get(&id) == Some(&true);
-    assert!(stretch_the_story_is_inside("B_CENTER_VILLAGE_01", flag_on).is_none());
+    assert!(stretch_the_story_is_inside("B_CENTER_VILLAGE_01", flag_on).is_some());
 }
 
 #[test]
