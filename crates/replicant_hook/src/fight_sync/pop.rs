@@ -389,9 +389,7 @@ fn judge_guest_pop(
         .window()
         .map_or(&[][..], |window| window.player_local_messages);
     let registered_local = is_player_local_message_handler(phase, name, more_local_ids);
-    if source == PopSource::Fired
-        && crate::cutscene_skip::own_end_is_the_copy_the_waiting_host_end_needs(name)
-    {
+    if crate::cutscene_skip::own_end_is_the_copy_the_waiting_host_end_needs(name) {
         // The host's End popped before its window opened, so no stream copy pairs with this pop.
         log_line(&format!(
             "fight stream: your game's {name} is the copy the host's End waits for, it runs here"
