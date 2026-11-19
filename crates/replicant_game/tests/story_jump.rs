@@ -1202,13 +1202,13 @@ fn the_boss_fight_10_jump_enters_the_library_at_point_one_and_places_nobody() {
 }
 
 #[test]
-fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_second_not_started() {
+fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_intro_chain_left_to_the_stage_start() {
     let steps = loadout_steps(StoryJumpPoint::LibraryBoss11);
     let (flags, _, _) = final_story_state(steps.clone());
-    for id in [541, 549, 550, 551, 552, 554] {
+    for id in [541, 549, 550, 551, 552] {
         assert_eq!(flags.get(&id), Some(&true), "{id}");
     }
-    for id in [553, 555, 556] {
+    for id in [553, 554, 555, 556] {
         assert_ne!(flags.get(&id), Some(&true), "{id}");
     }
     assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));

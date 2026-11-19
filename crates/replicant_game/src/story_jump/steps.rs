@@ -680,11 +680,10 @@ const BOSS_FIGHT_9_TO_BOSS_FIGHT_10_EXTRA_STEPS: [JumpStep; 20] = [
     JumpStep::LearnMagic { id: 10 },
 ];
 
-const BOSS_FIGHT_10_TO_BOSS_FIGHT_11_EXTRA_STEPS: [JumpStep; 4] = [
+const BOSS_FIGHT_10_TO_BOSS_FIGHT_11_EXTRA_STEPS: [JumpStep; 3] = [
     JumpStep::SetFlag { id: 550 },
     JumpStep::SetFlag { id: 551 },
     JumpStep::SetFlag { id: 552 },
-    JumpStep::SetFlag { id: 554 },
 ];
 
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
