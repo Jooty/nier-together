@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use replicant_game::bullet_flights::SightedBullet;
+use replicant_game::bullet_flights::{MAX_EXTRAPOLATION_MS, SightedBullet};
 use replicant_game::enemy_bullets::{
     BULLET_SPRITE_FRAME_COUNT, BeamEnd, ENEMY_BULLET_STALE_MS, EnemyBullet, EnemyBulletBoard,
     EnemyBulletCensus, EnemyBulletKinds, EnemyBulletSender, EnemyBulletStep, FlightRefusals,
@@ -554,6 +554,72 @@ fn sprite_bullets_have_their_own_limit_beside_the_effect_drawn_ones() {
     assert_eq!(sprites, MAX_SIGHTED_ENEMY_SPRITE_BULLETS);
     assert_eq!(scan.bullets.len() - sprites, MAX_SIGHTED_ENEMY_BULLETS);
     assert_eq!(scan.census.past_the_limit, 5);
+}
+
+const BOSS_FIGHT_PEAK_SPRITES_IN_THE_AIR: u32 = 320;
+const SCAN_STEP_MS: u64 = 50;
+
+#[test]
+fn a_boss_fight_peak_of_sprite_bullets_is_all_sighted_and_all_sent() {
+    let mut memory = world();
+    for index in 0..BOSS_FIGHT_PEAK_SPRITES_IN_THE_AIR {
+        sprite_bullet(&mut memory, index, SHADE_SLOT);
+    }
+    let scan = scan_enemy_bullets(&memory, &shared_shades()).unwrap();
+    assert_eq!(scan.census.past_the_limit, 0);
+    assert_eq!(
+        scan.bullets.len(),
+        BOSS_FIGHT_PEAK_SPRITES_IN_THE_AIR as usize
+    );
+    let mut sender = EnemyBulletSender::default();
+    let mut told: Vec<u16> = Vec::new();
+    for step in 0..8_u64 {
+        for sent in sender.update(&scan.bullets, 1000 + step * SCAN_STEP_MS) {
+            if !told.contains(&sent.flight.instance) {
+                assert!(sent.sprite.is_some());
+                told.push(sent.flight.instance);
+            }
+        }
+    }
+    assert_eq!(told.len(), BOSS_FIGHT_PEAK_SPRITES_IN_THE_AIR as usize);
+}
+
+#[test]
+fn every_bullet_at_the_sighting_limits_moves_before_the_guest_stops_extrapolating() {
+    let sprites = MAX_SIGHTED_ENEMY_SPRITE_BULLETS as u16;
+    let bullets: Vec<EnemyBullet> = (0..sprites)
+        .map(|index| sprite_sighting(200 + index, 0.0))
+        .chain(
+            (0..MAX_SIGHTED_ENEMY_BULLETS as u16)
+                .map(|index| sighting(SHADE_ID, 1000 + index, i32::from(index) + 1, 0.0)),
+        )
+        .collect();
+    let mut sender = EnemyBulletSender::default();
+    let mut last_sent: HashMap<u16, u64> = HashMap::new();
+    let mut longest_wait_ms = 0;
+    for step in 0..40_u64 {
+        let now_ms = 1000 + step * SCAN_STEP_MS;
+        for sent in sender.update(&bullets, now_ms) {
+            if let Some(before) = last_sent.insert(sent.flight.instance, now_ms) {
+                longest_wait_ms = longest_wait_ms.max(now_ms - before);
+            }
+        }
+    }
+    assert_eq!(last_sent.len(), bullets.len());
+    assert!(longest_wait_ms > 0);
+    assert!(longest_wait_ms <= MAX_EXTRAPOLATION_MS);
+}
+
+#[test]
+fn the_guest_shows_the_boss_fight_peak_beside_the_effect_drawn_bullets() {
+    let mut board = EnemyBulletBoard::default();
+    let sighted = (BOSS_FIGHT_PEAK_SPRITES_IN_THE_AIR as usize + MAX_SIGHTED_ENEMY_BULLETS) as u16;
+    for instance in 0..sighted {
+        assert_eq!(
+            board.note(&sprite_flight(instance), 0),
+            EnemyBulletStep::Start
+        );
+    }
 }
 
 #[test]
