@@ -1,6 +1,6 @@
 use replicant_game::move_log::{
-    BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST, FeetDrive, FeetDriveReading, FeetDriveStep,
-    FeetDriveTally, GAMES_OWN_BODY_SPEED_RATE, FALLBACK_INDOOR_PACE_PER_SECOND,
+    BODY_SPEED_RATE_LEAST, BODY_SPEED_RATE_MOST, FALLBACK_INDOOR_PACE_PER_SECOND, FeetDrive,
+    FeetDriveReading, FeetDriveStep, FeetDriveTally, GAMES_OWN_BODY_SPEED_RATE,
     HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE, HostPaceWatch, PaceFeedback, RUN_LOOP_MOTION_NAME,
     STATE_ACTION_MOVE_RVA, house_pace_in_play, starting_body_speed_rate,
 };
@@ -286,7 +286,10 @@ fn the_host_pace_the_story_points_show_is_followed_and_never_lifted_past_the_cap
             });
         }
         assert!(step.body_speed_rate <= BODY_SPEED_RATE_MOST);
-        assert!((6.0 * step.body_speed_rate - host).abs() < 0.15, "host {host}");
+        assert!(
+            (6.0 * step.body_speed_rate - host).abs() < 0.15,
+            "host {host}"
+        );
     }
 }
 
@@ -301,7 +304,10 @@ fn with_no_host_pace_measured_she_aims_at_the_fallback() {
 fn the_host_pace_is_measured_from_the_position_stream_while_he_walks() {
     let mut watch = HostPaceWatch::default();
     for tick in 0..=40 {
-        watch.observe([4.07 * tick as f32 * 0.033, 0.0, 0.0], f64::from(tick) * 0.033);
+        watch.observe(
+            [4.07 * tick as f32 * 0.033, 0.0, 0.0],
+            f64::from(tick) * 0.033,
+        );
     }
     assert!((watch.pace_per_second().unwrap() - 4.07).abs() < 0.05);
     for tick in 41..=80 {
@@ -322,14 +328,20 @@ fn only_the_rate_the_drive_wrote_is_put_back_and_never_another_writers() {
     let written = drive.rate_to_write(Some(1.0), walking).unwrap();
     assert!((written - walking.body_speed_rate).abs() < 1e-6);
     assert!(drive.holds_a_rate_of_ours(Some(written)));
-    assert_eq!(drive.rate_to_write(Some(written), FeetDriveStep::LEAVE), Some(1.0));
+    assert_eq!(
+        drive.rate_to_write(Some(written), FeetDriveStep::LEAVE),
+        Some(1.0)
+    );
     assert!(!drive.holds_a_rate_of_ours(Some(1.0)));
 
     // the game's own 0.75 at the stairs (0:2/1:2/2:2) or 0.60 (0:4) in this entry is not ours
     let mut drive = FeetDrive::default();
     for foreign in [0.75_f32, 0.60] {
         assert!(!drive.holds_a_rate_of_ours(Some(foreign)));
-        assert_eq!(drive.rate_to_write(Some(foreign), FeetDriveStep::LEAVE), None);
+        assert_eq!(
+            drive.rate_to_write(Some(foreign), FeetDriveStep::LEAVE),
+            None
+        );
     }
     drive.rate_to_write(Some(1.0), walking);
     assert_eq!(drive.rate_to_write(Some(0.6), FeetDriveStep::LEAVE), None);
@@ -341,9 +353,18 @@ fn a_talk_a_scene_a_mask_or_a_state_change_does_not_restart_the_ten_tick_wait() 
     let walk = the_run_loop_under_her_at_08_27_36_009();
     for interruption in [
         FeetDriveReading { talk: true, ..walk },
-        FeetDriveReading { event_scene: true, ..walk },
-        FeetDriveReading { control_masked: true, ..walk },
-        FeetDriveReading { state_rva: Some(DODGE_STATE_RVA), ..walk },
+        FeetDriveReading {
+            event_scene: true,
+            ..walk
+        },
+        FeetDriveReading {
+            control_masked: true,
+            ..walk
+        },
+        FeetDriveReading {
+            state_rva: Some(DODGE_STATE_RVA),
+            ..walk
+        },
     ] {
         let mut drive = FeetDrive::default();
         settled(&mut drive, &walk);
@@ -352,6 +373,9 @@ fn a_talk_a_scene_a_mask_or_a_state_change_does_not_restart_the_ten_tick_wait() 
     }
     let mut drive = FeetDrive::default();
     settled(&mut drive, &walk);
-    drive.tick(&FeetDriveReading { speed_cap: 1.0, ..walk });
+    drive.tick(&FeetDriveReading {
+        speed_cap: 1.0,
+        ..walk
+    });
     assert_eq!(drive.tick(&walk), FeetDriveStep::LEAVE);
 }

@@ -139,8 +139,6 @@ mod fight_player_traps;
 mod fight_requests;
 #[path = "fight_scene_end_hold.rs"]
 mod fight_scene_end_hold;
-#[path = "fight_wave_replay_claim.rs"]
-mod fight_wave_replay_claim;
 #[path = "fight_start_entry.rs"]
 mod fight_start_entry;
 #[path = "fight_start_once.rs"]
@@ -151,6 +149,8 @@ mod fight_stream;
 mod fight_sync;
 #[path = "fight_tape.rs"]
 mod fight_tape;
+#[path = "fight_wave_replay_claim.rs"]
+mod fight_wave_replay_claim;
 #[path = "fight_window.rs"]
 mod fight_window;
 #[path = "fill_in.rs"]
@@ -163,6 +163,8 @@ mod focus;
 mod frame_ring;
 #[path = "game_closing.rs"]
 mod game_closing;
+#[path = "guest_music_in_scenes.rs"]
+mod guest_music_in_scenes;
 #[path = "hit_kind.rs"]
 mod hit_kind;
 #[path = "hit_reaction.rs"]
@@ -257,8 +259,6 @@ mod minimap;
 mod mirror_window_size;
 #[path = "move_log.rs"]
 mod move_log;
-#[path = "guest_music_in_scenes.rs"]
-mod guest_music_in_scenes;
 #[path = "music.rs"]
 mod music;
 #[path = "new_game.rs"]

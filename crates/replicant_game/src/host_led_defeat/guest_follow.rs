@@ -3,10 +3,9 @@ use replicant_proto::{DefeatPick, HostDefeatScreen};
 use crate::host_led_defeat::{
     DEFEAT_SCREEN_FRAMES_APART_FOR_A_NEW_SCREEN_MS, GAME_OVER_SEQUENCE_CHOOSING_STATE,
     GUEST_DEFEAT_SCREEN_WAITS_FOR_THE_HOST_MS, GameOverScreen, HOST_DEFEAT_PICK_KEPT_FOR_MS,
-    USED_DEFEAT_FORGOTTEN_AFTER_MS,
-    HOST_DEFEAT_SCREEN_NOTE_FRESH_MS, context_missing_line, guest_buttons_back_line,
-    guest_led_line, guest_made_pick_line, guest_screen_opened_line, guest_waits_line,
-    heard_pick_line, heard_screen_line, pick_dropped_line,
+    HOST_DEFEAT_SCREEN_NOTE_FRESH_MS, USED_DEFEAT_FORGOTTEN_AFTER_MS, context_missing_line,
+    guest_buttons_back_line, guest_led_line, guest_made_pick_line, guest_screen_opened_line,
+    guest_waits_line, heard_pick_line, heard_screen_line, pick_dropped_line,
 };
 
 /// The guest's side: while the host shows a defeat screen of its own, this game's screen takes
@@ -68,7 +67,10 @@ impl GuestDefeatFollow {
     }
 
     pub fn hear(&mut self, note: HostDefeatScreen, now_ms: u64) -> Vec<String> {
-        if self.used_defeat.is_some_and(|used| used.defeat == note.defeat) {
+        if self
+            .used_defeat
+            .is_some_and(|used| used.defeat == note.defeat)
+        {
             return Vec::new();
         }
         let before = self.heard.map(|heard| heard.note);

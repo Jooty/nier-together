@@ -25,12 +25,16 @@ fn a_guest_does_not_run_a_repeated_stream_end_of_a_scene_it_already_ended_in_the
     replayer.receive(entry(0, SCENE_END));
     replayer.receive(entry(1, SCENE_END));
     replayer.receive(entry(2, NEXT_ENTRY));
-    let first = replayer.tick(SlotState::Idle).expect("the first End is released");
+    let first = replayer
+        .tick(SlotState::Idle)
+        .expect("the first End is released");
     assert_eq!((first.seq, first.name.as_str()), (0, SCENE_END));
     replayer.entry_queued_at(7);
     replayer.pop(SCENE_END, PopSource::Queued, 7);
     assert!(replayer.tick(SlotState::Busy).is_none());
-    let next = replayer.tick(SlotState::Idle).expect("the entry after the repeat is released");
+    let next = replayer
+        .tick(SlotState::Idle)
+        .expect("the entry after the repeat is released");
     assert_eq!((next.seq, next.name.as_str()), (2, NEXT_ENTRY));
 }
 
@@ -58,12 +62,16 @@ fn the_host_knows_a_name_its_stream_already_ran_in_this_fight() {
     host.callback_registered();
     assert!(!host.streamed_in_this_fight(SCENE_END));
     let outs = host.popped(SCENE_END, Vec::new(), false);
-    assert!(outs.iter().any(|out| matches!(out, HostStreamOut::Entry(_))));
+    assert!(
+        outs.iter()
+            .any(|out| matches!(out, HostStreamOut::Entry(_)))
+    );
     assert!(host.streamed_in_this_fight(SCENE_END));
 }
 
 #[test]
-fn run_135601_the_host_does_not_run_a_guest_request_for_an_end_it_ran_just_before_the_window_opened() {
+fn run_135601_the_host_does_not_run_a_guest_request_for_an_end_it_ran_just_before_the_window_opened()
+ {
     const LIBRARY_PHASE: u16 = 7;
     const FIGHT_END: &str = "EID_2000_a0100_End";
     let window = FIGHT_WINDOWS

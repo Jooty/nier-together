@@ -3,7 +3,8 @@ use replicant_game::GameMemory;
 use replicant_game::effects::{
     HostStatueWatch, StoneCopyStep, StoneDummy, StoneStateView, actor_of_stone_dummy_handle,
     hold_off_off_camera_end, host_statue_broke, host_statue_watch, read_stone_state,
-    stone_copy_step, stone_dummy_handle, stone_state_machine_pointer_offset, stone_state_vtable_rva,
+    stone_copy_step, stone_dummy_handle, stone_state_machine_pointer_offset,
+    stone_state_vtable_rva,
 };
 use replicant_game::offsets::{
     ACTOR_CLASS_ID_OFFSET, DAMAGE_DUMMY_CLASS_ID, HANDLE_POOL_GENERATIONS_RVA,
@@ -161,8 +162,8 @@ fn the_guests_stone_step_never_writes_a_survive_flag_through_the_dummy() {
     // Class 0xA5 is 0x1600 bytes (factory 0x14018E750); the parameter-object pointer sits at
     // actor +0x14350, so a survive-at-one-hp write on the dummy lands in another heap block.
     let source = include_str!("../../replicant_hook/src/enemies/guest_combat.rs");
-    let step = &source[source.find("fn step_stoned_copies").unwrap()
-        ..source.find("fn kill_copy").unwrap()];
+    let step = &source
+        [source.find("fn step_stoned_copies").unwrap()..source.find("fn kill_copy").unwrap()];
     assert!(!step.contains("set_survive_at_one_hp"));
     assert!(!step.contains("ACTOR_PARAMETER_OBJECT_OFFSET"));
 }

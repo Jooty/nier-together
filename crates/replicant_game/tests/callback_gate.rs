@@ -839,7 +839,9 @@ fn run_135601_the_guests_own_end_runs_once_through_the_waiting_host_end() {
     const FIGHT_END: &str = "EID_2000_a0100_End";
     let mut waiting = EndQueue::new();
     waiting.push(FIGHT_END, 7, 0);
-    assert!(own_end_is_the_copy_a_waiting_host_end_needs(FIGHT_END, &waiting));
+    assert!(own_end_is_the_copy_a_waiting_host_end_needs(
+        FIGHT_END, &waiting
+    ));
     waiting.take_through(FIGHT_END);
     assert!(
         !own_end_is_the_copy_a_waiting_host_end_needs(FIGHT_END, &waiting),

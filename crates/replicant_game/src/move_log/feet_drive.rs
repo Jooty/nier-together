@@ -1,7 +1,7 @@
 use crate::move_log::{
-    BODY_SPEED_RATE_WRITE_TOLERANCE, GAMES_OWN_BODY_SPEED_RATE, HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE,
-    FALLBACK_INDOOR_PACE_PER_SECOND, INDOOR_FEET_MOVING_GROUND_SPEED, PaceFeedback, RUN_LOOP_MOTION_NAME, STATE_ACTION_MOVE_RVA,
-    is_house_speed_cap_value,
+    BODY_SPEED_RATE_WRITE_TOLERANCE, FALLBACK_INDOOR_PACE_PER_SECOND, GAMES_OWN_BODY_SPEED_RATE,
+    HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE, INDOOR_FEET_MOVING_GROUND_SPEED, PaceFeedback,
+    RUN_LOOP_MOTION_NAME, STATE_ACTION_MOVE_RVA, is_house_speed_cap_value,
 };
 
 /// One tick of the swapped body as the indoor feet drive sees it.
@@ -76,8 +76,11 @@ impl FeetDrive {
         if self.house_pace_ticks < HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE {
             return FeetDriveStep::LEAVE;
         }
-        self.pace
-            .retarget(reading.host_pace_per_second.unwrap_or(FALLBACK_INDOOR_PACE_PER_SECOND));
+        self.pace.retarget(
+            reading
+                .host_pace_per_second
+                .unwrap_or(FALLBACK_INDOOR_PACE_PER_SECOND),
+        );
         let stick_held = reading.ground_speed >= INDOOR_FEET_MOVING_GROUND_SPEED;
         let run_loop_plays = reading
             .body_motion

@@ -3,7 +3,6 @@ mod known_addresses;
 
 pub use game_address::GameAddress;
 pub use known_addresses::EVENT_SET_PAUSED_FUNCTION;
-pub use known_addresses::{INPUT_UPDATE_TAIL_FUNCTION, PAD_SNAPSHOT_THE_GAME_READS};
 pub use known_addresses::GAME_OVER_MENU_OBJECT;
 pub use known_addresses::{
     ACTION_UPDATE_FUNCTION, APPLY_LOADED_STORY_FUNCTION, BUILD_SAVE_FILE_PATH_FUNCTION,
@@ -79,6 +78,7 @@ pub use known_addresses::{
     UI_TEXT_TABLE_OBJECT,
 };
 pub use known_addresses::{HUD_LOG_POST_TEXT_ID_FUNCTION, UI_TEXT_LOOKUP_FUNCTION};
+pub use known_addresses::{INPUT_UPDATE_TAIL_FUNCTION, PAD_SNAPSHOT_THE_GAME_READS};
 pub use known_addresses::{
     LOAD_DONE_REQUEST_VALUE, LOADING_SCREEN_ANSWER_VALUE, LOADING_SCREEN_OBJECT,
     LOADING_SCREEN_STILL_LOADING_TEST_FUNCTION, SCENE_LOADER_FUNCTION, SCENE_LOADER_STAGE_VALUE,

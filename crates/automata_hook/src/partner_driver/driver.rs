@@ -31,9 +31,9 @@ use crate::game_calls::{GameCalls, Vec4};
 use crate::game_hooks::{
     auto_item_use_checks_skipped_on_the_partner_body, clear_autopilot_feed, clear_input_feed,
     forget_recorded_start, hits_kept_off_the_partner_body, hold_body, install_camera_guard,
-    install_engine_partner_choice, install_focus_pass, install_input_feed, install_pad_press,
+    install_engine_partner_choice, install_focus_pass, install_input_feed,
     install_object_read_wait_guard, install_own_input_guard, install_own_item_use_hold,
-    install_partner_harm_guard, install_partner_walk_guards, install_pod_aim,
+    install_pad_press, install_partner_harm_guard, install_partner_walk_guards, install_pod_aim,
     install_start_recorder, object_read_waits_refused, recorded_pod_aim, recorded_start,
     release_body, set_autopilot_feed, set_input_feed, set_partner_pod_aim,
     set_partner_the_engine_should_make, set_session_linked,
