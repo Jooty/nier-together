@@ -1,6 +1,8 @@
 use crate::script_functions::{
-    FUNCTIONS_CALLED_ONLY_FROM_LOCAL_STATE, MODAL_UI_FUNCTIONS, SCRIPT_FUNCTIONS,
+    FUNCTIONS_CALLED_ONLY_FROM_LOCAL_STATE, MODAL_UI_FUNCTIONS, MUSIC_ONLY_FUNCTIONS,
+    SCRIPT_FUNCTIONS,
 };
+use crate::shared_sequence::is_led_by_the_host;
 use crate::story_calls::is_event_id_name;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,10 +28,11 @@ pub fn script_function(phase: &str, name: &str) -> Option<ScriptFunction> {
 
 /// A function the shared function relay carries: one of the phase's shared functions, or an
 /// event callback outside the table (the sender relays those only when its engine popped them,
-/// e.g. `EID_0200_a0037g_EnemyCount`). Such a callback is taken as a plain step with no scene.
+/// e.g. `EID_0200_a0037g_EnemyCount`), or a step only the host's guide reaches. Such a callback
+/// is taken as a plain step with no scene.
 pub fn relayed_function(phase: &str, name: &str) -> Option<ScriptFunction> {
     script_function(phase, name).or_else(|| {
-        is_event_id_name(name).then_some(ScriptFunction {
+        (is_event_id_name(name) || is_led_by_the_host(phase, name)).then_some(ScriptFunction {
             starts_scene: false,
             shows_modal_ui: false,
             callees: &[],
@@ -50,4 +53,10 @@ pub fn is_callee_of(phase: &str, callee: &str, caller: &str) -> bool {
 pub fn shows_modal_ui(phase: &str, name: &str) -> bool {
     script_function(phase, name).is_some_and(|function| function.shows_modal_ui)
         || MODAL_UI_FUNCTIONS.binary_search(&(phase, name)).is_ok()
+}
+
+/// A function whose every native is music, a no-op print, a flag read or a callback removal
+/// (docs `scripts/music_only_functions.py`): it can never load, clear or release a scene.
+pub fn is_music_only(phase: &str, name: &str) -> bool {
+    MUSIC_ONLY_FUNCTIONS.binary_search(&(phase, name)).is_ok()
 }

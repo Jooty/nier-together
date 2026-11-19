@@ -1,46 +1,69 @@
+mod actor_cue;
 mod anchor_offset;
+mod attached_cue_effects;
 mod capture;
 mod falloff;
 mod hit_spark;
 mod instance;
+mod lasting_cue_sounds;
 mod live_effects;
 mod look;
-mod probe_log;
+mod name_tally;
 mod push;
-mod rate_window;
 mod sent_effects;
 mod source;
+mod stone_dummy;
 mod voice_character;
 mod world_trail;
 
+pub use actor_cue::{
+    ActorCueCall, ActorCueMoment, CopyForCue, FirstCues, MAX_ACTOR_CUES_PER_SECOND,
+    MAX_FIRST_ACTOR_CUES_LOGGED, STONE_HANDLERS, actor_cue_goes_to_enemy_sync, actor_cue_is_sent,
+    actor_cue_replay_target, actor_cue_text, actor_holds_stone, by_id_sound_cue,
+    sound_caller_is_one_shot, stack_holds_ai_step, state_machine_holds_stone, stone_handler_rva,
+    stone_state_machine_pointer_offset, stone_state_vtable_rva,
+};
 pub use anchor_offset::{match_anchor_offset, read_anchor_offset};
+pub use attached_cue_effects::{
+    AttachedCueEffect, AttachedCueEffects, MAX_ATTACHED_CUE_EFFECTS,
+    REMOVE_ATTACHED_ANY_BONE_AT_OR_BELOW,
+};
 pub use capture::{
     CapturedEffect, EffectCall, WORLD_EFFECT_SENT_PREFIX, build_effect_call, read_effect,
     read_sound, read_world_effect,
 };
 pub use falloff::sound_gain;
-pub use hit_spark::{HitSparkNames, hit_spark_log_line, spawn_is_sent};
+pub use hit_spark::{
+    HitSparkNames, hit_spark_log_line, spawn_is_drawn_by_shot_sync, spawn_is_sent,
+};
 pub use instance::{
     effect_instance_address, effect_is_finished, finish_effect, read_effect_transform,
+};
+pub use lasting_cue_sounds::{
+    MAX_LASTING_CUE_SOUNDS, ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds,
 };
 pub use live_effects::LiveEffects;
 pub use look::{
     EFFECT_LOOK_RETRY_FRAMES, LookAttempt, OriginNames, look_attempt, look_is_set, look_log_line,
     look_needs_write, read_effect_look, write_effect_look,
 };
-pub use probe_log::{PROBE_LOG_LINES_PER_WINDOW, PROBE_LOG_WINDOW_MS, ProbeLogLimiter};
+pub use name_tally::{EffectNameTally, NameCount, name_counts_text, world_effects_shown_line};
 pub use push::{
-    AFTER_OWN_HIT_WINDOW_MS, DROP_LOG_INTERVAL_MS, DropLogLimiter, FLUSHER_HIT_RADIUS,
-    MAX_RECENT_PUSHED_HANDLES, PendingAdmission, PushCaller, RecentHandles, admit_pending,
-    census_log_line, classify_push_caller, push_is_sent, read_request_id, read_request_name,
-    read_request_transform, within_after_hit_window, within_hit_radius,
+    AFTER_OWN_HIT_WINDOW_MS, DROP_LOG_INTERVAL_MS, FLUSHER_HIT_RADIUS, MAX_RECENT_PUSHED_HANDLES,
+    PendingAdmission, PushCaller, RecentHandles, admit_pending, census_log_line,
+    classify_push_caller, push_is_sent, read_request_id, read_request_name, read_request_transform,
+    within_after_hit_window, within_hit_radius,
 };
-pub use rate_window::RateWindow;
 pub use sent_effects::SentEffects;
 pub use source::{
     EffectSource, POWER_ACTOR_CLASSES, PowerActorClass, SoundRoute, classify_effect_source,
     is_normal_bullet, local_book_actor, local_has_book, power_actor_class, power_actor_owner,
     projectile_kind, projectile_owner, read_actor_position,
+};
+pub use stone_dummy::{
+    HostStatueWatch, StoneCopyStep, StoneDummy, StoneStateView, actor_of_stone_dummy_handle,
+    hold_off_off_camera_end, host_statue_broke, host_statue_watch, read_stone_state,
+    stone_copy_step, stone_dummy_handle, stone_state_of,
 };
 pub use voice_character::{
     FirstTimeNames, VOICE_SWITCH_GROUP, VoiceCharacterSchedule, read_character_state,
@@ -58,5 +81,6 @@ pub const MAX_LASTING_SENT_EFFECTS: usize = 256;
 pub const PUPPET_EFFECT_MAX_LIFETIME_MS: u64 = 8000;
 pub const MAX_EFFECT_EVENTS_PER_SECOND: u32 = 40;
 pub const MAX_PUPPET_EFFECTS_PER_TICK: usize = 8;
+pub const MAX_EFFECT_NAMES_IN_A_SUMMARY: usize = 8;
 pub const EFFECT_LOG_LINES_PER_WINDOW: u32 = 12;
 pub const EFFECT_LOG_WINDOW_MS: u64 = 5000;

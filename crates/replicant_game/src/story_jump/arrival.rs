@@ -2,8 +2,24 @@ use replicant_proto::StoryJumpPoint;
 
 use crate::story_jump::LEVEL_CHECK_SETTLE_MS;
 
+pub const PLACEMENT_READ_BACK_AFTER_MS: u64 = 1000;
+pub const ARRIVED_WITHIN_UNITS: f32 = 1.5;
+pub const PLACEMENTS_REPEATED_AFTER_AN_ENTRY_SCRIPT: u8 = 1;
+pub const ENTRY_SCRIPT_WAIT_GIVE_UP_MS: u64 = 30_000;
 const ARENA_HOST_POSITION: [f32; 3] = [-2.2, 146.8, -8.6];
 const ARENA_GUEST_SIDE_OFFSET_UNITS: f32 = 2.0;
+const JUNK_HEAP_FLOOR_B2_HOST_POSITION: [f32; 3] = [-76.5, 4.9, -124.0];
+const JUNK_HEAP_FLOOR_B2_GUEST_X_OFFSET_UNITS: f32 = -0.6;
+const AFTER_BOSS_FIGHT_6_HOST_POSITION: [f32; 3] = [26.25, 30.61, 107.67];
+const AFTER_BOSS_FIGHT_6_GUEST_X_OFFSET_UNITS: f32 = 1.5;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadBackStep {
+    Arrived,
+    WaitForControl,
+    PlaceAgain,
+    DidNotArrive,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ArrivalSpot {
@@ -14,12 +30,30 @@ pub struct ArrivalSpot {
 
 pub fn arrival_spot(point: StoryJumpPoint, host: bool) -> Option<ArrivalSpot> {
     match point {
-        StoryJumpPoint::AtShrineBoss => {
+        StoryJumpPoint::ShrineBoss2 => {
             let [x, y, z] = ARENA_HOST_POSITION;
             let side = if host {
                 0.0
             } else {
                 ARENA_GUEST_SIDE_OFFSET_UNITS
+            };
+            Some(ArrivalSpot { x: x + side, y, z })
+        }
+        StoryJumpPoint::JunkHeapB2 => {
+            let [x, y, z] = JUNK_HEAP_FLOOR_B2_HOST_POSITION;
+            let side = if host {
+                0.0
+            } else {
+                JUNK_HEAP_FLOOR_B2_GUEST_X_OFFSET_UNITS
+            };
+            Some(ArrivalSpot { x: x + side, y, z })
+        }
+        StoryJumpPoint::AerieAfterBoss6 => {
+            let [x, y, z] = AFTER_BOSS_FIGHT_6_HOST_POSITION;
+            let side = if host {
+                0.0
+            } else {
+                AFTER_BOSS_FIGHT_6_GUEST_X_OFFSET_UNITS
             };
             Some(ArrivalSpot { x: x + side, y, z })
         }
@@ -36,4 +70,23 @@ pub fn arrival_is_due(
 ) -> bool {
     let phase_changed = phase_at_apply != phase_now || field_was_left;
     phase_changed && field_ready && ms_since_phase_change >= LEVEL_CHECK_SETTLE_MS
+}
+
+pub fn read_back_step(
+    distance_units: f32,
+    free_to_act: bool,
+    placements_left: u8,
+    ms_since_placed: u64,
+) -> ReadBackStep {
+    if distance_units <= ARRIVED_WITHIN_UNITS {
+        return ReadBackStep::Arrived;
+    }
+    if placements_left == 0 || ms_since_placed > ENTRY_SCRIPT_WAIT_GIVE_UP_MS {
+        return ReadBackStep::DidNotArrive;
+    }
+    if free_to_act {
+        ReadBackStep::PlaceAgain
+    } else {
+        ReadBackStep::WaitForControl
+    }
 }

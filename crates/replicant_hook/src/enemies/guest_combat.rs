@@ -1,10 +1,15 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use replicant_game::GameMemory;
+use replicant_game::effects::{
+    StoneCopyStep, hold_off_off_camera_end, read_stone_state, stone_copy_step,
+};
 use replicant_game::enemies::{
-    CopyStance, EnemySighting, ListDiff, LocalKeep, MirroredEnemy, RemovalCause,
-    SMALLEST_OWN_STEP_WORTH_LOGGING, ghost_is_same_spawn, holds_copy, host_removal_destroys_copy,
-    plan_ghosts, sighting_text,
+    CopyStance, DAMAGE_STATE_NAME, EnemySighting, FIGHT_GUEST_ONLY_ENEMY_GRACE_MS,
+    HOST_HIT_STAGGER_CHECK_WINDOW_MS, HitReaction, HostHas, HostListView, ListDiff, LocalKeep,
+    MirroredEnemy, RemovalCause, SMALLEST_OWN_STEP_WORTH_LOGGING, StaggerVerdict,
+    ghost_is_same_spawn, holds_copy, host_removal_destroys_copy, plan_ghosts,
+    player_reaction_motion, read_player_state_name, sighting_text,
 };
 use replicant_game::npcs::villager_runs_own_event;
 use replicant_game::offsets::{
@@ -12,16 +17,19 @@ use replicant_game::offsets::{
     PLAYER_MESSAGE_DIRECT_HIT, PLAYER_MESSAGE_ENEMY_KILLED,
 };
 use replicant_game::puppet::actor_is_live;
-use replicant_proto::{EnemyGoneReason, EnemyId, EnemyKilled, Message, MotionState};
+use replicant_proto::{
+    ActorCue, ActorCueKind, EnemyGoneReason, EnemyId, EnemyKilled, Message, MotionState,
+};
 
 use crate::boss_messages::is_boss;
 use crate::diagnostics::log_line;
-use crate::enemies::combat::{CombatState, GhostCopy};
-use crate::enemies::combat_view::{CombatView, as_remote, publish_view};
+use crate::enemies::combat::{CombatState, GhostCopy, StonedCopy};
+use crate::enemies::combat_view::{CombatView, as_remote, as_remote_with_reaction, publish_view};
 use crate::enemies::drop_hook::drop_at_actor;
 use crate::enemies::hold_hook::{
     release_held, set_ghosts, set_held, set_stopped_dead, take_own_steps_cut,
 };
+use crate::enemies::stone;
 use crate::enemies::sync::LocalView;
 use crate::enemies::word_drop_hook::word_drop_at_actor;
 use crate::enemies::{COPY_KILL_ATTEMPTS, EnemySyncRole, PENDING_KILL_MAX_AGE_MS, enemy_id_text};
@@ -42,6 +50,16 @@ pub(super) fn receive(combat: &mut CombatState, now_ms: u64, message: &Message) 
         Message::EnemyCreation(creation) => {
             combat.creations.insert(creation.id, creation.clone());
         }
+        Message::ActorCue(ActorCue {
+            actor,
+            kind: ActorCueKind::TurnedToStone(turn),
+            ..
+        }) => combat.pending_stones.push((*actor, *turn, now_ms)),
+        Message::ActorCue(ActorCue {
+            actor,
+            kind: ActorCueKind::StoneBroken,
+            ..
+        }) => combat.pending_stone_breaks.push(*actor),
         Message::EnemyDrop(drop) => combat.pending_drops.push(*drop),
         Message::EnemyWordDrop(drop) => combat.pending_word_drops.push(*drop),
         Message::EnemyBodyGone(gone) => combat.pending_body_gone.push((gone.phase, gone.id)),
@@ -70,7 +88,7 @@ pub(super) fn step(
     seen: &[(EnemyId, EnemySighting)],
     samples: &BTreeMap<EnemyId, MirroredEnemy>,
     authority: bool,
-    host_list_complete: bool,
+    host_view: &HostListView,
 ) {
     if combat.phase.is_some_and(|phase| phase != local.phase) {
         show_hidden_copies(combat, &mut InProcessMemory::new(local.build));
@@ -92,6 +110,7 @@ pub(super) fn step(
         puppet,
         aggro_targets: BTreeMap::new(),
         enemy_damage_bonus_percent: 0,
+        bullet_target: None,
     });
     let mut memory = InProcessMemory::new(local.build);
     let mut held = HashSet::new();
@@ -119,17 +138,11 @@ pub(super) fn step(
     }
     combat.counts.held = held.len();
     set_held(held);
-    hold_guest_only_copies(
-        combat,
-        local,
-        &mut memory,
-        now_ms,
-        seen,
-        samples,
-        host_list_complete,
-    );
+    hold_guest_only_copies(combat, local, &mut memory, now_ms, seen, samples, host_view);
     apply_player_hits(combat, local, now_ms, local_player);
+    apply_stones(combat, local, &mut memory, now_ms, local_player);
     apply_kills(combat, local, &mut memory, now_ms, local_player, puppet);
+    step_stoned_copies(combat, local, &mut memory);
     apply_drops(combat, local, local_player);
     apply_word_drops(combat, local, local_player);
     apply_removals(combat, local);
@@ -226,17 +239,18 @@ fn hold_guest_only_copies(
     now_ms: u64,
     seen: &[(EnemyId, EnemySighting)],
     samples: &BTreeMap<EnemyId, MirroredEnemy>,
-    host_list_complete: bool,
+    host_view: &HostListView,
 ) {
     let pending: HashSet<EnemyId> = combat
         .pending_kills
         .iter()
         .map(|(killed, _)| killed.id)
         .collect();
-    let candidates: Vec<(EnemyId, u64)> = if host_list_complete {
+    let candidates: Vec<(EnemyId, u64)> = if host_view.is_known() {
         seen.iter()
             .filter(|(id, sighting)| {
                 !samples.contains_key(id)
+                    && host_view.host_has(*id) == HostHas::No
                     && !combat.ended_ids.contains(id)
                     && !pending.contains(id)
                     && !combat.ghosts.contains_key(&sighting.actor)
@@ -249,10 +263,22 @@ fn hold_guest_only_copies(
         Vec::new()
     };
     let actors: Vec<u64> = candidates.iter().map(|(_, actor)| *actor).collect();
-    for actor in combat.guest_only.expired(now_ms, &actors) {
+    let inside_fight_window = crate::fight_sync::covers_phase(local.phase);
+    let expired = if inside_fight_window {
+        combat
+            .guest_only
+            .expired_after(now_ms, &actors, FIGHT_GUEST_ONLY_ENEMY_GRACE_MS)
+    } else {
+        combat.guest_only.expired(now_ms, &actors)
+    };
+    for actor in expired {
         let Some((id, _)) = candidates.iter().find(|(_, other)| *other == actor) else {
             continue;
         };
+        if inside_fight_window {
+            remove_guest_only_fight_enemy(combat, local, samples.len(), actor, *id);
+            continue;
+        }
         let serial = memory
             .read_i32(actor + ACTOR_SPAWN_SERIAL_OFFSET)
             .unwrap_or_default();
@@ -270,6 +296,26 @@ fn hold_guest_only_copies(
     }
     settle_ghosts(combat, local, memory, seen, samples);
     set_ghosts(combat.ghosts.keys().copied().collect());
+}
+
+fn remove_guest_only_fight_enemy(
+    combat: &mut CombatState,
+    local: &LocalView<'_>,
+    host_count: usize,
+    actor: u64,
+    id: EnemyId,
+) {
+    // The host's fight stream runs the fight here, so no script of this game waits on it.
+    release_held(actor);
+    combat.killed_copies.insert(actor);
+    combat
+        .removal_causes
+        .push((id, RemovalCause::GuestOnlyInFightWindow));
+    local.calls.destroy(actor);
+    log_line(&format!(
+        "combat: {} exists only here inside a fight window (the host's list of {host_count} enemies lacks it); removed (no kill, no credit, no drop)",
+        enemy_id_text(id)
+    ));
 }
 
 fn settle_ghosts(
@@ -396,6 +442,13 @@ fn apply_player_hits(
 ) {
     let hits = std::mem::take(&mut combat.pending_player_hits);
     let memory = local.game.memory();
+    if local_player != 0
+        && let Some(verdict) = combat
+            .stagger_watch
+            .observe(read_player_state_name(memory, local_player), now_ms)
+    {
+        log_line(&stagger_line(&verdict));
+    }
     for hit in hits {
         if hit.phase != local.phase || local_player == 0 {
             log_line(&format!(
@@ -426,7 +479,13 @@ fn apply_player_hits(
             .actor_of(memory, hit.attacker)
             .unwrap_or(local_player);
         let before = local.game.health().unwrap_or(-1);
-        let sent = as_remote(|| {
+        let state_before = read_player_state_name(memory, local_player);
+        let reaction = HitReaction {
+            flags: hit.flags,
+            push: hit.push,
+            direction: hit.direction,
+        };
+        let sent = as_remote_with_reaction(reaction, || {
             local.calls.send_actor_message(
                 memory,
                 local_player,
@@ -438,13 +497,23 @@ fn apply_player_hits(
         let after = local.game.health().unwrap_or(-1);
         if sent {
             combat.counts.player_hits_applied += 1;
+            combat.stagger_watch.hit_applied(
+                &enemy_id_text(hit.attacker),
+                reaction.kind(),
+                hit.push,
+                state_before == DAMAGE_STATE_NAME,
+                now_ms,
+            );
         }
         log_line(&format!(
-            "combat: {} hit you at the host: hp {} sent, flags {:#x}, kind {}, from {}, your hp {before} -> {after}",
+            "combat: {} hit you at the host: hp {} sent, flags {:#x}, kind {}, reaction kind {} ({}) with push {:.2}, from {}, your body was in {state_before}, your hp {before} -> {after}",
             enemy_id_text(hit.attacker),
             hit.hp_damage,
             hit.flags,
             hit.attack_kind,
+            reaction.kind(),
+            player_reaction_motion(reaction.kind()),
+            hit.push,
             if sender == local_player {
                 "no local copy"
             } else {
@@ -492,6 +561,158 @@ fn apply_kills(
             puppet,
         );
     }
+}
+
+fn apply_stones(
+    combat: &mut CombatState,
+    local: &LocalView<'_>,
+    memory: &mut InProcessMemory,
+    now_ms: u64,
+    local_player: u64,
+) {
+    for (id, turn, received_at) in std::mem::take(&mut combat.pending_stones) {
+        if combat.ended_ids.contains(&id) {
+            log_line(&format!(
+                "stone: host turned {} to stone, but your copy had already died",
+                enemy_id_text(id)
+            ));
+            continue;
+        }
+        let Some(copy) = combat.actor_of(memory, id) else {
+            if now_ms.saturating_sub(received_at) < PENDING_KILL_MAX_AGE_MS {
+                combat.pending_stones.push((id, turn, received_at));
+            } else {
+                log_line(&format!(
+                    "stone: host turned {} to stone, no copy here",
+                    enemy_id_text(id)
+                ));
+            }
+            continue;
+        };
+        let turned = stone::turn_copy(local.build, copy, turn);
+        log_line(&format!(
+            "stone: host turned {} to stone ({:?} handler); your copy turned to stone {turned}{}",
+            enemy_id_text(id),
+            turn.handler,
+            if turned {
+                ", it now runs its own stone death"
+            } else {
+                ", the host's kill will end it as a normal death"
+            }
+        ));
+        if !turned {
+            continue;
+        }
+        // The copy's own stone state ends it, so the host's later kill must not hit it.
+        let paid = local_player != 0
+            && local.calls.send_actor_message(
+                memory,
+                local_player,
+                PLAYER_MESSAGE_ENEMY_KILLED,
+                copy,
+                0,
+            );
+        combat.killed_copies.insert(copy);
+        release_held(copy);
+        local.calls.set_survive_at_one_hp(memory, copy, false);
+        combat.counts.kills_applied += 1;
+        combat.ended_ids.insert(id);
+        combat.removal_causes.push((id, RemovalCause::KilledByHost));
+        let serial = memory
+            .read_i32(copy + ACTOR_SPAWN_SERIAL_OFFSET)
+            .unwrap_or_default();
+        combat.dying_bodies.insert(copy, (id, now_ms, serial));
+        combat.stoned_copies.insert(
+            id,
+            StonedCopy {
+                copy,
+                serial,
+                handler: turn.handler,
+                host_broke: false,
+                held_dummy: None,
+            },
+        );
+        if !paid {
+            log_line(&format!(
+                "stone: no kill credit for {} (no local player)",
+                enemy_id_text(id)
+            ));
+        }
+    }
+}
+
+fn step_stoned_copies(
+    combat: &mut CombatState,
+    local: &LocalView<'_>,
+    memory: &mut InProcessMemory,
+) {
+    for id in std::mem::take(&mut combat.pending_stone_breaks) {
+        match combat.stoned_copies.get_mut(&id) {
+            Some(stoned) => {
+                stoned.host_broke = true;
+                log_line(&format!(
+                    "stone: host's statue of {} broke; your copy breaks once its dummy is destroyed",
+                    enemy_id_text(id)
+                ));
+            }
+            None => log_line(&format!(
+                "stone: host's statue of {} broke, no stoned copy here",
+                enemy_id_text(id)
+            )),
+        }
+    }
+    let host_gone = &combat.host_gone_bodies;
+    combat.stoned_copies.retain(|id, stoned| {
+        let still_it = actor_is_live(memory, stoned.copy).unwrap_or(false)
+            && memory
+                .read_i32(stoned.copy + ACTOR_SPAWN_SERIAL_OFFSET)
+                .is_ok_and(|serial| serial == stoned.serial);
+        if !still_it {
+            return false;
+        }
+        if host_gone.contains(id) && !stoned.host_broke {
+            log_line(&format!(
+                "stone: host's statue of {} ended without a break; your copy is left to its own stone state",
+                enemy_id_text(*id)
+            ));
+            return false;
+        }
+        let view = read_stone_state(memory, stoned.copy, stoned.handler);
+        match stone_copy_step(view, stoned.host_broke) {
+            StoneCopyStep::WaitForDummy => true,
+            StoneCopyStep::HoldUntilHostBreaks { state, dummy } => {
+                hold_off_off_camera_end(memory, state);
+                if stoned.held_dummy != Some(dummy) {
+                    stoned.held_dummy = Some(dummy);
+                    log_line(&format!(
+                        "stone: your copy of {}'s damage dummy {dummy:#x} stands; its off-camera end is held until the host's statue breaks, your own hits on it are not kept off",
+                        enemy_id_text(*id)
+                    ));
+                }
+                true
+            }
+            StoneCopyStep::BreakNow { dummy } => {
+                local.calls.destroy(dummy);
+                log_line(&format!(
+                    "stone: your copy of {}'s damage dummy {dummy:#x} destroyed, so it breaks now as the host's did",
+                    enemy_id_text(*id)
+                ));
+                false
+            }
+            StoneCopyStep::Over => {
+                log_line(&format!(
+                    "stone: your copy of {} left its stone state ({})",
+                    enemy_id_text(*id),
+                    if view.is_some() {
+                        "its dummy went before the host's statue broke"
+                    } else {
+                        "the state ended"
+                    }
+                ));
+                false
+            }
+        }
+    });
 }
 
 fn kill_copy(
@@ -677,7 +898,7 @@ pub(super) fn list_diff(
     combat: &CombatState,
     seen: &[(EnemyId, EnemySighting)],
     samples: &BTreeMap<EnemyId, MirroredEnemy>,
-    host_list_complete: bool,
+    host_view: &HostListView,
 ) -> ListDiff {
     let here: HashSet<EnemyId> = seen.iter().map(|(id, _)| *id).collect();
     let pending: HashSet<EnemyId> = combat
@@ -701,8 +922,10 @@ pub(super) fn list_diff(
                     LocalKeep::WaitingHostKill
                 } else if combat.ended_ids.contains(id) {
                     LocalKeep::HostEnded
-                } else if !host_list_complete {
+                } else if !host_view.is_known() {
                     LocalKeep::HostListIncomplete
+                } else if host_view.host_has(*id) == HostHas::Yes {
+                    LocalKeep::OutsideHostRound
                 } else {
                     LocalKeep::WaitingGrace
                 };
@@ -719,4 +942,23 @@ fn describe(seen: &[(EnemyId, EnemySighting)], actor: u64, id: EnemyId) -> Strin
             || enemy_id_text(id),
             |(id, sighting)| sighting_text(*id, sighting),
         )
+}
+
+fn stagger_line(verdict: &StaggerVerdict) -> String {
+    match verdict {
+        StaggerVerdict::Entered { check, after_ms } => format!(
+            "combat: stagger: your body entered {DAMAGE_STATE_NAME} {after_ms} ms after {}'s hit at the host (reaction kind {}, {}, push {:.2})",
+            check.attacker,
+            check.kind,
+            player_reaction_motion(check.kind),
+            check.push
+        ),
+        StaggerVerdict::NotEntered { check, last_state } => format!(
+            "combat: stagger: your body did not enter {DAMAGE_STATE_NAME} within {HOST_HIT_STAGGER_CHECK_WINDOW_MS} ms of {}'s hit at the host (reaction kind {}, {}, push {:.2}), it is in {last_state}: the action it was in did not take that reaction",
+            check.attacker,
+            check.kind,
+            player_reaction_motion(check.kind),
+            check.push
+        ),
+    }
 }

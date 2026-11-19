@@ -1,26 +1,37 @@
+mod body_speed_rate;
+mod feet;
+mod feet_drive;
+mod host_pace;
 mod input;
 mod line;
 mod names;
+mod pace_feedback;
 mod rates_dump;
 mod sample;
 mod spec_dump;
 mod speed_cap;
+mod speed_cap_report;
 mod trigger;
 mod window;
 
+pub use body_speed_rate::{body_speed_rate_address, read_body_speed_rate, write_body_speed_rate};
+pub use feet::{FeetReading, FeetSecond, format_feet_second, read_feet};
+pub use feet_drive::{
+    FeetDrive, FeetDriveReading, FeetDriveStep, FeetDriveTally, house_pace_in_play,
+};
+pub use host_pace::HostPaceWatch;
 pub use input::{input_block_getter, read_move_axis, read_move_keys};
 pub use line::{MoveLineContext, format_move_line};
 pub use names::{action_set_for_seed, state_name_for_rva};
+pub use pace_feedback::{PaceFeedback, starting_body_speed_rate};
 pub use rates_dump::{RatesDump, format_rates_dump, read_rates_dump};
-pub use sample::{MoveSample, RateChange, read_move_sample};
+pub use sample::{MoveSample, RateChange, read_move_sample, read_state_rva};
 pub use spec_dump::{
     SPEC_DUMP_SECOND_DUMP_DELAY_MS, SpecDumpMoment, SpecDumpSchedule, SpecTable, format_spec_dump,
     read_spec_table, role_label,
 };
-pub use speed_cap::{
-    SpeedCapLift, SpeedCapLog, SpeedCapStep, format_speed_cap_log, read_speed_cap,
-    should_lift_speed_cap, speed_cap_address, write_lifted_speed_cap,
-};
+pub use speed_cap::{is_house_speed_cap_value, read_speed_cap, speed_cap_address};
+pub use speed_cap_report::{SpeedCapSecond, SpeedCapWatch, format_speed_cap_second};
 pub use trigger::{MoveLogReason, MoveLogTrigger};
 pub use window::{MoveLogDue, MoveLogWindow};
 
@@ -40,8 +51,30 @@ pub const SPEC_TABLE_WORDS_PER_LINE: usize = 8;
 pub const SPEED_CAP_RATE_ID: usize = 5;
 pub const SPEED_CAP_RATE_CHANNEL: usize = 2;
 pub const SPEED_CAP_THRESHOLD: f32 = 0.05;
-pub const SPEED_CAP_LIFTED_VALUE: f32 = 1.0;
-pub const SPEED_CAP_GIVE_UP_AFTER_RESETS: u32 = 20;
+pub const SPEED_CAP_HOUSE_VALUE_MIN: f32 = 0.005;
+pub const SPEED_CAP_REPORT_WINDOW_AFTER_LOW_MS: u64 = 1_000;
+pub const RUN_LOOP_MOTION_NAME: &str = "KAINE015_run_lp";
+pub const RUN_LOOP_ROOT_TRAVEL_PER_SECOND_AT_FULL_SPEED: f32 = 6.0;
+pub const FALLBACK_INDOOR_PACE_PER_SECOND: f32 = 2.9;
+pub const HOST_PACE_MEASURING_WINDOW_SECONDS: f64 = 0.5;
+pub const HOST_PACE_LEAST_MOVING_PER_SECOND: f32 = 2.0;
+pub const HOST_PACE_LEAST_PER_SECOND: f32 = 2.5;
+pub const HOST_PACE_LARGEST_PER_SECOND: f32 = 4.5;
+pub const HOST_PACE_AVERAGE_SAMPLE_WEIGHT: f32 = 0.3;
+pub const INDOOR_FEET_MOVING_GROUND_SPEED: f32 = 0.02;
+pub const INDOOR_FEET_PLAY_BLEND_SECONDS: f32 = 0.2;
+pub const HOUSE_PACE_TICKS_BEFORE_THE_FEET_DRIVE: u32 = 10;
+pub const BODY_LAYER_MOTION_SPEED_RATE_ID: usize = 1;
+pub const BODY_SPEED_RATE_CHANNEL_THE_FEET_DRIVE_OWNS: usize = 0;
+pub const GAMES_OWN_BODY_SPEED_RATE: f32 = 1.0;
+pub const BODY_SPEED_RATE_LEAST: f32 = 0.25;
+pub const BODY_SPEED_RATE_MOST: f32 = 1.0;
+pub const BODY_SPEED_RATE_WRITE_TOLERANCE: f32 = 0.005;
+pub const PACE_AVERAGE_SAMPLE_WEIGHT: f32 = 0.05;
+pub const PACE_TICKS_PER_RATE_STEP: u32 = 30;
+pub const PACE_LARGEST_STEP_OF_THE_RATE: f32 = 1.25;
+pub const PACE_BLOCKED_BELOW_SHARE_OF_THE_AIM: f32 = 0.3;
+pub const STATE_ACTION_MOVE_RVA: u32 = 0xC9_3E98;
 pub const STATE_161F0_OFFSET: u64 = 0x1_61F0;
 pub const APPLIED_STEP_OFFSET: u64 = 0x1A0;
 pub const DISPLACEMENT_PENDING_FLAG_OFFSET: u64 = 0x1D0;

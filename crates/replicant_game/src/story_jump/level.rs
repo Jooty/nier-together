@@ -1,7 +1,3 @@
-use replicant_proto::StoryJumpPoint;
-
-use crate::story_jump::steps::{JumpStep, loadout_steps};
-
 pub const LEVEL_CHECK_SETTLE_MS: u64 = 3000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,20 +23,10 @@ impl LevelWatcher {
     }
 }
 
-pub fn loadout_player_level(point: StoryJumpPoint) -> Option<i32> {
-    loadout_steps(point)
-        .into_iter()
-        .rev()
-        .find_map(|step| match step {
-            JumpStep::SetPlayerLevel { level } => Some(level),
-            _ => None,
-        })
-}
-
 pub fn check_level(expected: i32, actual: Option<i32>) -> LevelCheck {
     match actual {
         None => LevelCheck::Unreadable,
-        Some(actual) if actual == expected => LevelCheck::Matches,
+        Some(actual) if actual >= expected => LevelCheck::Matches,
         Some(actual) => LevelCheck::ApplyAgain { expected, actual },
     }
 }

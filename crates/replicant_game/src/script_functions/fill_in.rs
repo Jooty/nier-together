@@ -1,22 +1,18 @@
 use std::collections::VecDeque;
 
-use crate::script_functions::{FILL_IN_GRACE_MS, is_called_only_from_local_state};
+use crate::script_functions::{
+    FILL_IN_GRACE_MS, is_called_only_from_local_state, is_started_by_the_hosts_own_talk,
+};
+use crate::shared_sequence::is_led_by_the_host;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FillInReach {
     /// This game's own engine or map init runs its own copy, so the partner's copy waits for it.
     OwnCopyExpected,
-    /// Called only from functions that hold local state (a hit counter, a life check): this game
-    /// may never run it, so the partner's copy runs as soon as its turn comes.
+    /// Called only from functions that hold local state (a hit counter, a life check), a step
+    /// only the host's guide reaches, or one the host's own talk starts: this game may never run
+    /// it, so the partner's copy runs as soon as its turn comes.
     CannotReachHere,
-}
-
-pub fn fill_in_reach(phase_label: &str, name: &str) -> FillInReach {
-    if is_called_only_from_local_state(phase_label, name) {
-        FillInReach::CannotReachHere
-    } else {
-        FillInReach::OwnCopyExpected
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +23,20 @@ pub struct FillInCopy {
     pub arrived_ms: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FillInArrival {
+    Waiting { position: usize, due_in_ms: u64 },
+    AlreadyWaiting,
+}
+
+/// The partner's copies of shared story steps outside a fight window: each runs here only when
+/// this game has not run the step itself within `FILL_IN_GRACE_MS`, or at once when this game
+/// cannot reach the step. Copies go in arrival order, each once the relay call gate is clear.
+#[derive(Debug, Clone)]
+pub struct FillInRelay {
+    waiting: VecDeque<FillInCopy>,
+}
+
 impl FillInCopy {
     pub const fn due_ms(&self) -> u64 {
         match self.reach {
@@ -34,22 +44,6 @@ impl FillInCopy {
             FillInReach::CannotReachHere => self.arrived_ms,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FillInArrival {
-    Waiting { position: usize, due_in_ms: u64 },
-    AlreadyWaiting,
-}
-
-/// The partner's copies of shared story steps outside a fight window. This game runs its own
-/// copy of each step; the partner's copy runs here only when this game has not run the step
-/// itself within `FILL_IN_GRACE_MS`, or at once when this game cannot reach the step on its own.
-/// Copies go in arrival order, each only once the shared relay call gate is clear, so a copy
-/// that is dropped when its turn comes never holds up the next one.
-#[derive(Debug, Clone)]
-pub struct FillInRelay {
-    waiting: VecDeque<FillInCopy>,
 }
 
 impl Default for FillInRelay {
@@ -129,5 +123,16 @@ impl FillInRelay {
         self.waiting
             .iter()
             .position(|copy| copy.phase == phase && copy.name == name)
+    }
+}
+
+pub fn fill_in_reach(phase_label: &str, name: &str) -> FillInReach {
+    if is_called_only_from_local_state(phase_label, name)
+        || is_led_by_the_host(phase_label, name)
+        || is_started_by_the_hosts_own_talk(phase_label, name)
+    {
+        FillInReach::CannotReachHere
+    } else {
+        FillInReach::OwnCopyExpected
     }
 }

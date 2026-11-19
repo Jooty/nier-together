@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
 
 use replicant_game::coop_pause::{
-    MenuTaint, PauseView, effective_control_mask, mask_without_menu, ui_prompt_open,
+    MenuTaint, PauseView, effective_control_mask, mask_for_the_free_to_act_test,
+    mask_with_player_input_held, mask_without_menu, ui_prompt_open,
 };
 use replicant_game::marker::{
     CONTROL_MASK_FIRST_RVA, CONTROL_MASK_SLOT_COUNT, EVENT_SCENE_BYTE_RVA, UI_DIALOG_STATE_RVA,
@@ -18,11 +19,12 @@ use replicant_game::{GameMemory, Replicant};
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::game_hooks::menu_free_calls::menu_free_call_active;
+use crate::game_hooks::menu_open_test;
 use crate::game_hooks::radio_sites;
 use crate::game_hooks::stuck_menu_mask;
 use crate::memory::InProcessMemory;
 use crate::paused_hits::paused_players_can_be_hit;
-use nc_hook::detour::hook_address;
+use nt_hook::detour::hook_address;
 
 static ORIGINAL_GET_CONTROL_MASK: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static MODULE_BASE: AtomicU64 = AtomicU64::new(0);
@@ -71,7 +73,7 @@ pub fn update_menu_no_pause(build: &VerifiedBuild, partner_connected: bool) {
             build,
         ))))
         .is_in_play();
-        stuck_menu_mask::watch(&memory, scenes, ui_dialog_state, in_play);
+        stuck_menu_mask::watch(build, &memory, scenes, ui_dialog_state, in_play);
     }
     let signals = MenuSignals {
         scenes,
@@ -147,7 +149,14 @@ extern "system" fn get_control_mask_detour(game_state: *mut c_void) -> u32 {
     }
     // SAFETY: the trampoline continues into the original getter, which has this exact signature.
     let mask = unsafe { core::mem::transmute::<*mut c_void, GetControlMask>(original)(game_state) };
-    panic::catch_unwind(|| settle(mask)).unwrap_or(mask)
+    let settled = panic::catch_unwind(|| settle(mask)).unwrap_or(mask);
+    let watching = crate::story_watch::this_game_is_watching();
+    let inside_test = menu_open_test::inside_free_to_act_test();
+    if watching && inside_test {
+        menu_open_test::note_held_bit_left_out();
+    }
+    let held = mask_with_player_input_held(settled, crate::rule_rooms::input_blocked(), false);
+    mask_for_the_free_to_act_test(held, watching, inside_test)
 }
 
 #[expect(

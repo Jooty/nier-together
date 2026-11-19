@@ -25,6 +25,7 @@ pub enum Action {
     GoToGuest,
     RefillHealth,
     RefillMagic,
+    LevelUp,
     AddGold {
         amount: i32,
     },

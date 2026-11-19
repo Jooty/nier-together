@@ -16,8 +16,10 @@ use replicant_game::{Position, Replicant};
 use replicant_proto::{GatherAnswer, GatherForScene, GatherReply, Message, TeleportHere};
 
 use crate::build_gate::VerifiedBuild;
+use crate::carts::own_player_rides_a_cart;
 use crate::diagnostics::log_line;
 use crate::downed::downed_status;
+use crate::game_hooks::script_pause_in_force;
 use crate::memory::InProcessMemory;
 use crate::net::NetSharedExt;
 use crate::net::{self, net_clock_ms};
@@ -27,17 +29,19 @@ use crate::stay_together::{
 };
 use crate::teleport::door_steps::{
     door_action_for_a_move_here, door_steps_are_running, door_steps_can_run, run_door_action,
-    tick_indoor_arrival,
+    tick_indoor_arrival, tick_scene_arrival,
 };
 use crate::teleport::move_player_with_native;
 use crate::teleport::status::{host_can_teleport, remember_outcome};
 use crate::teleport::verify;
 
 static LAST_PULL_MOVE_AT_MS: Mutex<Option<u64>> = Mutex::new(None);
+static HELD_PULL: Mutex<Option<TeleportHere>> = Mutex::new(None);
 static PULL_ARRIVAL: Mutex<PullArrival> = Mutex::new(PullArrival::new());
 
 pub(crate) fn tick(build: &VerifiedBuild) {
     tick_indoor_arrival(build);
+    tick_scene_arrival(build);
     let Some(net) = net::handle() else {
         return;
     };
@@ -49,16 +53,88 @@ pub(crate) fn tick(build: &VerifiedBuild) {
     };
     for message in net.take_relayed(wanted) {
         match message {
-            Message::TeleportHere(here) => move_here(build, here),
+            Message::TeleportHere(_)
+                if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() =>
+            {
+                log_line("teleport: the host's pull is not followed, you watch the host");
+            }
+            Message::TeleportHere(here) => offer_pull(build, here),
             Message::GatherForScene(gather) => gather_for_scene(build, gather),
             _ => {}
         }
     }
+    apply_held_pull(build);
     step_pull_arrival(build);
     verify::tick(build);
 }
 
+pub(crate) fn bring_guest_along(
+    build: &VerifiedBuild,
+    from: [f32; 3],
+    to: [f32; 3],
+    partner_away: f32,
+) {
+    if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() {
+        log_line(
+            "teleport: a script moved the host, the guest is not brought along while it watches",
+        );
+        return;
+    }
+    match send_host_position(build) {
+        Ok(()) => log_line(&format!(
+            "teleport: a script moved the host ({:.1}, {:.1}, {:.1} -> {:.1}, {:.1}, {:.1}), brought the guest along (partner was {partner_away:.0} away)",
+            from[0], from[1], from[2], to[0], to[1], to[2]
+        )),
+        Err(reason) => log_line(&format!(
+            "teleport: a script moved the host, but the guest was not brought along ({reason})"
+        )),
+    }
+}
+
+pub(crate) fn own_talk_or_script_pause_is_running(build: &VerifiedBuild) -> bool {
+    let game = Replicant::new(InProcessMemory::new(build));
+    let in_own_talk = read_world_flags(game.memory()).is_ok_and(|flags| flags.talk_window_open);
+    in_own_talk || script_pause_in_force()
+}
+
+fn offer_pull(build: &VerifiedBuild, here: TeleportHere) {
+    if !pull_must_wait(build) {
+        move_here(build, here);
+        return;
+    }
+    log_line(
+        "teleport: the host asked you to come, holding it until your talk, script or cart ride ends",
+    );
+    *HELD_PULL.lock().unwrap_or_else(PoisonError::into_inner) = Some(here);
+}
+
+fn pull_must_wait(build: &VerifiedBuild) -> bool {
+    own_talk_or_script_pause_is_running(build) || own_player_rides_a_cart(build)
+}
+
+fn apply_held_pull(build: &VerifiedBuild) {
+    let mut held = HELD_PULL.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(here) = *held else {
+        return;
+    };
+    let game = Replicant::new(InProcessMemory::new(build));
+    if !partner_shares_phase(local_phase_index(&game), here.phase) {
+        *held = None;
+        log_line("teleport: the held pull is dropped, you are in another map now");
+        return;
+    }
+    if pull_must_wait(build) {
+        return;
+    }
+    *held = None;
+    drop(held);
+    move_here(build, here);
+}
+
 pub(crate) fn bring_guest_here(build: &VerifiedBuild) -> Result<(), String> {
+    if crate::host_led_stretch::guest_is_not_taken_along_now().is_some() {
+        return Err("the guest is not brought along while it watches".to_owned());
+    }
     let result = send_host_position(build);
     report(&result, "teleport: asked the guest to come to the host");
     result
@@ -105,8 +181,7 @@ fn move_to_guest(build: &VerifiedBuild) -> Result<(), String> {
     let net = net::handle().ok_or("not in a co-op session")?;
     let view = net.view();
     let remote = view
-        .remote
-        .as_ref()
+        .partner_state()
         .filter(|_| view.partner_in_play())
         .filter(|remote| remote.age() <= Duration::from_millis(PARTNER_TIMEOUT_MS))
         .ok_or("the guest's position is not known")?;
@@ -296,6 +371,18 @@ fn answer(phase: u16, reply: GatherReply) {
     if let Some(net) = net::handle() {
         net.send_relayed(Message::GatherAnswer(GatherAnswer { phase, reply }));
     }
+}
+
+pub(crate) fn move_beside(build: &VerifiedBuild, spot: [f32; 3]) -> Result<(), String> {
+    let game = Replicant::new(InProcessMemory::new(build));
+    let [x, y, z] = spot;
+    place(build, &game, Position { x, y, z })
+}
+
+pub(crate) fn place_on_cart(build: &VerifiedBuild, spot: [f32; 3]) {
+    let game = Replicant::new(InProcessMemory::new(build));
+    let [x, y, z] = spot;
+    place_exactly(build, &game, Position { x, y, z });
 }
 
 fn place_exactly(build: &VerifiedBuild, game: &Replicant<InProcessMemory>, spot: Position) {

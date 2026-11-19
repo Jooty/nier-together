@@ -8,22 +8,28 @@ use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureStackBackTrace;
 
+use nt_hook::line_budget::LineBudget;
 use replicant_game::effects::{
-    DropLogLimiter, EffectSource, HitSparkNames, LookAttempt, MAX_EFFECT_EVENTS_PER_SECOND,
-    OriginNames, PendingAdmission, RateWindow, RecentHandles, SentEffects, SoundRoute,
-    WorldEffectTrail, admit_pending, census_log_line, classify_effect_source, classify_push_caller,
+    DROP_LOG_INTERVAL_MS, EffectSource, HitSparkNames, LookAttempt, MAX_EFFECT_EVENTS_PER_SECOND,
+    OriginNames, PendingAdmission, RecentHandles, SentEffects, SoundRoute, WorldEffectTrail,
+    admit_pending, census_log_line, classify_effect_source, classify_push_caller,
     effect_is_finished, hit_spark_log_line, look_attempt, power_actor_class, push_is_sent,
     read_actor_position, read_effect, read_effect_look, read_effect_transform, read_request_name,
-    read_request_transform, read_sound, read_world_effect, spawn_is_sent, within_after_hit_window,
-    within_hit_radius,
+    read_request_transform, read_sound, read_world_effect, spawn_is_drawn_by_shot_sync,
+    spawn_is_sent, within_after_hit_window, within_hit_radius,
 };
+use replicant_game::enemies::{
+    CUBE_EFFECT_NAME_READ_LEN, cube_effect_attached_text, cube_glow_is_relayed, is_cube_effect,
+};
+use replicant_game::kaine::SpellLook;
 use replicant_game::marker::read_world_flags;
 use replicant_game::offsets::{
-    ACTOR_PLAY_EFFECT_FUNCTION_RVA, ACTOR_PLAY_SOUND_FUNCTION_RVA,
-    EFFECT_CREATE_BY_ID_FUNCTION_RVA, EFFECT_INVALID_HANDLE, EFFECT_PUSH_FUNCTION_RVA,
-    EFFECT_SPAWN_BY_NAME_FUNCTION_RVA,
+    ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_PLAY_EFFECT_FUNCTION_RVA,
+    ACTOR_PLAY_SOUND_FUNCTION_RVA, EFFECT_CREATE_BY_ID_FUNCTION_RVA, EFFECT_INVALID_HANDLE,
+    EFFECT_PUSH_FUNCTION_RVA, EFFECT_SPAWN_BY_NAME_FUNCTION_RVA,
 };
 use replicant_game::puppet::actor_is_live;
+use replicant_game::stay_together::FollowRole;
 use replicant_game::{GameMemory, Replicant};
 use replicant_proto::{
     BulletEffectPlay, EffectStop, Message, SoundPlay, WORLD_EFFECT_ARGUMENT_COUNT, WorldEffectMove,
@@ -35,9 +41,12 @@ use crate::diagnostics::log_line;
 use crate::effects::report::{
     REFUSED_BY_RATE_LIMIT, SENT_EFFECTS, SENT_SOUNDS, SENT_STOPS, UNREADABLE, count, log_limited,
 };
-use crate::effects::sound_probe;
+use crate::effects::{actor_cues, sound_probe};
 use crate::enemies::applying_remote;
 use crate::game_hooks::hook_address;
+use crate::kaine::{
+    after_spawn, note_shot_slot_not_resent, sent_effect_name, spawn_look, spawn_size,
+};
 use crate::memory::InProcessMemory;
 use crate::net::{self, net_clock_ms};
 use crate::puppet::is_puppet_actor;
@@ -47,6 +56,9 @@ static ORIGINAL_PLAY_EFFECT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut())
 static ORIGINAL_PLAY_SOUND: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_SPAWN_BY_NAME: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static ORIGINAL_CREATE_BY_ID: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static ORIGINAL_ATTACH_BY_ID: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static CUBE_EFFECT_LINES: AtomicU64 = AtomicU64::new(0);
+const CUBE_EFFECT_LINES_MAX: u64 = 600;
 static WORLD_TRAIL: LazyLock<Mutex<WorldEffectTrail>> = LazyLock::new(Mutex::default);
 static ORIGINAL_EFFECT_PUSH: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static LAST_OWN_HIT_CLOCK_PLUS_ONE: AtomicU64 = AtomicU64::new(0);
@@ -54,7 +66,7 @@ static LAST_PARTNER_HIT_EFFECT_CLOCK_PLUS_ONE: AtomicU64 = AtomicU64::new(0);
 static CENSUS_NAMES: LazyLock<Mutex<OriginNames>> = LazyLock::new(Mutex::default);
 static PUSHED_HANDLES: LazyLock<Mutex<RecentHandles>> = LazyLock::new(Mutex::default);
 static LAST_OWN_HIT_POSITION: Mutex<Option<[f32; 3]>> = Mutex::new(None);
-static DROP_LOG: LazyLock<Mutex<DropLogLimiter>> = LazyLock::new(Mutex::default);
+static DROP_LOG: Mutex<LineBudget> = Mutex::new(LineBudget::new());
 static SENDING: AtomicBool = AtomicBool::new(false);
 static SENT_HANDLES: LazyLock<Mutex<SentEffects>> =
     LazyLock::new(|| Mutex::new(SentEffects::new()));
@@ -65,9 +77,9 @@ static PENDING_WORLD_EFFECTS: LazyLock<Mutex<Vec<PendingWorldEffect>>> =
     LazyLock::new(Mutex::default);
 static ORIGIN_NAMES: LazyLock<Mutex<OriginNames>> = LazyLock::new(Mutex::default);
 static LOOKLESS_NAMES: LazyLock<Mutex<HitSparkNames>> = LazyLock::new(Mutex::default);
-static SEND_WINDOW: LazyLock<Mutex<RateWindow>> =
-    LazyLock::new(|| Mutex::new(RateWindow::new(1000, MAX_EFFECT_EVENTS_PER_SECOND)));
+static SEND_WINDOW: Mutex<LineBudget> = Mutex::new(LineBudget::counting_from_zero());
 
+const SEND_WINDOW_MS: u64 = 1000;
 const DEFAULT_FLUSHER_ARGUMENTS: [u32; WORLD_EFFECT_ARGUMENT_COUNT] =
     [0x3F80_0000, 0, 0xBF80_0000, 0xBF80_0000, 0];
 const GAME_IMAGE_RVA_LIMIT: u64 = 0x1000_0000;
@@ -82,10 +94,13 @@ struct PendingWorldEffect {
     wire: WorldEffectPlay,
     frames_waited: u32,
     in_hit: bool,
+    cube_glow: bool,
 }
 
 thread_local! {
     static CREATE_BY_ID_CALLER_RVA: Cell<u32> = const { Cell::new(0) };
+    static ATTACHING_ACTOR: Cell<u64> = const { Cell::new(0) };
+    static CUBE_GLOW_RELAYED: Cell<bool> = const { Cell::new(false) };
     static NESTED_EFFECT_CALLS: Cell<u32> = const { Cell::new(0) };
     static OWN_HIT_IN_FLIGHT: Cell<bool> = const { Cell::new(false) };
     static HIT_SPARK_VIA: Cell<&'static str> = const { Cell::new(SPAWN_BY_NAME_CALL_NAME) };
@@ -96,6 +111,17 @@ type PlayEffect =
 type PlaySound = unsafe extern "system" fn(*mut c_void, *const c_char, *mut c_void) -> *mut c_void;
 type SpawnByName =
     unsafe extern "system" fn(*mut u32, *const u8, *const f32, f32, u32, u32, u32, i32) -> *mut u32;
+type AttachEffectById = unsafe extern "system" fn(
+    *mut c_void,
+    u32,
+    i32,
+    u8,
+    *const f32,
+    *const f32,
+    u32,
+    u8,
+    u32,
+) -> u64;
 type EffectPush = unsafe extern "system" fn(*mut c_void, *mut u32, *const u8) -> *mut u32;
 type CreateById =
     unsafe extern "system" fn(*mut u32, u32, *const f32, u32, u32, u32, u32) -> *mut u32;
@@ -160,6 +186,20 @@ pub fn install(build: VerifiedBuild) {
     };
     #[expect(
         unsafe_code,
+        reason = "hooks the attach-effect-by-id function by address, only to log which actor it serves"
+    )]
+    // SAFETY: the RVA starts the function (actor, effect id, bone, unique, colour, scale, three
+    // words -> handle) in the verified build, and the replacement matches it.
+    unsafe {
+        hook_address(
+            "Actor::AttachEffectById",
+            (base + u64::from(ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA)) as usize,
+            attach_effect_by_id_detour as *const () as *mut c_void,
+            &ORIGINAL_ATTACH_BY_ID,
+        )
+    };
+    #[expect(
+        unsafe_code,
         reason = "hooks the effect request push function by address"
     )]
     // SAFETY: the RVA starts the function (registry, out handle, request -> out handle) in the
@@ -173,6 +213,7 @@ pub fn install(build: VerifiedBuild) {
         )
     };
     sound_probe::install(build);
+    actor_cues::install(build);
 }
 
 /// Runs `call` as a nested effect call: an effect spawned by name inside it belongs to an
@@ -253,6 +294,10 @@ fn effect_is_sent_as_actor_effect(source: EffectSource) -> bool {
 
 fn actor_effect_is_sent_directly(actor: u64) -> bool {
     source_in_play(actor).is_some_and(|(_, source)| effect_is_sent_as_actor_effect(source))
+}
+
+pub(super) fn sending() -> bool {
+    SENDING.load(Ordering::Relaxed)
 }
 
 pub(super) fn set_sending(sending: bool) {
@@ -401,27 +446,150 @@ extern "system" fn spawn_by_name_detour(
     if original.is_null() {
         return handle;
     }
-    // SAFETY: the trampoline continues into the original function, which has this signature.
+    let build = HOOKED_BUILD.get();
+    let look = build.map_or(SpellLook::AsItIs, |build| {
+        let address = name as usize as u64;
+        panic::catch_unwind(|| spawn_look(build, address)).unwrap_or(SpellLook::AsItIs)
+    });
+    let spawned_name = match look {
+        SpellLook::Hers(pair) => pair.hers.as_ptr().cast::<u8>(),
+        SpellLook::Tinted | SpellLook::AsItIs => name,
+    };
+    let size = panic::catch_unwind(|| spawn_size(look)).unwrap_or(1.0);
+    let spawned_scale = scale * size;
+    // SAFETY: the trampoline continues into the original function, which has this signature;
+    // her name is a static NUL-terminated string, which the function only hashes.
     let result = unsafe {
         core::mem::transmute::<*mut c_void, SpawnByName>(original)(
-            handle, name, matrix, scale, fifth, sixth, seventh, eighth,
+            handle,
+            spawned_name,
+            matrix,
+            spawned_scale,
+            fifth,
+            sixth,
+            seventh,
+            eighth,
         )
     };
     let outermost = NESTED_EFFECT_CALLS.with(|depth| depth.get() == 0);
-    if spawn_is_sent(outermost, hit_related_spawn()) && SENDING.load(Ordering::Relaxed) {
+    if let Some(build) = build
+        && look != SpellLook::AsItIs
+        && !handle.is_null()
+    {
+        // SAFETY: the game wrote the new handle through this out pointer just now.
+        let made = unsafe { handle.read() };
+        let _ = panic::catch_unwind(|| {
+            after_spawn(build, look, made, outermost, size, spawned_scale);
+        });
+    }
+    let cube_glow = panic::catch_unwind(|| note_cube_effect(name)).unwrap_or(false);
+    let due = SENDING.load(Ordering::Relaxed)
+        && (spawn_is_sent(outermost, hit_related_spawn()) || cube_glow);
+    if due && spawn_is_drawn_by_shot_sync(CREATE_BY_ID_CALLER_RVA.with(Cell::get)) {
+        let _ = panic::catch_unwind(note_shot_slot_not_resent);
+    } else if due {
+        if cube_glow {
+            CUBE_GLOW_RELAYED.with(|cell| cell.set(true));
+        }
         let (handle, name, matrix) = (handle as usize, name as usize, matrix as usize);
         let arguments = [
-            scale.to_bits(),
+            spawned_scale.to_bits(),
             fifth,
             sixth,
             seventh,
             eighth.cast_unsigned(),
         ];
         let _ = panic::catch_unwind(|| {
-            send_world_effect(handle as u64, name as u64, matrix as u64, arguments)
+            send_world_effect(
+                handle as u64,
+                name as u64,
+                matrix as u64,
+                arguments,
+                cube_glow,
+            )
         });
     }
     result
+}
+
+#[expect(
+    unsafe_code,
+    reason = "calls the original attach-effect-by-id function through the trampoline MinHook built"
+)]
+extern "system" fn attach_effect_by_id_detour(
+    actor: *mut c_void,
+    id: u32,
+    bone: i32,
+    unique: u8,
+    colour: *const f32,
+    scale: *const f32,
+    a: u32,
+    b: u8,
+    c: u32,
+) -> u64 {
+    let original = ORIGINAL_ATTACH_BY_ID.load(Ordering::Acquire);
+    if original.is_null() {
+        return 0;
+    }
+    let was_attaching = ATTACHING_ACTOR.with(|cell| cell.replace(actor as usize as u64));
+    let outer_glow_relayed = CUBE_GLOW_RELAYED.with(|cell| cell.replace(false));
+    // SAFETY: the trampoline continues into the original function, which has this signature.
+    let result = unsafe {
+        core::mem::transmute::<*mut c_void, AttachEffectById>(original)(
+            actor, id, bone, unique, colour, scale, a, b, c,
+        )
+    };
+    ATTACHING_ACTOR.with(|cell| cell.set(was_attaching));
+    let relayed_as_cube_glow = CUBE_GLOW_RELAYED.with(|cell| cell.replace(outer_glow_relayed));
+    if result & 0xFF != 0 && SENDING.load(Ordering::Relaxed) {
+        let (actor, colour, scale) = (actor as usize, colour as usize, scale as usize);
+        let _ = panic::catch_unwind(|| {
+            actor_cues::note_attach(
+                actor as u64,
+                id,
+                bone,
+                unique,
+                colour as u64,
+                scale as u64,
+                a,
+                b,
+                c,
+                relayed_as_cube_glow,
+            );
+        });
+    }
+    result
+}
+
+fn note_cube_effect(name: *const u8) -> bool {
+    let actor = ATTACHING_ACTOR.with(Cell::get);
+    let Some(build) = HOOKED_BUILD.get() else {
+        return false;
+    };
+    if actor == 0 || name.is_null() {
+        return false;
+    }
+    let Ok(bytes) =
+        InProcessMemory::new(build).read_array::<CUBE_EFFECT_NAME_READ_LEN>(name as usize as u64)
+    else {
+        return false;
+    };
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    let text = String::from_utf8_lossy(&bytes[..end]);
+    if is_cube_effect(&text)
+        && CUBE_EFFECT_LINES.fetch_add(1, Ordering::Relaxed) < CUBE_EFFECT_LINES_MAX
+    {
+        log_line(&cube_effect_attached_text(&text, actor));
+    }
+    cube_glow_is_relayed(actor, &text, local_is_host())
+}
+
+fn local_is_host() -> bool {
+    net::handle()
+        .is_some_and(|net| FollowRole::from_slot(net.view().local_slot) == FollowRole::Host)
 }
 
 #[expect(
@@ -442,17 +610,29 @@ extern "system" fn create_by_id_detour(
         return handle;
     }
     let caller_rva = game_caller_rva();
+    let nested = NESTED_EFFECT_CALLS.with(|depth| depth.get() > 0)
+        || ATTACHING_ACTOR.with(|actor| actor.get() != 0);
     let was_caller = CREATE_BY_ID_CALLER_RVA.with(|cell| cell.replace(caller_rva));
-    // Bullet effects by id are sent as bullet flights, so the by-name spawn inside is nested.
     // SAFETY: the trampoline continues into the original function, which has this signature.
-    let result = with_hit_spark_call(CREATE_BY_ID_CALL_NAME, false, || {
-        nested_effect_call(|| unsafe {
-            core::mem::transmute::<*mut c_void, CreateById>(original)(
-                handle, id, matrix, fourth, fifth, sixth, seventh,
-            )
-        })
-    });
+    let create = || unsafe {
+        core::mem::transmute::<*mut c_void, CreateById>(original)(
+            handle, id, matrix, fourth, fifth, sixth, seventh,
+        )
+    };
+    // Bullet effects by id cross with their shot (flights and shot cues), so the by-name spawn
+    // inside is nested.
+    let result = with_hit_spark_call(CREATE_BY_ID_CALL_NAME, false, || nested_effect_call(create));
     CREATE_BY_ID_CALLER_RVA.with(|cell| cell.set(was_caller));
+    if !handle.is_null() {
+        // SAFETY: the game wrote the new handle through this out pointer just now.
+        let made = unsafe { handle.read() };
+        let _ = panic::catch_unwind(|| crate::enemy_bullets::note_effect_made(id, made));
+        if SENDING.load(Ordering::Relaxed) {
+            let _ = panic::catch_unwind(|| {
+                actor_cues::note_create_by_id(made, id, caller_rva, nested);
+            });
+        }
+    }
     result
 }
 
@@ -570,21 +750,25 @@ fn census_and_send_push(request: u64, handle_out: u64, caller_rva: u32) {
     let playing = game.playable_actor().is_ok()
         && read_world_flags(game.memory()).is_ok_and(|flags| !flags.activity().world_paused());
     if playing && wire.validate().is_ok() {
-        queue_world_effect(wire, false);
+        queue_world_effect(wire, false, false);
     }
 }
 
-fn queue_world_effect(wire: WorldEffectPlay, in_hit: bool) {
+fn queue_world_effect(wire: WorldEffectPlay, in_hit: bool, cube_glow: bool) {
     let mut pending = PENDING_WORLD_EFFECTS
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    let queued: Vec<bool> = pending.iter().map(|entry| entry.in_hit).collect();
+    let queued: Vec<bool> = pending
+        .iter()
+        .map(|entry| entry.in_hit || entry.cube_glow)
+        .collect();
     let entry = PendingWorldEffect {
         wire,
         frames_waited: 0,
         in_hit,
+        cube_glow,
     };
-    match admit_pending(&queued, in_hit, MAX_PENDING_WORLD_EFFECTS) {
+    match admit_pending(&queued, in_hit || cube_glow, MAX_PENDING_WORLD_EFFECTS) {
         PendingAdmission::Append => pending.push(entry),
         PendingAdmission::ReplaceAt(index) => {
             pending[index] = entry;
@@ -601,7 +785,7 @@ fn log_dropped_effect(reason: &str) {
     let due = DROP_LOG
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .should_log(net_clock_ms());
+        .due(net_clock_ms(), DROP_LOG_INTERVAL_MS);
     if due {
         log_line(&format!("effects: an effect was not sent, {reason}"));
     }
@@ -612,15 +796,19 @@ fn send_world_effect(
     name: u64,
     matrix: u64,
     arguments: [u32; WORLD_EFFECT_ARGUMENT_COUNT],
+    cube_glow: bool,
 ) {
     let Some(build) = HOOKED_BUILD.get() else {
         return;
     };
     let memory = InProcessMemory::new(build);
     let in_hit = hit_related_spawn();
-    let Ok(Some((effect, transform))) = read_world_effect(&memory, name, matrix, in_hit) else {
+    let Ok(Some((effect, transform))) =
+        read_world_effect(&memory, name, matrix, in_hit || cube_glow)
+    else {
         return;
     };
+    let effect = sent_effect_name(effect);
     if in_hit {
         log_hit_spark_once(&effect);
         set_last_own_hit_position([transform[3], transform[7], transform[11]]);
@@ -659,7 +847,7 @@ fn send_world_effect(
             ));
         }
     }
-    queue_world_effect(wire, in_hit);
+    queue_world_effect(wire, in_hit, cube_glow);
 }
 
 fn send_pending_world_effects(build: &VerifiedBuild) {
@@ -674,7 +862,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
     let memory = InProcessMemory::new(build);
     let mut waiting = Vec::new();
     let mut due = due;
-    due.sort_by_key(|pending| !pending.in_hit);
+    due.sort_by_key(|pending| !(pending.in_hit || pending.cube_glow));
     for mut pending in due {
         let look = read_effect_look(&memory, pending.wire.handle)
             .ok()
@@ -691,7 +879,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
             }
             LookAttempt::Use => {
                 pending.wire.look = look;
-                send_world_effect_now(pending.wire);
+                send_world_effect_now(pending.wire, pending.cube_glow);
             }
             LookAttempt::GiveUp => {
                 let first = LOOKLESS_NAMES
@@ -704,7 +892,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
                         pending.wire.effect
                     ));
                 }
-                send_world_effect_now(pending.wire);
+                send_world_effect_now(pending.wire, pending.cube_glow);
             }
         }
     }
@@ -714,11 +902,11 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
         .extend(waiting);
 }
 
-fn send_world_effect_now(wire: WorldEffectPlay) {
+fn send_world_effect_now(wire: WorldEffectPlay, cube_glow: bool) {
     if !SENDING.load(Ordering::Relaxed) {
         return;
     }
-    if !admit_send() {
+    if !cube_glow && !admit_send() {
         log_dropped_effect("the send rate limit was reached");
         return;
     }
@@ -789,7 +977,8 @@ fn send_effect(actor: u64, params: u64, attach: u64, handle_address: u64) {
             .map_or(EFFECT_INVALID_HANDLE, i32::cast_unsigned)
     };
     let modes = captured.attach_modes();
-    let wire = captured.to_wire(handle);
+    let mut wire = captured.to_wire(handle);
+    wire.effect = sent_effect_name(wire.effect);
     if wire.validate().is_err() {
         count(&UNREADABLE);
         return;
@@ -929,7 +1118,7 @@ fn admit_send() -> bool {
     let admitted = SEND_WINDOW
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .admit(net_clock_ms());
+        .admit(net_clock_ms(), SEND_WINDOW_MS, MAX_EFFECT_EVENTS_PER_SECOND);
     if !admitted {
         count(&REFUSED_BY_RATE_LIMIT);
     }

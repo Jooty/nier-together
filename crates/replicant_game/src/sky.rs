@@ -6,7 +6,7 @@ mod record_copy;
 
 pub use assets::{read_asset_names, write_asset_pointers};
 pub use broadcast::{SkyBroadcast, SkySend};
-pub use hold::{SkyApply, SkyHold};
+pub use hold::{SkyApply, SkyHold, SkyOutcome};
 pub use reading::{SkyReading, read_sky, write_weather_counters};
 pub(crate) use record_copy::record_address;
 pub use record_copy::{
@@ -15,3 +15,4 @@ pub use record_copy::{
 
 pub const ZONE_SETTLE_MS: u64 = 750;
 pub const APPLY_RETRY_MS: u64 = 250;
+pub const SKY_APPLY_LIMIT_MS: u64 = 20_000;

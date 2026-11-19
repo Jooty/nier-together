@@ -1,27 +1,61 @@
 mod fake_memory;
 
+#[path = "actor_cue_replay_l34.rs"]
+mod actor_cue_replay_l34;
+#[path = "actor_cues.rs"]
+mod actor_cues;
 #[path = "actor_model.rs"]
 mod actor_model;
+#[path = "armed_host_led_stretch.rs"]
+mod armed_host_led_stretch;
 #[path = "arrival.rs"]
 mod arrival;
 #[path = "arrive_in_state.rs"]
 mod arrive_in_state;
+#[path = "attached_cue_effects.rs"]
+mod attached_cue_effects;
 #[path = "attack_gauge.rs"]
 mod attack_gauge;
+#[path = "attack_gauge_opening_hit.rs"]
+mod attack_gauge_opening_hit;
+#[path = "attack_gauge_shared.rs"]
+mod attack_gauge_shared;
 #[path = "blocks.rs"]
 mod blocks;
+#[path = "body_following_camera.rs"]
+mod body_following_camera;
+#[path = "bomb_tracking.rs"]
+mod bomb_tracking;
+#[path = "bomb_walls.rs"]
+mod bomb_walls;
 #[path = "boss_bar_probe.rs"]
 mod boss_bar_probe;
 #[path = "boss_hit_log.rs"]
 mod boss_hit_log;
 #[path = "boss_messages.rs"]
 mod boss_messages;
+#[path = "breaker_body_hold.rs"]
+mod breaker_body_hold;
 #[path = "bullet_flights.rs"]
 mod bullet_flights;
+#[path = "bullet_hits.rs"]
+mod bullet_hits;
+#[path = "bullet_starts.rs"]
+mod bullet_starts;
 #[path = "ca_gauge.rs"]
 mod ca_gauge;
 #[path = "callback_gate.rs"]
 mod callback_gate;
+#[path = "camera_aim_follow.rs"]
+mod camera_aim_follow;
+#[path = "camera_control.rs"]
+mod camera_control;
+#[path = "camera_follow.rs"]
+mod camera_follow;
+#[path = "cart_steering.rs"]
+mod cart_steering;
+#[path = "carts.rs"]
+mod carts;
 #[path = "choice_hover.rs"]
 mod choice_hover;
 #[path = "companion.rs"]
@@ -30,6 +64,11 @@ mod companion;
 mod containers;
 #[path = "copy_hold.rs"]
 mod copy_hold;
+#[path = "counted_talks.rs"]
+mod counted_talks;
+#[path = "cube_log.rs"]
+mod cube_log;
+#[cfg(feature = "probes")]
 #[path = "cube_probe.rs"]
 mod cube_probe;
 #[path = "cutscene_skip.rs"]
@@ -42,6 +81,12 @@ mod dialogue;
 mod door_sync;
 #[path = "downed.rs"]
 mod downed;
+#[path = "downed_while_watching.rs"]
+mod downed_while_watching;
+#[path = "dream_screen.rs"]
+mod dream_screen;
+#[path = "dropped_ride_step.rs"]
+mod dropped_ride_step;
 #[path = "dummy_hits.rs"]
 mod dummy_hits;
 #[path = "effect_look.rs"]
@@ -64,32 +109,48 @@ mod enemy_combat;
 mod enemy_creation;
 #[path = "enemy_difficulty.rs"]
 mod enemy_difficulty;
+#[path = "enemy_fight_waves.rs"]
+mod enemy_fight_waves;
 #[path = "enemy_log.rs"]
 mod enemy_log;
+#[path = "enemy_roster_cap.rs"]
+mod enemy_roster_cap;
 #[path = "enemy_takeover.rs"]
 mod enemy_takeover;
 #[path = "entity.rs"]
 mod entity;
 #[path = "event_log.rs"]
 mod event_log;
+#[path = "eye_set_tally.rs"]
+mod eye_set_tally;
 #[path = "far_guest_follow.rs"]
 mod far_guest_follow;
 #[path = "fight_doors.rs"]
 mod fight_doors;
+#[path = "fight_end_once.rs"]
+mod fight_end_once;
 #[path = "fight_entry_end.rs"]
 mod fight_entry_end;
+#[path = "fight_own_scene_music.rs"]
+mod fight_own_scene_music;
 #[path = "fight_player_traps.rs"]
 mod fight_player_traps;
 #[path = "fight_requests.rs"]
 mod fight_requests;
+#[path = "fight_scene_end_hold.rs"]
+mod fight_scene_end_hold;
 #[path = "fight_start_entry.rs"]
 mod fight_start_entry;
+#[path = "fight_start_once.rs"]
+mod fight_start_once;
 #[path = "fight_stream.rs"]
 mod fight_stream;
 #[path = "fight_sync.rs"]
 mod fight_sync;
 #[path = "fight_tape.rs"]
 mod fight_tape;
+#[path = "fight_wave_replay_claim.rs"]
+mod fight_wave_replay_claim;
 #[path = "fight_window.rs"]
 mod fight_window;
 #[path = "fill_in.rs"]
@@ -102,32 +163,100 @@ mod focus;
 mod frame_ring;
 #[path = "game_closing.rs"]
 mod game_closing;
+#[path = "guest_music_in_scenes.rs"]
+mod guest_music_in_scenes;
 #[path = "hit_kind.rs"]
 mod hit_kind;
+#[path = "hit_reaction.rs"]
+mod hit_reaction;
+#[path = "hit_stagger.rs"]
+mod hit_stagger;
+#[path = "host_led_defeat.rs"]
+mod host_led_defeat;
 #[path = "host_led_runs.rs"]
 mod host_led_runs;
 #[path = "host_led_script_talk.rs"]
 mod host_led_script_talk;
+#[path = "host_led_stretch.rs"]
+mod host_led_stretch;
 #[path = "host_removal.rs"]
 mod host_removal;
+#[path = "host_story_apply_gate.rs"]
+mod host_story_apply_gate;
+#[path = "host_story_talk_pace.rs"]
+mod host_story_talk_pace;
+#[path = "host_view.rs"]
+mod host_view;
 #[path = "inventory.rs"]
 mod inventory;
 #[path = "invincibility.rs"]
 mod invincibility;
+#[path = "kaine_ai_hold.rs"]
+mod kaine_ai_hold;
+#[path = "kaine_box_moves.rs"]
+mod kaine_box_moves;
+#[path = "kaine_companion_off.rs"]
+mod kaine_companion_off;
+#[path = "kaine_companion_off_everywhere.rs"]
+mod kaine_companion_off_everywhere;
+#[path = "kaine_companion_off_fallback.rs"]
+mod kaine_companion_off_fallback;
+#[path = "kaine_door_state.rs"]
+mod kaine_door_state;
+#[path = "kaine_feet_drive.rs"]
+mod kaine_feet_drive;
+#[path = "kaine_feet_line.rs"]
+mod kaine_feet_line;
+#[path = "kaine_hit_power.rs"]
+mod kaine_hit_power;
+#[path = "kaine_level_in_use.rs"]
+mod kaine_level_in_use;
+#[path = "kaine_missing_motion.rs"]
+mod kaine_missing_motion;
 #[path = "kaine_partner.rs"]
 mod kaine_partner;
+#[path = "kaine_rows_from_scripts.rs"]
+mod kaine_rows_from_scripts;
 #[path = "kaine_save.rs"]
 mod kaine_save;
+#[path = "kaine_scene_stand_in.rs"]
+mod kaine_scene_stand_in;
+#[path = "kaine_spell_brightness.rs"]
+mod kaine_spell_brightness;
+#[path = "kaine_spell_effect_tally.rs"]
+mod kaine_spell_effect_tally;
+#[path = "kaine_spell_look.rs"]
+mod kaine_spell_look;
+#[path = "kaine_spell_size.rs"]
+mod kaine_spell_size;
+#[path = "kaine_stand_in.rs"]
+mod kaine_stand_in;
 #[path = "kaine_stats.rs"]
 mod kaine_stats;
+#[path = "kaine_swapped_level.rs"]
+mod kaine_swapped_level;
 #[path = "kill_guard.rs"]
 mod kill_guard;
+#[path = "lasting_cue_sounds.rs"]
+mod lasting_cue_sounds;
+#[path = "level_up.rs"]
+mod level_up;
+#[path = "lift_rides.rs"]
+mod lift_rides;
+#[path = "line_press.rs"]
+mod line_press;
+#[path = "loading_lines.rs"]
+mod loading_lines;
 #[path = "local_pose.rs"]
 mod local_pose;
+#[path = "manor_watch.rs"]
+mod manor_watch;
 #[path = "message_handlers.rs"]
 mod message_handlers;
 #[path = "minimap.rs"]
 mod minimap;
+#[path = "mirror_window_size.rs"]
+mod mirror_window_size;
 #[path = "move_log.rs"]
 mod move_log;
 #[path = "music.rs"]
@@ -140,8 +269,20 @@ mod noclip;
 mod npcs;
 #[path = "one_sided.rs"]
 mod one_sided;
+#[path = "own_body_calls.rs"]
+mod own_body_calls;
 #[path = "own_hit_log.rs"]
 mod own_hit_log;
+#[path = "own_ride.rs"]
+mod own_ride;
+#[path = "own_start_pause.rs"]
+mod own_start_pause;
+#[path = "own_step_copy.rs"]
+mod own_step_copy;
+#[path = "part2_watch.rs"]
+mod part2_watch;
+#[path = "part_pickups.rs"]
+mod part_pickups;
 #[path = "partner_holds.rs"]
 mod partner_holds;
 #[path = "partner_marker.rs"]
@@ -152,6 +293,8 @@ mod party_frame;
 mod patches;
 #[path = "pe_identity.rs"]
 mod pe_identity;
+#[path = "phase_request.rs"]
+mod phase_request;
 #[path = "phase_state.rs"]
 mod phase_state;
 #[path = "phases.rs"]
@@ -170,12 +313,12 @@ mod popup_saved_mask;
 mod position;
 #[path = "power_models.rs"]
 mod power_models;
-#[path = "probe_log.rs"]
-mod probe_log;
 #[path = "prologue_levels.rs"]
 mod prologue_levels;
 #[path = "prompt_follow.rs"]
 mod prompt_follow;
+#[path = "prompt_follow_partner_led.rs"]
+mod prompt_follow_partner_led;
 #[path = "puppet.rs"]
 mod puppet;
 #[path = "puppet_body.rs"]
@@ -194,38 +337,74 @@ mod radio_pause;
 mod radio_waits;
 #[path = "readiness.rs"]
 mod readiness;
+#[path = "red_bag_gather.rs"]
+mod red_bag_gather;
 #[path = "relay_call_gate.rs"]
 mod relay_call_gate;
+#[path = "relayed_scenes.rs"]
+mod relayed_scenes;
 #[path = "revive_display.rs"]
 mod revive_display;
 #[path = "rewind.rs"]
 mod rewind;
 #[path = "ridden_boar.rs"]
 mod ridden_boar;
+#[path = "ride_boarding.rs"]
+mod ride_boarding;
+#[path = "rule_rooms.rs"]
+mod rule_rooms;
 #[path = "save_files.rs"]
 mod save_files;
+#[path = "scene_cover.rs"]
+mod scene_cover;
 #[path = "scene_follow.rs"]
 mod scene_follow;
+#[path = "scene_follow_cut.rs"]
+mod scene_follow_cut;
+#[path = "scene_follow_stale_cut_load.rs"]
+mod scene_follow_stale_cut_load;
 #[path = "scene_gather.rs"]
 mod scene_gather;
 #[path = "scene_pull.rs"]
 mod scene_pull;
 #[path = "script_functions.rs"]
 mod script_functions;
+#[path = "script_jump.rs"]
+mod script_jump;
+#[path = "script_pause.rs"]
+mod script_pause;
 #[path = "script_rolls.rs"]
 mod script_rolls;
 #[path = "script_runner.rs"]
 mod script_runner;
+#[path = "scripted_camera.rs"]
+mod scripted_camera;
+#[path = "seat.rs"]
+mod seat;
+#[path = "seat_name.rs"]
+mod seat_name;
 #[path = "shared_events.rs"]
 mod shared_events;
 #[path = "shared_items.rs"]
 mod shared_items;
+#[path = "shared_sequence.rs"]
+mod shared_sequence;
+#[path = "shot_copies.rs"]
+mod shot_copies;
+#[path = "shot_cues.rs"]
+mod shot_cues;
 #[path = "side_view.rs"]
 mod side_view;
+#[path = "skip_prompt_vote.rs"]
+mod skip_prompt_vote;
 #[path = "sky.rs"]
 mod sky;
 #[path = "stay_together.rs"]
 mod stay_together;
+#[path = "step_echo.rs"]
+mod step_echo;
+#[path = "stone_break.rs"]
+mod stone_break;
 #[path = "story_calls.rs"]
 mod story_calls;
 #[path = "story_jump.rs"]
@@ -236,12 +415,22 @@ mod story_player_local_flags;
 mod story_progress;
 #[path = "story_relay.rs"]
 mod story_relay;
+#[path = "story_talk_menu_close.rs"]
+mod story_talk_menu_close;
+#[path = "story_watch.rs"]
+mod story_watch;
 #[path = "story_writes.rs"]
 mod story_writes;
 #[path = "stuck_menu_mask.rs"]
 mod stuck_menu_mask;
 #[path = "talk_guard.rs"]
 mod talk_guard;
+#[path = "talk_lines.rs"]
+mod talk_lines;
+#[path = "talk_on_screen.rs"]
+mod talk_on_screen;
+#[path = "talk_origin.rs"]
+mod talk_origin;
 #[path = "talk_refusal.rs"]
 mod talk_refusal;
 #[path = "teleport_check.rs"]
@@ -256,8 +445,14 @@ mod ui_scenes;
 mod view_list;
 #[path = "voice_character.rs"]
 mod voice_character;
+#[path = "watch_talks.rs"]
+mod watch_talks;
+#[path = "watching_guest_rules.rs"]
+mod watching_guest_rules;
 #[path = "world_effects.rs"]
 mod world_effects;
+#[path = "world_objects.rs"]
+mod world_objects;
 #[path = "zone_rules.rs"]
 mod zone_rules;
 

@@ -5,13 +5,14 @@ use replicant_proto::{
     FightTape, FightWindowChange, FightWindowMark, Message, StoryCallArg,
 };
 
+use crate::callback_gate::is_end_callback;
 use crate::fight_sync::{
     EarlierQueuedCalls, FightWindow, FightWindowData, HOST_TAPE_LOGGED_KEYS_KEPT,
     HOST_TAPE_LOGGED_SEQS_BACK, HostPop, HostRadioWaits, HostRequests, HostTape, PopSource,
     QUEUED_CALL_GIVEN_UP_AFTER_MS, QueueRefusal, QueuedCallNotice, RadioWaitPoll, RadioWaitRun,
     RequestAnswer, RequestCall, RequestReceipt, SceneHoldChange, SlotState, StreamEntry,
     StreamRecorder, TapeValue, WindowArming, WindowCloseCause, WindowEvent, WindowState,
-    counted_wait_ms, fight_windows_of_pack,
+    counted_wait_ms, fight_windows_of_pack, is_start_chain_of,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +97,9 @@ pub struct HostFightStream {
     answers_out: Vec<FightRequestAnswer>,
     radio_waits: HostRadioWaits,
     start_pop: Option<(&'static str, Vec<StoryCallArg>)>,
+    moved_past_start_chain: bool,
+    start_ids_ran: HashSet<String>,
+    ends_ran_before_window: HashSet<String>,
 }
 
 impl HostStreamOut {
@@ -182,6 +186,9 @@ impl HostFightStream {
             answers_out: Vec::new(),
             radio_waits: HostRadioWaits::new(),
             start_pop: None,
+            moved_past_start_chain: false,
+            start_ids_ran: HashSet::new(),
+            ends_ran_before_window: HashSet::new(),
         }
     }
 
@@ -191,6 +198,10 @@ impl HostFightStream {
 
     pub const fn phase(&self) -> Option<u16> {
         self.phase
+    }
+
+    pub fn streamed_in_this_fight(&self, name: &str) -> bool {
+        self.streamed_names.contains(name)
     }
 
     pub fn is_open_in(&self, phase: u16) -> bool {
@@ -228,12 +239,15 @@ impl HostFightStream {
             self.forget_requests();
         }
         self.phase = Some(phase);
+        self.ends_ran_before_window.clear();
         let epoch = self.recorder.enter_phase(phase);
         self.fewest_registered_since_armed = None;
         if let Some(window) = self.window.open_window() {
             self.tape.end();
             self.tape_logged.clear();
             self.restarted_with_no_entry_since = true;
+            self.moved_past_start_chain = false;
+            self.start_ids_ran.clear();
             outs.push(HostStreamOut::Restarted {
                 phase,
                 epoch,
@@ -255,6 +269,8 @@ impl HostFightStream {
             self.tape.end();
             self.tape_logged.clear();
             self.restarted_with_no_entry_since = true;
+            self.moved_past_start_chain = false;
+            self.start_ids_ran.clear();
             return vec![HostStreamOut::Restarted {
                 phase: self.phase.unwrap_or_default(),
                 epoch,
@@ -313,6 +329,23 @@ impl HostFightStream {
         let pop = self.requests.pop(name, source, arguments, streamed);
         self.collect_answers();
         pop
+    }
+
+    /// A pop of the open window's start or of a function that calls it, once the fight moved
+    /// past its start chain (a function outside the chain popped) in this epoch: the host's own
+    /// game repeating the chain, which is not run. A start id that has not run yet still runs.
+    pub fn repeats_start_chain(&mut self, name: &str) -> Option<&'static FightWindowData> {
+        let window = self.window.open_window()?;
+        if window.is_player_local_handler(name) {
+            return None;
+        }
+        if !is_start_chain_of(window, name) {
+            self.moved_past_start_chain = true;
+            return None;
+        }
+        let unseen_start_id =
+            window.start_ids.contains(&name) && !self.start_ids_ran.contains(name);
+        (self.moved_past_start_chain && !unseen_start_id).then_some(window)
     }
 
     /// The answers to the guest's requests since the last call, to send to the guest.
@@ -452,10 +485,16 @@ impl HostFightStream {
     ) -> Vec<HostStreamOut> {
         // The slot runs one handler at a time, so this pop ends the previous handler's tape.
         let mut outs: Vec<HostStreamOut> = self.end_entry_tape().into_iter().collect();
+        if self.is_start_id(name) {
+            self.start_ids_ran.insert(name.to_owned());
+        }
         if self.window.open_window().is_some() {
             outs.extend(self.stream_pop(name, args, registered_player_local));
             outs.extend(self.function_ran(name));
             return outs;
+        }
+        if is_end_callback(name) {
+            self.ends_ran_before_window.insert(name.to_owned());
         }
         let armed = self.function_ran(name);
         let armed_by_this_pop = armed.iter().find_map(|out| match out {
@@ -561,6 +600,8 @@ impl HostFightStream {
             && !fight_windows_of_pack(self.window.pack())
                 .any(|row| row != window && row.start_ids.contains(&name))
         {
+            self.moved_past_start_chain = false;
+            self.start_ids_ran.clear();
             return Vec::new();
         }
         let event = self.window.function_ran(name);
@@ -605,6 +646,8 @@ impl HostFightStream {
             }
             WindowEvent::Closed(window, cause) => {
                 self.forget_requests();
+                self.ends_ran_before_window.clear();
+                self.start_ids_ran.clear();
                 // The window closes as its end id pops, so nothing that handler reads is taped.
                 let ended = self
                     .tape
@@ -642,6 +685,7 @@ impl HostFightStream {
         self.tape.end();
         self.tape_logged.clear();
         self.restarted_with_no_entry_since = false;
+        self.moved_past_start_chain = false;
         HostStreamOut::Opened {
             phase,
             epoch,
@@ -739,7 +783,9 @@ impl HostFightStream {
             && !self.streamed_names.contains(&call.name)
         {
             RequestReceipt::NotAWindowFunction
-        } else if self.streamed_copies(&call.name) >= call.copy_number {
+        } else if self.streamed_copies(&call.name) >= call.copy_number
+            || self.ends_ran_before_window.contains(&call.name)
+        {
             RequestReceipt::AlreadyRanHere
         } else {
             let answer_if_refused = RequestAnswer::refused(&call, FightRequestRefusal::Full);

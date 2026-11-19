@@ -5,13 +5,15 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
+use replicant_game::callback_gate::LastPauseOn;
 use replicant_game::cutscene_skip::TRIGGER_MANAGER_RVA;
 use replicant_game::fight_sync::{SlotState, script_slot_state};
 use replicant_game::marker::CONTROL_MASK_FIRST_RVA;
 use replicant_game::script_runner::{
     HostLedRuns, PAUSE_OFF_NATIVE_RVA, PAUSE_ON_NATIVE_RVA, PauseCall, QUEUE_FIRST_SLOT_OFFSET,
-    QUEUE_SLOT_COUNT, QUEUE_SLOT_STRIDE, ScriptRunnerLogGate, ScriptRunnerSnapshot,
-    SlotHolderWatch, format_empty_pop, format_pause_call, format_runner_state, format_slot_holder,
+    QUEUE_SLOT_COUNT, QUEUE_SLOT_STRIDE, ScriptPauseWatch, ScriptRunnerLogGate,
+    ScriptRunnerSnapshot, SlotHolderWatch, format_empty_pop, format_pause_call,
+    format_runner_state, format_slot_holder,
 };
 use replicant_game::story_relay::{QUEUED_CALL_FREE_STATE, QUEUED_CALL_READY_STATE};
 
@@ -22,7 +24,7 @@ use crate::game_hooks::menu_no_pause;
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
 use crate::stay_together::{main_menu_open, pause_menu_open};
-use nc_hook::detour::hook_address;
+use nt_hook::detour::hook_address;
 
 static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_PAUSE_ON: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
@@ -30,7 +32,9 @@ static ORIGINAL_PAUSE_OFF: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static GATE: Mutex<ScriptRunnerLogGate> = Mutex::new(ScriptRunnerLogGate::new());
 static LAST_POP: Mutex<Option<(String, u64)>> = Mutex::new(None);
 static SLOT_HOLDER: Mutex<SlotHolderWatch> = Mutex::new(SlotHolderWatch::new());
+static SCRIPT_PAUSES: Mutex<ScriptPauseWatch> = Mutex::new(ScriptPauseWatch::new());
 static HOST_LED_RUNS: Mutex<HostLedRuns> = Mutex::new(HostLedRuns::new());
+static LAST_PAUSE_ON: Mutex<Option<LastPauseOn>> = Mutex::new(None);
 
 type LuaNative = unsafe extern "system" fn(*mut c_void);
 
@@ -75,6 +79,13 @@ pub(crate) fn note_host_led_handler(name: &str, arrived_ms: Option<u64>) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .announce(name, arrived_ms.unwrap_or_else(net_clock_ms));
+}
+
+pub(crate) fn script_pause_in_force() -> bool {
+    SCRIPT_PAUSES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .in_force(net_clock_ms())
 }
 
 pub(crate) fn host_led_run() -> Option<(String, u64)> {
@@ -136,6 +147,13 @@ pub(crate) fn last_native() -> Option<(&'static str, u64)> {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .last_native(net_clock_ms())
+}
+
+pub(crate) fn last_pause_on() -> Option<LastPauseOn> {
+    LAST_PAUSE_ON
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 pub(crate) fn last_pop() -> Option<(String, u64)> {
@@ -274,9 +292,18 @@ fn run_pause_native(original: &AtomicPtr<c_void>, call: PauseCall, lua_state: *m
         PauseCall::Off => "_PauseOff",
     };
     let _ = panic::catch_unwind(|| {
+        note_script_pause_call(call);
         note_native(native);
         log_pause_call(call, before);
     });
+}
+
+fn note_script_pause_call(call: PauseCall) {
+    let mut pauses = SCRIPT_PAUSES.lock().unwrap_or_else(PoisonError::into_inner);
+    match call {
+        PauseCall::On => pauses.pause_on_called(net_clock_ms()),
+        PauseCall::Off => pauses.pause_off_called(),
+    }
 }
 
 fn current_pause_mask() -> u32 {
@@ -292,10 +319,13 @@ fn log_pause_call(call: PauseCall, before: u32) {
         .as_ref()
         .map(|(name, _)| name.clone())
         .unwrap_or_default();
-    log_line(&format_pause_call(
-        call,
-        before,
-        current_pause_mask(),
-        &running,
-    ));
+    let after = current_pause_mask();
+    *LAST_PAUSE_ON.lock().unwrap_or_else(PoisonError::into_inner) = match call {
+        PauseCall::On => Some(LastPauseOn {
+            step: running.clone(),
+            mask_after: after,
+        }),
+        PauseCall::Off => None,
+    };
+    log_line(&format_pause_call(call, before, after, &running));
 }

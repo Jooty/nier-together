@@ -41,3 +41,31 @@ pub fn mask_without_menu(slots: [u32; 4], view: PauseView) -> u32 {
         menu_slot | others
     }
 }
+
+/// The mask with the player-input bit added while a rule room's return or a watching guest holds
+/// the player's own input back; every other bit is left as it is.
+pub fn mask_with_player_input_held(
+    mask: u32,
+    return_holds_input: bool,
+    guest_is_watching: bool,
+) -> u32 {
+    if return_holds_input || guest_is_watching {
+        mask | MENU_PLAYER_INPUT_BIT
+    } else {
+        mask
+    }
+}
+
+/// The mask the game's free-to-act test (it gates opening the pause menu) sees: while a guest
+/// watches, the player-input bit its slot 0 hold wrote is left out, so the pause menu still opens.
+pub fn mask_for_the_free_to_act_test(
+    mask: u32,
+    guest_is_watching: bool,
+    inside_free_to_act_test: bool,
+) -> u32 {
+    if guest_is_watching && inside_free_to_act_test {
+        mask & !MENU_PLAYER_INPUT_BIT
+    } else {
+        mask
+    }
+}

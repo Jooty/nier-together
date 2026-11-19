@@ -1,14 +1,18 @@
+#[cfg(feature = "probes")]
 mod boss_bar_probe;
 mod boss_hit_log;
+#[cfg(feature = "probes")]
 mod boss_motion_probe;
+mod bullet_hit_hook;
+#[cfg(feature = "probes")]
 mod ca_gauge_probe;
 mod combat;
 mod combat_view;
 mod companion;
-mod companion_probe;
 mod counters;
 mod drop_hook;
 mod game_calls;
+mod gauge_opening_replay;
 mod guest_combat;
 mod hit_hook;
 mod hold_hook;
@@ -17,14 +21,16 @@ mod install;
 mod shared_actors;
 mod spawn_hook;
 mod status;
+mod stone;
 mod sync;
 mod word_drop_hook;
 
 pub(crate) use combat_view::applying_remote;
 pub use counters::CombatCounts;
-pub(crate) use hold_hook::cut_copy_step_before_move;
+pub(crate) use gauge_opening_replay::{OpeningReplayStep, replay_guest_opening_hit};
+pub(crate) use hold_hook::{cut_copy_step_before_move, is_held};
 pub use install::install;
-pub use shared_actors::shared_enemy_actors;
+pub use shared_actors::{shared_actor_id, shared_actor_of, shared_enemy_actors};
 pub use status::{
     EnemySyncRole, EnemySyncStatus, enemy_id_text, enemy_sync_status, set_snap_enabled,
     snap_enabled,

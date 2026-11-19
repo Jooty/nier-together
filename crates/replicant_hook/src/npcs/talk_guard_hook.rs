@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 
 use replicant_game::GameMemory;
+use replicant_game::dialogue::talk_command_came_from_a_story_step;
 use replicant_game::npcs::{NPC_TALK_COMMAND_IDS, refuses_talk_start, talk_busy_notice};
 use replicant_game::offsets::{HUMAN_NPC_COMMAND_FUNCTION_RVA, NPC_COMMAND_ID_OFFSET};
 
@@ -14,6 +15,7 @@ use crate::diagnostics::log_line;
 use crate::event_log::post_event;
 use crate::game_hooks::hook_address;
 use crate::memory::InProcessMemory;
+use crate::net::net_clock_ms;
 use crate::npcs::talk_press::refuses_important_press;
 
 static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
@@ -95,8 +97,21 @@ fn refuse_talk(actor: u64, command: u64) -> bool {
     }
     let talks = PARTNER_TALKS.lock().unwrap_or_else(PoisonError::into_inner);
     let partner_talking = talks.actors.contains(&actor);
-    if !refuses_talk_start(command_id, partner_talking) {
+    let last_pop = crate::game_hooks::last_pop();
+    let step_makes_it_talk = talk_command_came_from_a_story_step(
+        last_pop
+            .as_ref()
+            .map(|(call, at_ms)| (call.as_str(), *at_ms)),
+        net_clock_ms(),
+    );
+    if !refuses_talk_start(command_id, partner_talking, step_makes_it_talk) {
         crate::cutscene_skip::note_talk_command();
+        if partner_talking && let Some((call, _)) = &last_pop {
+            log_line(&format!(
+                "npcs: talk command {command_id:#x} on {actor:#x} allowed though the other player talks to it: the story step {call} makes it talk, and both games run that step"
+            ));
+            return false;
+        }
         log_line(&format!(
             "npcs: talk command {command_id:#x} on {actor:#x} allowed (the other player talks to it: {partner_talking}, villagers held for the other player's talk: {})",
             talks.actors.len()

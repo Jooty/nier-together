@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::fight_sync::{BASE_PLAYER_LOCAL_HANDLERS, OwnQueuedCall, StreamEntry};
+
+const ENDS_RUN_ONCE_PER_FIGHT: [&str; 1] = ["EID_1450_a0080_End"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlotState {
@@ -41,6 +43,8 @@ pub enum InFlight {
 /// slot is idle and entry N-1 has popped and ended. A queued entry is ours only in the slot it
 /// took (`entry_queued_at`) under its name; one forgotten by a restart is handed out by
 /// `take_forgotten`, since it may still be in the engine queue.
+const TWIN_POPS_REFUSED_BEFORE_THE_QUEUED_ENTRY_IS_CLAIMED: u32 = 3;
+
 #[derive(Debug, Clone)]
 pub struct Replayer {
     epoch: u32,
@@ -50,8 +54,10 @@ pub struct Replayer {
     in_flight_entry: Option<StreamEntry>,
     queued_arguments: Option<u64>,
     forgotten: Vec<OwnQueuedCall>,
+    ends_released: BTreeSet<String>,
     player_local_names: Vec<String>,
     held_own_pops: u64,
+    twin_pops_refused_while_queued: u32,
     dropped_stale: u64,
 }
 
@@ -74,8 +80,10 @@ impl Replayer {
             in_flight_entry: None,
             queued_arguments: None,
             forgotten: Vec::new(),
+            ends_released: BTreeSet::new(),
             player_local_names,
             held_own_pops: 0,
+            twin_pops_refused_while_queued: 0,
             dropped_stale: 0,
         }
     }
@@ -111,6 +119,7 @@ impl Replayer {
         let dropped = self.pending.len();
         self.dropped_stale += dropped as u64;
         self.pending.clear();
+        self.ends_released.clear();
         self.epoch = epoch;
         self.next_seq = 0;
         self.forget_in_flight();
@@ -123,6 +132,7 @@ impl Replayer {
         let dropped = self.pending.len() + usize::from(self.in_flight != InFlight::Idle);
         self.dropped_stale += dropped as u64;
         self.pending.clear();
+        self.ends_released.clear();
         self.forget_in_flight();
         dropped
     }
@@ -162,11 +172,46 @@ impl Replayer {
             self.queued_arguments = None;
             return PopVerdict::RunReplayed { seq };
         }
+        if source == PopSource::Fired
+            && let Some(seq) = self.claim_queued_entry_named(name)
+        {
+            return PopVerdict::RunReplayed { seq };
+        }
         if self.is_player_local(name) {
             return PopVerdict::RunPlayerLocal;
         }
         self.held_own_pops += 1;
         PopVerdict::Hold
+    }
+
+    /// A pop of `name` that is not the queued entry's own slot but is the same call: the game's
+    /// own twin of the host's call (fired, or armed by an object) runs as the entry, so the entry
+    /// is not left waiting behind a pop that is refused every tick.
+    pub fn claim_queued_entry_named(&mut self, name: &str) -> Option<u64> {
+        let InFlight::Queued { seq } = self.in_flight else {
+            return None;
+        };
+        if self.in_flight_entry.as_ref()?.name != name {
+            return None;
+        }
+        self.twin_pops_refused_while_queued += 1;
+        if self.twin_pops_refused_while_queued
+            <= TWIN_POPS_REFUSED_BEFORE_THE_QUEUED_ENTRY_IS_CLAIMED
+        {
+            return None;
+        }
+        self.twin_pops_refused_while_queued = 0;
+        self.in_flight = InFlight::Running { seq };
+        self.queued_arguments = None;
+        Some(seq)
+    }
+
+    pub fn has_queued_entry_named(&self, name: &str) -> bool {
+        matches!(self.in_flight, InFlight::Queued { .. })
+            && self
+                .in_flight_entry
+                .as_ref()
+                .is_some_and(|entry| entry.name == name)
     }
 
     /// Called once per guest tick with the script slot's state; returns the entry to queue now.
@@ -192,8 +237,9 @@ impl Replayer {
             return None;
         }
         let mut entry = self.pending.remove(&self.next_seq)?;
-        while self.is_player_local(&entry.name) {
-            // The guest's engine fires its own copy of a player-local call.
+        while self.is_player_local(&entry.name) || self.is_repeated_end(&entry.name) {
+            // The guest's engine fires its own copy of a player-local call; a scene's End that
+            // already ran in this epoch is not run a second time.
             self.next_seq += 1;
             entry = self.pending.remove(&self.next_seq)?;
         }
@@ -201,8 +247,12 @@ impl Replayer {
             self.pending.insert(entry.seq, entry);
             return None;
         }
+        if ENDS_RUN_ONCE_PER_FIGHT.contains(&entry.name.as_str()) {
+            self.ends_released.insert(entry.name.clone());
+        }
         self.in_flight = InFlight::Queued { seq: entry.seq };
         self.in_flight_entry = Some(entry.clone());
+        self.twin_pops_refused_while_queued = 0;
         Some(entry)
     }
 
@@ -276,6 +326,10 @@ impl Replayer {
         Some(seq)
     }
 
+    fn is_repeated_end(&self, name: &str) -> bool {
+        self.ends_released.contains(name)
+    }
+
     pub fn is_player_local(&self, name: &str) -> bool {
         self.player_local_names.iter().any(|local| local == name)
     }
@@ -290,6 +344,10 @@ impl Replayer {
 
     pub const fn next_seq(&self) -> u64 {
         self.next_seq
+    }
+
+    pub const fn queued_arguments(&self) -> Option<u64> {
+        self.queued_arguments
     }
 
     pub fn in_flight_name(&self) -> Option<&str> {

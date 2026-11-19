@@ -25,10 +25,12 @@ impl DialogueTracker {
         self.current
     }
 
-    /// `find_talk_id` runs only when the window starts a different talk.
+    /// `find_talk_id` runs only when the window starts a different talk. `step` is the press count
+    /// inside the line so far (pages turned and page-break waits passed).
     pub fn observe(
         &mut self,
         cursor: Option<TalkCursor>,
+        step: u16,
         partner_present: bool,
         find_talk_id: impl FnOnce(u64) -> Option<u32>,
     ) -> Option<DialogueUpdate> {
@@ -44,6 +46,7 @@ impl DialogueTracker {
             talk_id.map(|talk_id| DialogueLine {
                 talk_id,
                 line: cursor.line,
+                step,
             })
         });
         if cursor.is_none() {

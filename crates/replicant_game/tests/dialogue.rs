@@ -2,13 +2,15 @@ use std::cell::Cell;
 
 use replicant_game::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, ChoiceFollowInput, ChoiceFollower,
-    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS, MirrorAction, MirrorInput,
+    ChoiceStep, DialogueTracker, FOLLOW_HOST_TALK_WAIT_MS,
+    HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS, LineSteps, MirrorAction, MirrorInput,
     OWN_ENDED_TALK_NOT_MIRRORED_MS, PartnerTalkMemory, PartnerTalkMirror, TALK_JOIN_RANGE_UNITS,
-    TALK_TABLE_SCAN_CHUNK_SLOTS, TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET,
-    TALK_WINDOW_RVA, TALK_WINDOW_TALK_TABLE_OFFSET, TalkCursor, TalkLeader, WATCHER_HOLD_MASK,
-    WatcherHold, WatcherHoldAction, WatcherHoldInput, find_talk_id, leader_for_own_talk,
-    open_prompt_kind, own_talk_started, read_talk_cursor, replace_player_name_tag,
-    speaker_name_to_show, talk_tags_run_here, within_talk_range,
+    TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK, TALK_TABLE_SCAN_CHUNK_SLOTS,
+    TALK_WINDOW_CURRENT_LINE_OFFSET, TALK_WINDOW_CURRENT_TALK_OFFSET, TALK_WINDOW_RVA,
+    TALK_WINDOW_TALK_TABLE_OFFSET, TalkCursor, TalkLeader, WATCHER_HOLD_MASK, WatcherHold,
+    WatcherHoldAction, WatcherHoldInput, find_talk_id, leader_for_own_talk, open_prompt_kind,
+    own_talk_started, read_talk_cursor, replace_player_name_tag, speaker_name_to_show,
+    talk_tags_run_here, within_talk_range,
 };
 use replicant_game::marker::{CONTROL_MASK_FIRST_RVA, EVENT_SCENE_BYTE_RVA, read_world_flags};
 use replicant_game::ui_scenes::PAUSE_MENU_SCENE_ID;
@@ -35,7 +37,11 @@ fn put_window(memory: &mut FakeMemory, state: i32, talk_address: u64, line: i32)
 }
 
 fn line(talk_id: u32, line: u16) -> DialogueLine {
-    DialogueLine { talk_id, line }
+    DialogueLine {
+        talk_id,
+        line,
+        step: 0,
+    }
 }
 
 #[test]
@@ -80,20 +86,20 @@ fn the_tracker_sends_each_new_line_once_and_ended_when_the_window_closes() {
         Some(42)
     };
     assert_eq!(
-        tracker.observe(cursor(0), true, find),
+        tracker.observe(cursor(0), 0, true, find),
         Some(DialogueUpdate::Line(line(42, 0)))
     );
-    assert_eq!(tracker.observe(cursor(0), true, find), None);
+    assert_eq!(tracker.observe(cursor(0), 0, true, find), None);
     assert_eq!(
-        tracker.observe(cursor(1), true, find),
+        tracker.observe(cursor(1), 0, true, find),
         Some(DialogueUpdate::Line(line(42, 1)))
     );
     assert_eq!(scans.get(), 1);
     assert_eq!(
-        tracker.observe(None, true, find),
+        tracker.observe(None, 0, true, find),
         Some(DialogueUpdate::Ended)
     );
-    assert_eq!(tracker.observe(None, true, find), None);
+    assert_eq!(tracker.observe(None, 0, true, find), None);
 }
 
 #[test]
@@ -103,9 +109,9 @@ fn a_partner_who_joins_mid_talk_gets_the_current_line() {
         talk_address: TALK_ADDRESS,
         line: 3,
     });
-    assert_eq!(tracker.observe(cursor, false, |_| Some(42)), None);
+    assert_eq!(tracker.observe(cursor, 0, false, |_| Some(42)), None);
     assert_eq!(
-        tracker.observe(cursor, true, |_| Some(42)),
+        tracker.observe(cursor, 0, true, |_| Some(42)),
         Some(DialogueUpdate::Line(line(42, 3)))
     );
 }
@@ -208,18 +214,22 @@ fn a_window_the_game_closed_is_reopened_but_not_every_frame() {
 }
 
 #[test]
-fn a_different_talk_closes_first_then_opens_the_new_one() {
+fn a_different_talk_opens_in_the_window_that_is_still_open() {
     let mut mirror = PartnerTalkMirror::new();
     mirror.step(mirror_input(Some(line(42, 1)), 0));
     let next = MirrorInput {
         window_open: true,
         ..mirror_input(Some(line(7, 0)), 10)
     };
-    assert_eq!(mirror.step(next), Some(MirrorAction::Close));
     assert_eq!(
-        mirror.step(mirror_input(Some(line(7, 0)), 2000)),
-        Some(MirrorAction::Open(line(7, 0)))
+        mirror.step(next),
+        Some(MirrorAction::SwitchTalk(line(7, 0)))
     );
+    let next_line = MirrorInput {
+        window_open: true,
+        ..mirror_input(Some(line(7, 1)), 500)
+    };
+    assert_eq!(mirror.step(next_line), Some(MirrorAction::ShowLine(1)));
 }
 
 #[test]
@@ -420,7 +430,10 @@ fn the_guest_follows_the_hosts_lines_through_a_talk_both_opened() {
         mirror.step(guest_with_own_talk(line(1002, 1), Some(line(2605, 0)), 30)),
         Some(MirrorAction::ChainOwnTalk(line(2605, 0)))
     );
-    assert!(!mirror.holds_own_talk());
+    assert!(
+        mirror.holds_own_talk(),
+        "the copy stays led while the presses take it on to the next talk"
+    );
     assert_eq!(
         mirror.step(guest_with_own_talk(line(2605, 0), Some(line(2605, 0)), 40)),
         Some(MirrorAction::FollowStarted(2605))
@@ -436,7 +449,7 @@ fn a_shared_talk_that_follows_a_shared_talk_is_stepped_into_on_the_guest() {
         mirror.step(guest_with_own_talk(line(1002, 1), Some(line(2605, 0)), 10)),
         Some(MirrorAction::ChainOwnTalk(line(2605, 0)))
     );
-    assert!(!mirror.holds_own_talk());
+    assert!(mirror.holds_own_talk());
     assert_eq!(
         mirror.step(guest_with_own_talk(line(2605, 0), Some(line(2605, 0)), 20)),
         Some(MirrorAction::FollowStarted(2605))
@@ -662,7 +675,7 @@ fn a_copy_opened_within_the_wait_after_the_host_left_closes_at_once() {
 }
 
 #[test]
-fn a_copy_opened_after_the_wait_runs_by_its_own_buttons() {
+fn a_copy_opened_long_after_the_host_left_runs_by_its_own_buttons() {
     let mut mirror = PartnerTalkMirror::new();
     let host = host_that_ended_talk_at(1057, 1000);
     assert_eq!(
@@ -670,9 +683,24 @@ fn a_copy_opened_after_the_wait_runs_by_its_own_buttons() {
             &mut mirror,
             &host,
             Some(line(1057, 0)),
-            1001 + FOLLOW_HOST_TALK_WAIT_MS
+            1001 + HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS
         ),
         Some(MirrorAction::FollowStarted(1057))
+    );
+}
+
+#[test]
+fn a_copy_opened_a_little_after_the_wait_still_closes_at_once() {
+    let mut mirror = PartnerTalkMirror::new();
+    let host = host_that_ended_talk_at(1056, 19_484);
+    assert_eq!(
+        guest_tick(&mut mirror, &host, Some(line(1056, 0)), 21_754),
+        Some(MirrorAction::FinishOwnTalk(1056))
+    );
+    assert!(!mirror.holds_own_talk());
+    assert_eq!(
+        guest_tick(&mut mirror, &host, Some(line(1056, 0)), 23_754),
+        None
     );
 }
 
@@ -945,4 +973,111 @@ fn releasing_the_followed_talk_gives_the_buttons_back() {
     assert!(mirror.holds_own_talk());
     mirror.release_followed_talk();
     assert!(!mirror.holds_own_talk());
+}
+
+#[test]
+fn a_talk_shown_as_a_mirror_is_finished_when_the_guests_own_copy_of_it_opens_later() {
+    let mut mirror = PartnerTalkMirror::new();
+    assert_eq!(
+        mirror.step(mirror_input(Some(line(1290, 0)), 0)),
+        Some(MirrorAction::Open(line(1290, 0)))
+    );
+    assert_eq!(mirror.step(mirror_input(None, 100)), None);
+    let own = |talk_id, leader, now_ms| MirrorInput {
+        own_talk: Some(line(talk_id, 0)),
+        window_open: true,
+        leader,
+        ..mirror_input(None, now_ms)
+    };
+    assert_eq!(
+        mirror.step(own(1290, TalkLeader::Partner, 17_000)),
+        Some(MirrorAction::FinishOwnTalk(1290))
+    );
+    assert_ne!(
+        mirror.step(own(1290, TalkLeader::Partner, 17_050)),
+        Some(MirrorAction::FinishOwnTalk(1290))
+    );
+}
+
+#[test]
+fn an_own_talk_that_was_never_a_mirror_or_is_led_by_the_player_is_left_alone() {
+    let mut mirror = PartnerTalkMirror::new();
+    mirror.step(mirror_input(Some(line(1290, 0)), 0));
+    mirror.step(mirror_input(None, 100));
+    let own = |talk_id, leader| MirrorInput {
+        own_talk: Some(line(talk_id, 0)),
+        window_open: true,
+        leader,
+        ..mirror_input(None, 5000)
+    };
+    assert_eq!(
+        mirror.step(own(1300, TalkLeader::Partner)),
+        Some(MirrorAction::FollowStarted(1300))
+    );
+    assert_eq!(mirror.step(own(1290, TalkLeader::Local)), None);
+}
+
+#[test]
+fn a_mirrored_talk_is_forgotten_after_the_expiry() {
+    let mut mirror = PartnerTalkMirror::new();
+    mirror.step(mirror_input(Some(line(1290, 0)), 0));
+    mirror.step(mirror_input(None, 100));
+    let late = MirrorInput {
+        own_talk: Some(line(1290, 0)),
+        window_open: true,
+        leader: TalkLeader::Partner,
+        ..mirror_input(None, 700_000)
+    };
+    assert_eq!(mirror.step(late), Some(MirrorAction::FollowStarted(1290)));
+}
+
+#[test]
+fn a_press_inside_the_line_goes_to_the_partner_as_a_new_step_of_the_same_line() {
+    let mut tracker = DialogueTracker::new();
+    let cursor = Some(TalkCursor {
+        talk_address: TALK_ADDRESS,
+        line: 0,
+    });
+    assert_eq!(
+        tracker.observe(cursor, 0, true, |_| Some(1423)),
+        Some(DialogueUpdate::Line(line(1423, 0)))
+    );
+    assert_eq!(tracker.observe(cursor, 0, true, |_| Some(1423)), None);
+    assert_eq!(
+        tracker.observe(cursor, 1, true, |_| Some(1423)),
+        Some(DialogueUpdate::Line(DialogueLine {
+            talk_id: 1423,
+            line: 0,
+            step: 1,
+        })),
+        "run 1115j 01:48:22.764: the guest sat in player state 5 (a page break) of talk 1423 and the host's line number never changed"
+    );
+}
+
+#[test]
+fn the_line_steps_count_pages_and_page_break_waits_the_player_left() {
+    const PAGE_BREAK: i32 = TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK;
+    let mut steps = LineSteps::new();
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, 2), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, 3), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS, 0, 0, PAGE_BREAK), 0);
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 0, 0, 3),
+        1,
+        "leaving the page break on a press is one step"
+    );
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 0, 1, 4),
+        2,
+        "a page turned is another"
+    );
+    assert_eq!(
+        steps.observe(TALK_ADDRESS, 1, 0, 2),
+        0,
+        "a new line starts over"
+    );
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, PAGE_BREAK), 0);
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, 3), 1);
+    steps.forget();
+    assert_eq!(steps.observe(TALK_ADDRESS + 8, 1, 0, 3), 0);
 }

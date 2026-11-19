@@ -5,11 +5,11 @@ use replicant_game::move_log::{
     MoveLineContext, MoveLogDue, MoveLogReason, MoveLogTrigger, MoveLogWindow,
     RATE_TABLE_CHANNEL_STRIDE, RATE_TABLE_ID_STRIDE, RATE_TABLE_OFFSET,
     SPEC_DUMP_SECOND_DUMP_DELAY_MS, SPEC_TABLE_BYTE_COUNT, SPEC_TABLE_POINTER_OFFSET,
-    SPEED_CAP_GIVE_UP_AFTER_RESETS, STATE_161F0_OFFSET, SpecDumpMoment, SpecDumpSchedule,
-    SpeedCapLift, SpeedCapLog, SpeedCapStep, action_set_for_seed, format_move_line,
-    format_rates_dump, format_spec_dump, format_speed_cap_log, input_block_getter, read_move_axis,
-    read_move_keys, read_move_sample, read_rates_dump, read_spec_table, read_speed_cap, role_label,
-    should_lift_speed_cap, speed_cap_address, state_name_for_rva, write_lifted_speed_cap,
+    STATE_161F0_OFFSET, SpecDumpMoment, SpecDumpSchedule, SpeedCapSecond, SpeedCapWatch,
+    action_set_for_seed, format_move_line, format_rates_dump, format_spec_dump,
+    format_speed_cap_second, input_block_getter, is_house_speed_cap_value, read_move_axis,
+    read_move_keys, read_move_sample, read_rates_dump, read_spec_table, read_speed_cap,
+    read_state_rva, role_label, speed_cap_address, state_name_for_rva,
 };
 use replicant_game::stay_together::FollowRole;
 
@@ -432,6 +432,7 @@ fn an_unreadable_rate_table_logs_one_line() {
 fn the_speed_cap_is_the_rate_five_slot_two_the_move_line_reads() {
     let mut memory = memory_with_actor();
     memory.put(speed_cap_address(ACTOR), &0.01_f32.to_le_bytes());
+    assert_eq!(read_state_rva(&memory, ACTOR), Some(MOVE_STATE_RVA));
     let sample = read_move_sample(&memory, ACTOR);
     let changes = sample.rate_changes.unwrap();
     assert!(
@@ -439,93 +440,47 @@ fn the_speed_cap_is_the_rate_five_slot_two_the_move_line_reads() {
             .iter()
             .any(|change| (change.id, change.channel, change.value) == (5, 2, 0.01))
     );
-    assert!(write_lifted_speed_cap(&mut memory, ACTOR));
-    assert_eq!(read_speed_cap(&memory, ACTOR), Some(1.0));
+    assert_eq!(read_speed_cap(&memory, ACTOR), Some(0.01));
 }
 
 #[test]
-fn only_a_swapped_kaine_outside_scenes_and_talks_has_a_capped_speed_lifted() {
-    assert!(should_lift_speed_cap(0.01, true, false, false));
-    assert!(!should_lift_speed_cap(0.05, true, false, false));
-    assert!(!should_lift_speed_cap(1.0, true, false, false));
-    assert!(!should_lift_speed_cap(0.01, false, false, false));
-    assert!(!should_lift_speed_cap(0.01, true, true, false));
-    assert!(!should_lift_speed_cap(0.01, true, false, true));
+fn only_the_house_value_counts_as_the_house_cap() {
+    assert!(is_house_speed_cap_value(0.01));
+    assert!(is_house_speed_cap_value(0.04));
+    assert!(!is_house_speed_cap_value(0.0));
+    assert!(!is_house_speed_cap_value(0.05));
+    assert!(!is_house_speed_cap_value(1.0));
 }
 
 #[test]
-fn the_lift_is_logged_once_per_phase_and_a_game_reset_once() {
-    let mut lift = SpeedCapLift::default();
-    let first = lift.observe(1, 0.01, true, false, false);
-    assert_eq!(
-        first,
-        SpeedCapStep {
-            write: true,
-            log: Some(SpeedCapLog::Lifted { from: 0.01 })
-        }
-    );
-    assert_eq!(
-        lift.observe(1, 1.0, true, false, false),
-        SpeedCapStep::default()
-    );
-    let reset = lift.observe(1, 0.01, true, false, false);
-    assert_eq!(
-        reset,
-        SpeedCapStep {
-            write: true,
-            log: Some(SpeedCapLog::GameReset { to: 0.01 })
-        }
-    );
-    assert_eq!(
-        lift.observe(1, 0.02, true, false, false),
-        SpeedCapStep {
-            write: true,
-            log: None
-        }
-    );
-    let next_phase = lift.observe(2, 0.01, true, false, false);
-    assert_eq!(next_phase.log, Some(SpeedCapLog::Lifted { from: 0.01 }));
+fn the_indoor_speed_line_is_due_each_second_while_the_house_cap_was_seen_in_the_last_second() {
+    let mut watch = SpeedCapWatch::default();
+    assert!(!watch.due(61_406, false));
+    assert!(watch.due(61_406, true));
+    assert!(!watch.due(61_900, true));
+    assert!(watch.due(62_406, false));
+    assert!(!watch.due(62_700, false));
+    assert!(!watch.due(63_500, false));
+    assert!(watch.due(64_100, true));
 }
 
 #[test]
-fn the_lift_gives_up_for_the_phase_after_too_many_game_resets() {
-    let mut lift = SpeedCapLift::default();
-    lift.observe(3, 0.0, true, false, false);
-    for _ in 0..SPEED_CAP_GIVE_UP_AFTER_RESETS {
-        assert!(lift.observe(3, 0.0, true, false, false).write);
-    }
-    let give_up = lift.observe(3, 0.0, true, false, false);
+fn the_indoor_speed_line_names_the_body_the_cap_the_step_and_the_ground_speed() {
+    let line = format_speed_cap_second(&SpeedCapSecond {
+        phase: 2,
+        swapped_body: true,
+        cap: Some(0.01),
+        step_per_second: Some(2.9),
+        ground_speed: Some(0.06),
+        state_rva: Some(MOVE_STATE_RVA),
+    });
     assert_eq!(
-        give_up,
-        SpeedCapStep {
-            write: false,
-            log: Some(SpeedCapLog::GaveUp)
-        }
+        line,
+        "indoor walk: swapped body, phase 2: 5:2 0.01, step 2.90/s at ground speed 0.06, state StateActionMove"
     );
+    let unread = format_speed_cap_second(&SpeedCapSecond::default());
     assert_eq!(
-        lift.observe(3, 0.0, true, false, false),
-        SpeedCapStep::default()
-    );
-    assert!(lift.observe(4, 0.0, true, false, false).write);
-}
-
-#[test]
-fn the_lift_stays_quiet_in_a_scene_and_the_log_lines_are_exact() {
-    let mut lift = SpeedCapLift::default();
-    assert_eq!(
-        lift.observe(1, 0.0, true, true, false),
-        SpeedCapStep::default()
-    );
-    assert_eq!(
-        format_speed_cap_log(SpeedCapLog::Lifted { from: 0.01 }, 7),
-        "kaine walk: lifted the house speed cap 5:2 from 0.01 to 1.0 (phase 7)"
-    );
-    assert_eq!(
-        format_speed_cap_log(SpeedCapLog::GameReset { to: 0.0 }, 7),
-        "kaine walk: the game reset 5:2 to 0.00"
-    );
-    assert_eq!(
-        format_speed_cap_log(SpeedCapLog::GaveUp, 7),
-        "kaine walk: gave up for phase 7"
+        unread,
+        "indoor walk: own body, phase 0: 5:2 ?, step ?/s at ground speed ?, state none"
     );
 }

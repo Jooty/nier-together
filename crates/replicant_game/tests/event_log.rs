@@ -71,3 +71,50 @@ fn the_stack_sits_at_the_bottom_left_and_grows_upwards() {
     assert!(layout.line_top(1) < layout.line_top(0));
     assert_eq!(layout.line_top(0) + layout.line_height, layout.bottom);
 }
+
+#[test]
+fn a_persistent_line_stays_after_the_fading_ones_are_gone() {
+    let mut log = EventLog::new();
+    assert!(log.set_persistent("Watching Jay"));
+    log.post("fades", 0);
+    let late = log.visible(EVENT_LOG_VISIBLE_MS * 10);
+    assert_eq!(late.len(), 1);
+    assert_eq!(late[0].text, "Watching Jay");
+    assert_eq!(late[0].alpha, 1.0);
+}
+
+#[test]
+fn the_persistent_line_is_drawn_below_the_fading_ones() {
+    let mut log = EventLog::new();
+    log.set_persistent("Watching Jay");
+    log.post("first", 0);
+    log.post("second", 10);
+    let texts: Vec<_> = log.visible(1000).into_iter().map(|e| e.text).collect();
+    assert_eq!(texts, ["first", "second", "Watching Jay"]);
+}
+
+#[test]
+fn setting_a_persistent_line_replaces_the_old_one() {
+    let mut log = EventLog::new();
+    assert!(log.set_persistent("Watching Jay"));
+    assert!(!log.set_persistent("Watching Jay"));
+    assert!(log.set_persistent("Sam is watching"));
+    assert_eq!(log.persistent(), Some("Sam is watching"));
+    assert_eq!(log.visible(0).len(), 1);
+}
+
+#[test]
+fn clearing_the_persistent_line_removes_it_once() {
+    let mut log = EventLog::new();
+    log.set_persistent("Watching Jay");
+    assert!(log.clear_persistent());
+    assert!(!log.clear_persistent());
+    assert!(log.visible(0).is_empty());
+}
+
+#[test]
+fn an_empty_persistent_line_is_not_set() {
+    let mut log = EventLog::new();
+    assert!(!log.set_persistent("\n"));
+    assert_eq!(log.persistent(), None);
+}

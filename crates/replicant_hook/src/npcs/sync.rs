@@ -144,10 +144,11 @@ pub fn tick_npc_sync(build: &VerifiedBuild) {
         sync.go_idle(build, "co-op is off");
         return;
     };
+    crate::npcs::side_view_report::tick(build, net);
     let relayed = net
         .take_relayed(|message| matches!(message, Message::NpcSnapshot(_) | Message::NpcTalk(_)));
     let view = net.view();
-    let Some(remote) = view.remote else {
+    let Some(remote) = view.partner_state().cloned() else {
         sync.go_idle(build, "no other player is connected");
         return;
     };

@@ -1,6 +1,7 @@
 use std::sync::{Mutex, PoisonError};
 
 use replicant_game::fight_sync::{SlotState, script_slot_state};
+use replicant_game::scene_follow::{LocalCut, StaleCutLoad, stale_cut_load};
 use replicant_game::script_functions::shows_modal_ui;
 use replicant_game::shared_events::phase_name;
 use replicant_game::story_relay::{
@@ -10,7 +11,10 @@ use replicant_game::story_relay::{
 use replicant_proto::StoryCall;
 
 use crate::build_gate::VerifiedBuild;
-use crate::cutscene_skip::{close_menus_for_modal_entry, expect_handler_run, forget_handler_run};
+use crate::cutscene_skip::{
+    close_menus_for_modal_entry, event_scene_running, expect_handler_run, forget_handler_run,
+    local_cut,
+};
 use crate::diagnostics::log_line;
 use crate::game_hooks::{last_native, last_pop};
 use crate::net::net_clock_ms;
@@ -29,6 +33,14 @@ pub(crate) enum RelayPath {
 }
 
 static RELAY_CALLS: Mutex<RelayCallGate<RelayPath>> = Mutex::new(RelayCallGate::new());
+static PATH_OF_THE_QUEUED_CALL: Mutex<Option<(u64, RelayPath)>> = Mutex::new(None);
+
+impl RelayPath {
+    /// True for every path that carries the partner's call; a held own call is this side's.
+    pub(crate) const fn is_partners_copy(self) -> bool {
+        !matches!(self, Self::HeldOwnCall)
+    }
+}
 
 pub(crate) fn submit_relay_call(call: &StoryCall, path: RelayPath) -> bool {
     let submitted = RELAY_CALLS
@@ -69,8 +81,14 @@ pub fn tick_relay_calls(build: &VerifiedBuild) {
     let now = net_clock_ms();
     let fight_call_queued = crate::fight_sync::own_call_queued();
     let menu_open = main_menu_open(build) || pause_menu_open(build);
-    let (due, long_wait, in_flight) = {
+    let local = local_cut(build);
+    let local_in_scene = event_scene_running(build).unwrap_or(false);
+    let (due, long_wait, in_flight, stale) = {
         let mut gate = RELAY_CALLS.lock().unwrap_or_else(PoisonError::into_inner);
+        let stale = gate.withdraw_waiting_if(|waiting| {
+            waiting.then == RelayPath::SceneFollow
+                && stale_cut_load(&waiting.call, &local, local_in_scene).is_some()
+        });
         gate.check_queued(slot, now, |name, arguments| {
             crate::fight_sync::queued_call_is_ours(build, name, arguments)
         });
@@ -80,8 +98,11 @@ pub fn tick_relay_calls(build: &VerifiedBuild) {
         let long_wait = gate.long_wait(menu_open, now);
         // Only a long wait's log reads the call in flight, so it is copied only then.
         let in_flight = long_wait.as_ref().map(|_| gate.in_flight().clone());
-        (due, long_wait, in_flight)
+        (due, long_wait, in_flight, stale)
     };
+    for dropped in stale {
+        log_stale_cut_load(&dropped, &local, local_in_scene, now);
+    }
     if let (Some(wait), Some(in_flight)) = (long_wait, in_flight) {
         log_long_wait(&wait, &in_flight, fight_call_queued, slot, manager_state);
     }
@@ -105,6 +126,26 @@ pub fn tick_relay_calls(build: &VerifiedBuild) {
             ),
         });
     }
+}
+
+fn log_stale_cut_load(
+    dropped: &WaitingRelayCall<RelayPath>,
+    local: &LocalCut,
+    local_in_scene: bool,
+    now: u64,
+) {
+    let why = match stale_cut_load(&dropped.call, local, local_in_scene) {
+        Some(StaleCutLoad::OwnSceneRuns) => {
+            "your game plays its own scene now, and the load would free the cut it plays"
+        }
+        Some(StaleCutLoad::CutLoadedHere) | None => "your game has that cut loaded now",
+    };
+    log_line(&format!(
+        "relay calls: the partner's {} ({:?}) dropped after {} ms, {why}",
+        dropped.call.function,
+        dropped.then,
+        now.saturating_sub(dropped.submitted_ms)
+    ));
 }
 
 fn log_long_wait(
@@ -176,6 +217,9 @@ fn queue_now(build: &VerifiedBuild, due: WaitingRelayCall<RelayPath>, now: u64) 
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .queued(name, slot);
+    *PATH_OF_THE_QUEUED_CALL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner) = Some((slot, due.then));
     if let RelayPath::StoryEvent(key) = due.then {
         LEDGER
             .lock()
@@ -189,11 +233,27 @@ fn queue_now(build: &VerifiedBuild, due: WaitingRelayCall<RelayPath>, now: u64) 
     ));
 }
 
-pub(crate) fn relay_call_popped(arguments: u64) {
-    RELAY_CALLS
+/// Notes a pop; the path when it is the call this gate queued (a partner's call or a released
+/// own one), none when the game fired it by itself.
+pub(crate) fn relay_call_popped(arguments: u64) -> Option<RelayPath> {
+    let ours = RELAY_CALLS
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .popped(arguments);
+    let path = PATH_OF_THE_QUEUED_CALL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_if(|(slot, _)| *slot == arguments)
+        .map(|(_, path)| path);
+    // A gate that lost track of its call still names the path the call was queued on.
+    ours.then_some(path.unwrap_or(RelayPath::SharedFunction))
+}
+
+pub(crate) fn withdraw_waiting_shared_function(name: &str) -> usize {
+    RELAY_CALLS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .withdraw_waiting(name, |path| *path == RelayPath::SharedFunction)
 }
 
 pub(super) fn relay_call_cancelled(arguments: u64) {

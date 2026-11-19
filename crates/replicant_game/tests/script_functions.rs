@@ -5,7 +5,7 @@ use replicant_game::callback_gate::{
 use replicant_game::coop_pause::LEFTOVER_PAUSE_MENU_MASK;
 use replicant_game::script_functions::{
     DEBUG_PRINT_TEXT_ARG_INDEX, DrainStep, FunctionArrival, FunctionArrivalFacts, FunctionDrop,
-    FunctionsRan, MODAL_UI_FUNCTIONS, SCRIPT_FUNCTIONS, debug_print_args_len,
+    FunctionsRan, MODAL_UI_FUNCTIONS, MUSIC_ONLY_FUNCTIONS, SCRIPT_FUNCTIONS, debug_print_args_len,
     debug_print_tag_range, debug_print_text_range, function_arrival, is_callee_of,
     plan_forced_drain, script_function, shows_modal_ui, traced_function_name, traced_function_text,
     traced_function_text_from_parts,
@@ -392,11 +392,57 @@ fn both_print_forms_name_the_function_and_other_text_does_not() {
         "EID_0200_a0030g_End",
         "",
         "->",
+        " -> ",
         "()",
         "two words()",
         "hits 12",
     ] {
         assert_eq!(traced_function_name(text), None, "{text}");
+    }
+}
+
+#[test]
+fn the_two_packs_that_print_spaces_around_the_arrow_name_their_stage_start_too() {
+    // script-functions.toml: A_CLIFF_VILLAGE_01 and A_TRIAL_01 print "<pack> -> StartStage"; the
+    // other 94 packs print "<pack>->StartStage()" or build the same text from pack->name.
+    assert_eq!(
+        traced_function_name("A_CLIFF_VILLAGE_01 -> StartStage"),
+        Some("StartStage"),
+        "R1b D3c: the leading space failed the name check, so every load into these packs held the host's changes the full 15 s"
+    );
+    assert_eq!(
+        traced_function_name("A_TRIAL_01 -> StartStage"),
+        Some("StartStage")
+    );
+}
+
+#[test]
+fn the_pack_whose_stage_start_is_printed_by_the_other_log_native_still_names_it() {
+    // The binding table points _DebugPrint and _SnowDebugLog at the same no-op stub, so the hook
+    // reads E_FOREST_FIELD_02's _SnowDebugLog print like any other.
+    assert_eq!(
+        traced_function_name("E_FOREST_FIELD_02->StartStage()"),
+        Some("StartStage")
+    );
+}
+
+#[test]
+fn a_spaced_arrow_names_only_the_stage_start_and_no_other_debug_print() {
+    for text in [
+        "A_DESERT_TOWN_01 -> Change_Bright_01",
+        "A_DESERT_TOWN_01 -> Play_ENV_01",
+        "A_CLIFF_VILLAGE_01 -> start",
+        "EventViewer -> EID_8000_a0010",
+        "A_MOUNT_ROBOT_01 -> snow_ResetTrapTitan",
+        "LIB_IsInPhaseFromSavePoint -> 1",
+        "DLC.h -> Game_Over",
+        "GM_OUT_Door_of_NierHouse_02 -> EID_0300_a0015g_Start -> Not PauseOff",
+    ] {
+        assert_eq!(
+            traced_function_name(text),
+            None,
+            "{text}: a spaced-arrow print that is not a stage start must not count as a function trace"
+        );
     }
 }
 
@@ -485,5 +531,51 @@ fn the_modal_ui_table_is_sorted_and_holds_no_relayed_row() {
     }
     for (phase, name) in MODAL_UI_FUNCTIONS.iter() {
         assert!(script_function(phase, name).is_none(), "{phase} {name}");
+    }
+}
+
+#[test]
+fn the_music_only_table_is_sorted() {
+    for pair in MUSIC_ONLY_FUNCTIONS.windows(2) {
+        assert!(pair[0] < pair[1], "{pair:?}");
+    }
+}
+
+#[test]
+fn the_bomb_callbacks_of_the_bomb_floor_are_plain_steps() {
+    for name in [
+        "Bomb_Tutorial01",
+        "Bomb_Tutorial02",
+        "Obj_Bomb_Flag01",
+        "Obj_Bomb_Flag02",
+    ] {
+        let function = replicant_game::script_functions::script_function("A_MOUNT_ROBOT_02", name)
+            .unwrap_or_else(|| panic!("{name} has no row"));
+        assert!(!function.starts_scene && !function.shows_modal_ui, "{name}");
+    }
+}
+
+#[test]
+fn only_the_cart_puts_are_shared_and_each_game_keeps_its_own_cart_callbacks() {
+    for pack in [
+        "A_MOUNT_ROBOT_02",
+        "A_MOUNT_ROBOT_03",
+        "B_MOUNT_ROBOT_02",
+        "B_MOUNT_ROBOT_03",
+    ] {
+        assert!(script_function(pack, "Put_Truck_01").is_some(), "{pack}");
+        assert!(script_function(pack, "Put_Truck_02").is_some(), "{pack}");
+        for own in [
+            "ChangeCam_Truck01",
+            "ChangeCam_Truck02",
+            "Put_Truck_03",
+            "Put_Truck_04",
+            "SET_FALL_TRUCK_01",
+            "SET_FALL_TRUCK_02",
+            "StartTruck_CameraSetting",
+            "Visible_Control",
+        ] {
+            assert!(script_function(pack, own).is_none(), "{pack} {own}");
+        }
     }
 }

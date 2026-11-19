@@ -12,6 +12,7 @@ use replicant_proto::{EffectLook, EffectPlay, Message};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
+use crate::effects::actor_cues;
 use crate::effects::calls::{
     PlayedEffect, align_anchor_offset, distance_to_listener, move_world_effect, play_effect,
     play_sound, spawn_world_effect,
@@ -19,7 +20,7 @@ use crate::effects::calls::{
 use crate::effects::hooks::{note_partner_hit_effect_played, send_ended_effects, set_sending};
 use crate::effects::report::{
     DROPPED_WITHOUT_PUPPET, PLAY_FAILED, PLAYED_EFFECTS, PLAYED_SOUNDS, PLAYED_STOPS,
-    SILENCED_BY_DISTANCE, count, log_limited, log_summary,
+    SILENCED_BY_DISTANCE, count, log_limited, log_summary, note_world_effect_shown,
 };
 use crate::effects::voice::{
     forget_sent_character, play_as_partner_character, remember_partner_character,
@@ -174,6 +175,7 @@ impl Mirror {
             }
             Message::WorldEffect(effect) => match spawn_world_effect(build, &effect) {
                 Some(handle) => {
+                    note_world_effect_shown(&effect.effect, true);
                     note_partner_hit_effect_played();
                     count(&PLAYED_EFFECTS);
                     log_limited(&format!(
@@ -193,6 +195,7 @@ impl Mirror {
                     }
                 }
                 None => {
+                    note_world_effect_shown(&effect.effect, false);
                     count(&PLAY_FAILED);
                     log_limited(&format!(
                         "effects: world effect {} was not created",
@@ -227,10 +230,12 @@ impl Mirror {
 
 pub fn tick(build: &VerifiedBuild) {
     let Some(net) = net::handle() else {
+        actor_cues::wind_down(build);
         return;
     };
     let active = net.view().partner_in_play();
-    set_sending(active);
+    set_sending(active && !crate::story_watch::this_game_is_watching());
+    actor_cues::tick(build, active);
     if active {
         send_ended_effects(build);
     }

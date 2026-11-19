@@ -7,7 +7,7 @@ use replicant_game::offsets::BODY_MOTION_LAYER;
 use replicant_game::puppet::{
     LayerMotion, motion_name, read_layer_motion, read_ridden_boar, read_weapon_look,
 };
-use replicant_game::readiness::{REPORT_MIN_INTERVAL_MS, classify, read_play_checks};
+use replicant_game::readiness::{REPORT_MIN_INTERVAL_MS, classify, read_play_reads};
 use replicant_game::{PhaseEntry, Replicant};
 use replicant_proto::{NO_MOTION_NAME_HASH, PartnerActivity, RiddenBoar, motion_name_hash};
 
@@ -36,7 +36,8 @@ pub fn report_readiness(build: &VerifiedBuild) {
     }
     *last = Some(now);
     let game = Replicant::new(InProcessMemory::new(build));
-    net.report_readiness(classify(read_play_checks(&game)));
+    let reads = read_play_reads(&game);
+    net.report_readiness(classify(reads.checks()), reads);
 }
 
 pub fn quit_when_asked() {
@@ -75,6 +76,11 @@ pub fn start_auto() {
     crate::frame_tuning::load_frame_tuning();
     if let Ok(Some(config)) = AutoConfig::load_beside_game() {
         crate::event_log::set_event_log_enabled(config.event_log_enabled());
+        crate::kaine::set_companion_rows_from_scripts(config.companion_rows_from_scripts_enabled());
+        crate::kaine::set_companion_off_everywhere(config.companion_off_everywhere_enabled());
+        crate::story_watch::set_guest_watches(
+            config.guest_watches_when_the_story_takes_her_enabled(),
+        );
     }
     match AutoConfig::load_beside_game() {
         Ok(Some(AutoConfig {
@@ -83,10 +89,11 @@ pub fn start_auto() {
             log_line(&format!("net: launcher link on port {port}"));
             start_link(port);
         }
-        Ok(Some(_)) => log_line("net: nier-coop.toml has no link port, co-op is off"),
-        Ok(None) => log_line("net: no nier-coop.toml, co-op is off"),
+        Ok(Some(_)) => log_line("net: niertogether.toml has no link port, co-op is off"),
+        Ok(None) => log_line("net: no niertogether.toml, co-op is off"),
         Err(error) => log_line(&format!("net: {error}")),
     }
+    nt_hook::hook_env::log_old_env_names_in_use();
 }
 
 fn read_snapshot(game: &Replicant<InProcessMemory>) -> Option<LocalSnapshot> {

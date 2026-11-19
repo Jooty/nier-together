@@ -4,13 +4,12 @@ use std::panic;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Mutex, PoisonError};
 
+use replicant_game::Replicant;
 use replicant_game::story_jump::{
     LevelCheck, LevelWatcher, NATIVE_ARG_FIRST_OFFSET_BYTES, NATIVE_ARG_STRIDE_BYTES,
     NATIVE_ARG_VALUE_OFFSET_BYTES, NATIVE_ARGS_HEADER_BYTES, PLAYER_UNIQUE_ACTOR_ID,
-    SAVE_BLOCK_PLAYER_LEVEL_RVA, SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA, check_level,
-    level_check_is_due, loadout_player_level,
+    SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA, check_level, jump_stat_level, level_check_is_due,
 };
-use replicant_game::{GameMemory, Replicant};
 use replicant_proto::StoryJumpPoint;
 
 use crate::build_gate::VerifiedBuild;
@@ -18,7 +17,7 @@ use crate::diagnostics::log_line;
 use crate::game_hooks::{hook_address, note_native};
 use crate::memory::InProcessMemory;
 use crate::net::net_clock_ms;
-use crate::story_jump::natives::call_native;
+use crate::story_jump::stat_level::raise_stat_level_to;
 use crate::story_writes::calls::running_call;
 
 const LEVEL_CHECK_GIVE_UP_MS: u64 = 60_000;
@@ -100,22 +99,11 @@ fn log_level_call(args_address: u64) {
 }
 
 pub(super) fn read_player_level(build: &VerifiedBuild) -> Option<i32> {
-    InProcessMemory::new(build)
-        .read_i32(build.module_base() + u64::from(SAVE_BLOCK_PLAYER_LEVEL_RVA))
-        .ok()
-}
-
-pub(super) fn log_level(build: &VerifiedBuild, when: &str) {
-    match read_player_level(build) {
-        Some(level) => log_line(&format!("story jump: level {level} {when}")),
-        None => log_line(&format!("story jump: level unreadable {when}")),
-    }
+    Replicant::new(InProcessMemory::new(build)).level().ok()
 }
 
 pub(super) fn expect_level_after_jump(build: &VerifiedBuild, point: StoryJumpPoint) {
-    let Some(level) = loadout_player_level(point) else {
-        return;
-    };
+    let level = jump_stat_level(point);
     let game = Replicant::new(InProcessMemory::new(build));
     let phase_at_apply = game.current_phase().unwrap_or_default();
     *EXPECTED.lock().unwrap_or_else(PoisonError::into_inner) = Some(ExpectedLevel {
@@ -183,18 +171,13 @@ fn verify_expected_level(build: &VerifiedBuild) {
     drop(guard);
     match check_level(level, read_player_level(build)) {
         LevelCheck::Matches => log_line(&format!(
-            "story jump: level {level} held after the travel ({phase_now})"
+            "story jump: level {level} or more held after the travel ({phase_now})"
         )),
         LevelCheck::ApplyAgain { expected, actual } => {
             log_line(&format!(
-                "story jump: level is {actual} after the travel, expected {expected}, applying it again"
+                "story jump: level is {actual} after the travel, expected at least {expected}, raising it again"
             ));
-            call_native(
-                build,
-                SET_UNIQUE_ACTOR_LEVEL_NATIVE_RVA,
-                &[PLAYER_UNIQUE_ACTOR_ID, expected],
-            );
-            log_level(build, "after applying it again");
+            raise_stat_level_to(build, expected);
         }
         LevelCheck::Unreadable => log_line("story jump: level unreadable after the travel"),
     }

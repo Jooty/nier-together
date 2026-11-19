@@ -1,8 +1,16 @@
 //! The game's talk window: which talk and line a player is reading, and mirroring the partner's.
 mod choice_follow;
 mod choice_hover;
+mod held_talk_start;
+mod line_press;
 mod mirror;
+mod mirror_window_size;
+mod on_screen;
+mod own_step_copy;
+mod own_window;
+mod story_talk_menu_close;
 mod talk_cursor;
+mod talk_origin;
 mod talker_name;
 mod tracker;
 mod watcher_hold;
@@ -15,11 +23,25 @@ pub use choice_hover::{
     PromptPick, followed_prompt_frame, host_answer_fits, marker_move, prompt_pick,
     read_choice_prompt, write_highlighted_option,
 };
+pub use held_talk_start::{HeldTalkRelease, HeldTalkStart, HeldTalkStep};
+pub use line_press::{LinePress, LineSteps, PressStep, TalkWindowReading};
 pub use mirror::{
     HostLedScriptTalk, MirrorAction, MirrorInput, PartnerTalkMemory, PartnerTalkMirror, TalkLeader,
     leader_for_own_talk, talk_tags_run_here, within_talk_range,
 };
+pub use mirror_window_size::{MirrorWindowSize, layout_size_text};
+pub use on_screen::{
+    ScreenReport, TalkScreenVerdict, TalkWindowScreen, put_may_show_flag_back,
+    read_talk_window_screen,
+};
+pub use own_step_copy::{OwnStepCopyEvent, OwnStepCopyReading, OwnStepCopyWait};
+pub use own_window::{OwnTalkWindow, SetTalkCalls};
+pub use story_talk_menu_close::{
+    STORY_TALK_MENU_CLOSE_MOST_ASKS_PER_TALK, STORY_TALK_MENU_CLOSE_RETRY_AFTER_MS,
+    StoryTalkMenuClose, story_talk_menu_close_text,
+};
 pub use talk_cursor::{TalkCursor, find_talk_id, read_talk_cursor};
+pub use talk_origin::{TalkOrigin, TalkOriginTracker, talk_command_came_from_a_story_step};
 pub use talker_name::{replace_player_name_tag, speaker_name_to_show};
 pub use tracker::DialogueTracker;
 pub use watcher_hold::{WatcherHold, WatcherHoldAction, WatcherHoldInput, own_talk_started};
@@ -36,6 +58,24 @@ pub const TALK_WINDOW_PLAYER_OFFSET: u64 = 0x108;
 pub const TALK_WINDOW_CURRENT_TALK_OFFSET: u64 = 0x46_3040;
 pub const TALK_WINDOW_CURRENT_LINE_OFFSET: u64 = 0x46_3048;
 pub const TALK_WINDOW_MASK_BEFORE_OPEN_OFFSET: u64 = 0x4A_4170;
+pub const TALK_WINDOW_MAY_SHOW_OFFSET: u64 = 0x4A_4185;
+pub const TALK_WINDOW_LAYOUT_SIZE_OFFSET: u64 = 0x4A_4168;
+pub const TALK_WINDOW_FULL_PAGE_LAYOUT_SIZES: core::ops::RangeInclusive<i32> = 0xB..=0xD;
+pub const TALK_WINDOW_WIDGET_OFFSET: u64 = 0x4A_32C8;
+pub const TALK_WIDGET_NODE_OFFSET: u64 = 0xE88;
+pub const WIDGET_NODE_HANDLE_OFFSET: u64 = 0x30;
+pub const WIDGET_HANDLE_NONE: u32 = 0xFFFF;
+pub const WIDGET_HANDLE_TABLE_RVA: u32 = 0xEE_49C0;
+pub const WIDGET_HANDLE_ENTRY_BYTES: u64 = 0x10;
+pub const WIDGET_HANDLE_ENTRY_GENERATION_OFFSET: u64 = 0x8;
+pub const WIDGET_OBJECT_FLAGS_OFFSET: u64 = 0xD4;
+pub const WIDGET_OBJECT_DRAWN_BIT: u8 = 1;
+pub const TALK_DATA_LINE_COUNT_OFFSET: u64 = 0x28;
+pub const TALK_PLAYER_DRAWS_TEXT_STATES: core::ops::RangeInclusive<i32> = 2..=9;
+pub const TALK_SCREEN_REPORT_AFTER_OPEN_MS: u64 = 300;
+pub const HELD_TALK_START_WAITS_FOR_THE_PARTNER_MS: u64 = 2000;
+pub const STORY_CALLBACKS_THAT_FORCE_A_TALK: [&str; 3] =
+    ["MiniGame_End", "ScriptMode_to_Yonah_02", "Talk_Text_02_06"];
 pub const TALK_WINDOW_TALK_TABLE_OFFSET: u64 = 0x1C_2B18;
 pub const TALK_TABLE_SLOTS: u32 = 0x4_0000;
 pub const TALK_TABLE_SCAN_CHUNK_SLOTS: u32 = 0x200;
@@ -49,6 +89,15 @@ pub const TALK_UPDATE_INPUT_VERTICAL_NEXT_OFFSETS: [usize; 4] = [0x21, 0x25, 0x3
 pub const TALK_UPDATE_INPUT_HORIZONTAL_PREVIOUS_OFFSETS: [usize; 4] = [0x22, 0x26, 0x39, 0x3D];
 pub const TALK_UPDATE_INPUT_HORIZONTAL_NEXT_OFFSETS: [usize; 4] = [0x23, 0x27, 0x3A, 0x3E];
 pub const TALK_UPDATE_INPUT_ENTER_LIST_OFFSET: usize = TALK_UPDATE_INPUT_VERTICAL_NEXT_OFFSETS[0];
+pub const TALK_UPDATE_INPUT_CONFIRM_OFFSET: usize = 0x28;
+pub const TALK_PLAYER_STATE_TYPING: i32 = 3;
+pub const TALK_PLAYER_STATE_WAITS_FOR_A_PRESS: i32 = 4;
+pub const TALK_PLAYER_STATE_WAITS_AT_A_PAGE_BREAK: i32 = 5;
+pub const TALK_WINDOW_PAGE_OFFSET: u64 = 0x46_31BC;
+pub const LINE_PRESS_OPENS_THE_TALK_AFTER_MS: u64 = 600;
+pub const LINE_PRESS_GIVES_UP_AFTER_MS: u64 = 3_000;
+pub const STORY_STEP_CALLS_WITHOUT_AN_EVENT_ID: [&str; 2] =
+    ["ScriptMode_to_Kaine_02", "ScriptMode_to_Kaine_03"];
 pub const TALK_PLAYER_PROMPT_KIND_OFFSET: u64 = 0x46_3068;
 pub const TALK_PLAYER_CHOICE_SELECTOR_OFFSET: u64 = 0x46_2A28;
 pub const CHOICE_SELECTOR_OPTION_COUNT_OFFSET: u64 = 0x20;
@@ -70,7 +119,15 @@ pub const TALK_TAG_RUN_ALL_RVA: u32 = 0xD_8950;
 pub const MIRROR_OPEN_RETRY_MS: u64 = 1000;
 pub const CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS: u64 = 5000;
 pub const FOLLOW_HOST_TALK_WAIT_MS: u64 = 2000;
+pub const HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS: u64 = 15_000;
+pub const OWN_STEP_COPY_AWAITED_MS: u64 = 3000;
 pub const OWN_ENDED_TALK_NOT_MIRRORED_MS: u64 = 3000;
+pub const MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS: u64 = 600_000;
+pub const SCRIPT_TALK_START_OPENS_THE_WINDOW_WITHIN_MS: u64 = 1000;
+pub const CHAINED_TALK_KEEPS_THE_STORY_STEP_WITHIN_MS: u64 = 500;
+pub const STORY_STEP_TALK_COMMAND_OPENS_THE_WINDOW_WITHIN_MS: u64 = 250;
+pub const HOST_ANSWER_KEPT_FOR_A_LATE_PROMPT_MS: u64 = 120_000;
+pub const HOST_ANSWERS_KEPT: usize = 8;
 pub const UI_DRAW_PASS_RVA: u32 = 0xC_C8F0;
 pub const TALK_JOIN_RANGE_UNITS: f32 = 15.0;
 pub const TALK_LEAVE_EXTRA_UNITS: f32 = 2.0;

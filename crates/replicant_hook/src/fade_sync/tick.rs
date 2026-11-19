@@ -22,6 +22,42 @@ static GUEST: Mutex<GuestFadeState> = Mutex::new(GuestFadeState::new());
 static WATCH: Mutex<FadeWatch> = Mutex::new(FadeWatch::new());
 static GUEST_HOLDS_FADE: AtomicBool = AtomicBool::new(false);
 
+pub(crate) fn fade_guest_back_in() -> bool {
+    call_fade(
+        false,
+        BACKSTOP_FADE_IN_KIND,
+        BACKSTOP_FADE_IN_SECONDS,
+        BACKSTOP_FADE_IN_DEPTH,
+    )
+}
+
+pub(crate) fn fade_on_this_game_only(
+    fading_out: bool,
+    kind: i32,
+    seconds: f32,
+    depth: u32,
+) -> bool {
+    call_fade(fading_out, kind, seconds, depth)
+}
+
+pub(super) fn guest_own_fade_in_repeats_the_hosts() -> bool {
+    let Some(net) = net::handle() else {
+        return false;
+    };
+    let guest_here = FollowRole::from_slot(net.view().local_slot) == FollowRole::Guest;
+    if !guest_here {
+        return false;
+    }
+    let repeats = GUEST
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .own_fade_in_repeats_mirror(now_ms());
+    if repeats {
+        log_line("fade: your game's fade in repeats the one mirrored from the host, not run");
+    }
+    repeats
+}
+
 pub fn guest_holds_fade() -> bool {
     GUEST_HOLDS_FADE.load(Ordering::Relaxed)
 }
@@ -41,6 +77,13 @@ pub fn tick(build: &VerifiedBuild) {
         let Message::Fade(fade) = message else {
             continue;
         };
+        if !fade.fading_out && guest.mirror_repeats_own_fade_in(now_ms()) {
+            guest.mirrored_fade_in(now_ms());
+            log_line(
+                "fade: the host's fade in repeats the one your game just ran, not called again",
+            );
+            continue;
+        }
         if !call_fade(
             fade.fading_out,
             i32::from(fade.kind),
@@ -59,10 +102,12 @@ pub fn tick(build: &VerifiedBuild) {
         if fade.fading_out {
             guest.started_fade_out(now_ms());
         } else {
-            guest.started_fade_in();
+            guest.mirrored_fade_in(now_ms());
         }
     }
-    if guest.backstop_due(now_ms())
+    let black_held_for_the_stretch = crate::host_led_stretch::guest_watches_a_stretch();
+    if !black_held_for_the_stretch
+        && guest.backstop_due(now_ms())
         && call_fade(
             false,
             BACKSTOP_FADE_IN_KIND,

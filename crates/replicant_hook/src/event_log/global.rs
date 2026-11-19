@@ -18,6 +18,22 @@ pub fn post_event(text: &str) {
     }
 }
 
+pub fn set_persistent_event(text: &str) {
+    let changed = LOG
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .set_persistent(text);
+    if changed {
+        log_posted(text);
+    }
+}
+
+pub fn clear_persistent_event() {
+    LOG.lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear_persistent();
+}
+
 pub fn take_visible_events() -> Vec<VisibleEvent> {
     LOG.lock()
         .unwrap_or_else(PoisonError::into_inner)

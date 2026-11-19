@@ -52,72 +52,17 @@ pub fn plan_takeovers(
     plan
 }
 
-/// What the guest's own spawns inside a fight window do with the host ids their order names.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct FightBindingPlan {
-    /// (own id, host id): the own enemy takes the host id no enemy here holds.
-    pub renames: Vec<(EnemyId, EnemyId)>,
-    /// (own id, host id): a copy here holds the host id; the own enemy takes it over and the copy goes.
-    pub takeovers: Vec<(EnemyId, EnemyId)>,
-}
-
-/// Inside a fight window the guest's own game spawns each wave from the host's replayed handler,
-/// so its n-th own spawn of a group is the host's n-th: each own spawn binds to the host id
-/// (group, own arrival). A copy made here from the host's spawn that holds that id is taken over
-/// (so a filled-in copy never doubles the late own spawn); an id an own enemy holds here or an own
-/// actor ever took over is never bound again. An own id freed by a rename or takeover planned in
-/// the same tick is free for the next spawn (two waves landing in one tick), and the plan is
-/// re-run until nothing changes; renames come out in an order `EnemyRoster::bind_ids` can apply.
-pub fn plan_fight_bindings(
-    own_spawns: &[(EnemyId, u16)],
-    held_here: &HashSet<EnemyId>,
-    copies_here: &HashSet<EnemyId>,
-    already_own: &HashSet<EnemyId>,
-) -> FightBindingPlan {
-    let mut held = held_here.clone();
-    let mut copies = copies_here.clone();
-    let mut waiting = own_spawns.to_vec();
-    waiting.sort();
-    let mut plan = FightBindingPlan::default();
-    loop {
-        let before = waiting.len();
-        waiting.retain(|&(own, arrival)| {
-            let bound = EnemyId {
-                group: own.group,
-                ordinal: arrival,
-            };
-            if bound == own || already_own.contains(&bound) {
-                return false;
-            }
-            if copies.remove(&bound) {
-                held.remove(&own);
-                plan.takeovers.push((own, bound));
-                return false;
-            }
-            if held.contains(&bound) {
-                // A spawn later in this tick may still rename away from it.
-                return true;
-            }
-            held.remove(&own);
-            held.insert(bound);
-            plan.renames.push((own, bound));
-            false
-        });
-        if waiting.len() == before {
-            return plan;
-        }
-    }
-}
-
 /// Host enemies inside a fight window that the guest's replay has not spawned: each waits
 /// `FIGHT_SPAWN_FILL_IN_GRACE_MS` from its arrival here for a guest spawn to bind it, then is due
 /// for a copy; a copy the game would not make is tried again `FIGHT_SPAWN_FILL_IN_RETRIES` times,
-/// `FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS` apart.
+/// `FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS` apart. Once a group had a spawn that waited the whole grace,
+/// the guest's replay is not spawning that group, so its later spawns are due at once.
 #[derive(Debug, Clone, Default)]
 pub struct FightSpawnFillIn {
     waiting_since: HashMap<EnemyId, u64>,
     filled_in: HashSet<EnemyId>,
     failed_tries: HashMap<EnemyId, (u32, u64)>,
+    groups_the_replay_never_filled: HashSet<u16>,
     snap_off_logged: bool,
 }
 
@@ -163,7 +108,15 @@ impl FightSpawnFillIn {
                 tries <= FIGHT_SPAWN_FILL_IN_RETRIES
                     && now_ms.saturating_sub(last_ms) >= FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS
             });
-            if waited >= FIGHT_SPAWN_FILL_IN_GRACE_MS && copyable.contains(&id) && retry_ready {
+            let grace_ms = if self.groups_the_replay_never_filled.contains(&id.group) {
+                0
+            } else {
+                FIGHT_SPAWN_FILL_IN_GRACE_MS
+            };
+            if waited >= grace_ms && copyable.contains(&id) && retry_ready {
+                if waited >= FIGHT_SPAWN_FILL_IN_GRACE_MS {
+                    self.groups_the_replay_never_filled.insert(id.group);
+                }
                 step.due.push((id, waited));
             }
         }
@@ -201,6 +154,7 @@ impl FightSpawnFillIn {
         self.waiting_since.clear();
         self.filled_in.clear();
         self.failed_tries.clear();
+        self.groups_the_replay_never_filled.clear();
         self.snap_off_logged = false;
     }
 }

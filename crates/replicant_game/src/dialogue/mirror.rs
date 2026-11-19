@@ -2,8 +2,9 @@ use replicant_proto::{DialogueLine, DialogueUpdate};
 
 use crate::dialogue::{
     CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, FOLLOW_HOST_TALK_WAIT_MS,
-    MIRROR_OPEN_RETRY_MS, OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS,
-    TALK_LEAVE_EXTRA_UNITS,
+    HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS, LINE_PRESS_GIVES_UP_AFTER_MS,
+    MIRROR_OPEN_RETRY_MS, MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS,
+    OWN_ENDED_TALK_NOT_MIRRORED_MS, TALK_JOIN_RANGE_UNITS, TALK_LEAVE_EXTRA_UNITS,
 };
 
 /// What the partner's talk window must do this tick to follow the talker's line.
@@ -11,6 +12,10 @@ use crate::dialogue::{
 pub enum MirrorAction {
     /// Open the window on `talk_id` and go straight to `line` (a late joiner starts mid-talk).
     Open(DialogueLine),
+    /// The talker went from one talk straight into the next in a window that stayed open: open
+    /// the next talk in the same open window, as the talker's own script does, so no opening
+    /// animation hides its first lines.
+    SwitchTalk(DialogueLine),
     /// Move the open mirrored window to this line.
     ShowLine(u16),
     Close,
@@ -27,6 +32,9 @@ pub enum MirrorAction {
     ChainOwnTalk(DialogueLine),
     /// The host never showed this talk: the guest's own talk goes on by the guest's buttons.
     FollowGaveUp(u32),
+    /// The presses did not take the guest's copy on to the host's next talk in time: the copy
+    /// goes on by the guest's buttons.
+    ChainGaveUp(u32),
     /// The host left the talk while the guest's copy was at an answer prompt that never got the
     /// host's answer: the guest's copy goes on by the guest's buttons.
     ChoiceGaveUp(u32),
@@ -41,16 +49,6 @@ pub enum TalkLeader {
     Local,
     Partner,
     Either,
-}
-
-/// A talk the local player started with the talk command is theirs alone: it is never led by
-/// the partner. A copy a script opened (stream entry, relayed call, shared event) follows `base`.
-pub fn leader_for_own_talk(base: TalkLeader, started_by_player_command: bool) -> TalkLeader {
-    if started_by_player_command && base == TalkLeader::Partner {
-        TalkLeader::Local
-    } else {
-        base
-    }
 }
 
 /// One tick's view of the partner's talk and of this game.
@@ -73,6 +71,7 @@ pub struct MirrorInput {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PartnerTalkMemory {
     line: Option<DialogueLine>,
+    story: bool,
     last_ended: Option<(u32, u64)>,
 }
 
@@ -81,6 +80,44 @@ pub struct PartnerTalkMemory {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct HostLedScriptTalk {
     led: bool,
+}
+
+/// Follows the partner's talk in this game's own talk window, line by line.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PartnerTalkMirror {
+    shown: Option<DialogueLine>,
+    retry_open_at_ms: u64,
+    joined_own_talk: Option<u32>,
+    following: Option<FollowedTalk>,
+    last_own_talk: Option<u32>,
+    own_ended: Option<EndedTalk>,
+    mirrored: Vec<MirroredTalk>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MirroredTalk {
+    talk_id: u32,
+    at_ms: u64,
+    own_copy_finished: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct EndedTalk {
+    talk_id: u32,
+    at_ms: u64,
+    skip_told: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FollowedTalk {
+    talk_id: u32,
+    since_ms: u64,
+    host_seen_on_it: bool,
+    gave_up: bool,
+    /// The host went on to this talk at this time; the copy stays led while its presses take it there too.
+    chained_to: Option<(u32, u64)>,
+    finish_deferred_since_ms: Option<u64>,
+    answer_seen: bool,
 }
 
 impl HostLedScriptTalk {
@@ -109,17 +146,20 @@ impl PartnerTalkMemory {
     pub const fn new() -> Self {
         Self {
             line: None,
+            story: false,
             last_ended: None,
         }
     }
 
     pub fn receive(&mut self, update: DialogueUpdate, now_ms: u64) {
         match update {
-            DialogueUpdate::Line(line) => {
+            DialogueUpdate::Line(line) | DialogueUpdate::StoryLine(line) => {
                 self.line = Some(line);
+                self.story = matches!(update, DialogueUpdate::StoryLine(_));
                 self.last_ended = None;
             }
             DialogueUpdate::Ended => {
+                self.story = false;
                 if let Some(line) = self.line.take() {
                     self.last_ended = Some((line.talk_id, now_ms));
                 }
@@ -129,6 +169,7 @@ impl PartnerTalkMemory {
 
     pub fn forget(&mut self) {
         self.line = None;
+        self.story = false;
         self.last_ended = None;
     }
 
@@ -144,8 +185,29 @@ impl PartnerTalkMemory {
             })
     }
 
-    /// The talk the host left within the wait before this tick, when the guest's own copy is that
-    /// same talk: the host already left, so the guest's copy closes at once.
+    pub fn is_on(&self, talk_id: u32) -> bool {
+        self.line.is_some_and(|line| line.talk_id == talk_id)
+    }
+
+    pub fn any_talk_on(&self) -> bool {
+        self.line.is_some()
+    }
+
+    pub fn any_talk_ended_within_follow_wait(&self, now_ms: u64) -> bool {
+        self.last_ended.is_some_and(|(_, ended_ms)| {
+            now_ms.saturating_sub(ended_ms) <= FOLLOW_HOST_TALK_WAIT_MS
+        })
+    }
+
+    pub fn ended_within_follow_wait(&self, talk_id: u32, now_ms: u64) -> bool {
+        self.last_ended.is_some_and(|(ended, ended_ms)| {
+            ended == talk_id && now_ms.saturating_sub(ended_ms) <= FOLLOW_HOST_TALK_WAIT_MS
+        })
+    }
+
+    /// The talk the host left a while before this tick, when the guest's own copy is that same
+    /// talk: the host already left, so the guest's copy closes at once. The guest's scene copy can
+    /// reach the talk seconds after the host's, so the memory outlasts the follow wait.
     pub fn ended_for_follow(
         &self,
         own_talk: Option<DialogueLine>,
@@ -156,7 +218,8 @@ impl PartnerTalkMemory {
         self.last_ended
             .filter(|&(talk_id, ended_ms)| {
                 talk_id == own.talk_id
-                    && now_ms.saturating_sub(ended_ms) <= FOLLOW_HOST_TALK_WAIT_MS
+                    && now_ms.saturating_sub(ended_ms)
+                        <= HOST_LEFT_TALK_CLOSES_A_LATE_SCRIPT_COPY_WITHIN_MS
             })
             .map(|(talk_id, _)| talk_id)
     }
@@ -171,34 +234,25 @@ impl PartnerTalkMemory {
         self.line
             .filter(|_| own_talk.is_some() && leader == TalkLeader::Partner)
     }
-}
 
-/// Follows the partner's talk in this game's own talk window, line by line.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct PartnerTalkMirror {
-    shown: Option<DialogueLine>,
-    retry_open_at_ms: u64,
-    joined_own_talk: Option<u32>,
-    following: Option<FollowedTalk>,
-    last_own_talk: Option<u32>,
-    own_ended: Option<EndedTalk>,
-}
+    /// The partner's line while their talk is a story step.
+    pub fn story_line(&self) -> Option<DialogueLine> {
+        self.line.filter(|_| self.story)
+    }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct EndedTalk {
-    talk_id: u32,
-    at_ms: u64,
-    skip_told: bool,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct FollowedTalk {
-    talk_id: u32,
-    since_ms: u64,
-    host_seen_on_it: bool,
-    gave_up: bool,
-    finish_deferred_since_ms: Option<u64>,
-    answer_seen: bool,
+    /// The line the mirror may see: the followed line of an own copy, or, on a game that shows
+    /// the partner's story talks, a story step's line while no talk of this player's is open.
+    pub fn for_mirror(
+        &self,
+        own_talk: Option<DialogueLine>,
+        leader: TalkLeader,
+        shows_partner_story_talks: bool,
+    ) -> Option<DialogueLine> {
+        self.for_follow(own_talk, leader).or_else(|| {
+            self.story_line()
+                .filter(|_| own_talk.is_none() && shows_partner_story_talks)
+        })
+    }
 }
 
 impl PartnerTalkMirror {
@@ -210,6 +264,7 @@ impl PartnerTalkMirror {
             following: None,
             last_own_talk: None,
             own_ended: None,
+            mirrored: Vec::new(),
         }
     }
 
@@ -227,6 +282,15 @@ impl PartnerTalkMirror {
             self.shown = None;
             self.last_own_talk = Some(own.talk_id);
             self.own_ended = None;
+            let host_still_on_it = input
+                .partner_line
+                .is_some_and(|partner| partner.talk_id == own.talk_id);
+            if input.leader == TalkLeader::Partner
+                && !host_still_on_it
+                && let Some(talk_id) = self.finish_mirrored_own_copy(own.talk_id, input.now_ms)
+            {
+                return Some(MirrorAction::FinishOwnTalk(talk_id));
+            }
             return match input.leader {
                 TalkLeader::Partner => self.follow_host(
                     own,
@@ -248,6 +312,7 @@ impl PartnerTalkMirror {
         self.joined_own_talk = None;
         self.following = None;
         if let Some(talk_id) = self.last_own_talk.take() {
+            self.mirrored.retain(|talk| talk.talk_id != talk_id);
             self.own_ended = Some(EndedTalk {
                 talk_id,
                 at_ms: input.now_ms,
@@ -268,6 +333,7 @@ impl PartnerTalkMirror {
                     return None;
                 }
                 self.shown = Some(line);
+                self.remember_mirrored(line.talk_id, input.now_ms);
                 self.retry_open_at_ms = input.now_ms + MIRROR_OPEN_RETRY_MS;
                 Some(MirrorAction::Open(line))
             }
@@ -278,11 +344,46 @@ impl PartnerTalkMirror {
                 self.shown = Some(line);
                 Some(MirrorAction::ShowLine(line.line))
             }
-            (Some(_), _) => {
+            (Some(_), Some(line)) => {
+                self.shown = Some(line);
+                self.remember_mirrored(line.talk_id, input.now_ms);
+                Some(MirrorAction::SwitchTalk(line))
+            }
+            (Some(_), None) => {
                 self.shown = None;
                 Some(MirrorAction::Close)
             }
         }
+    }
+
+    fn remember_mirrored(&mut self, talk_id: u32, now_ms: u64) {
+        self.mirrored.retain(|talk| {
+            now_ms.saturating_sub(talk.at_ms) < MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS
+        });
+        match self
+            .mirrored
+            .iter_mut()
+            .find(|talk| talk.talk_id == talk_id)
+        {
+            Some(talk) => talk.at_ms = now_ms,
+            None => self.mirrored.push(MirroredTalk {
+                talk_id,
+                at_ms: now_ms,
+                own_copy_finished: false,
+            }),
+        }
+    }
+
+    fn finish_mirrored_own_copy(&mut self, talk_id: u32, now_ms: u64) -> Option<u32> {
+        let talk = self
+            .mirrored
+            .iter_mut()
+            .find(|talk| talk.talk_id == talk_id && !talk.own_copy_finished)?;
+        if now_ms.saturating_sub(talk.at_ms) >= MIRRORED_TALK_OWN_COPY_FINISHED_WITHIN_MS {
+            return None;
+        }
+        talk.own_copy_finished = true;
+        Some(talk_id)
     }
 
     fn skip_ended_talk(
@@ -316,11 +417,19 @@ impl PartnerTalkMirror {
             .following
             .is_none_or(|followed| followed.talk_id != own.talk_id);
         if fresh {
+            // The copy arrived on the talk the host chained to: the host was on it, even if it
+            // has moved on since, so the copy chains on instead of waiting for the host to show it.
+            let host_was_on_it = self.following.is_some_and(|followed| {
+                followed
+                    .chained_to
+                    .is_some_and(|(next, _)| next == own.talk_id)
+            });
             self.following = Some(FollowedTalk {
                 talk_id: own.talk_id,
                 since_ms: now_ms,
-                host_seen_on_it: false,
+                host_seen_on_it: host_was_on_it,
                 gave_up: false,
+                chained_to: None,
                 finish_deferred_since_ms: None,
                 answer_seen: false,
             });
@@ -329,6 +438,13 @@ impl PartnerTalkMirror {
         followed.answer_seen |= answer_open;
         if followed.gave_up {
             return None;
+        }
+        if let Some((_, since_ms)) = followed.chained_to {
+            if now_ms.saturating_sub(since_ms) < LINE_PRESS_GIVES_UP_AFTER_MS {
+                return None;
+            }
+            followed.gave_up = true;
+            return Some(MirrorAction::ChainGaveUp(own.talk_id));
         }
         let host_left_before_open =
             fresh && partner_line.is_none() && partner_ended_talk == Some(own.talk_id);
@@ -366,10 +482,16 @@ impl PartnerTalkMirror {
         now_ms: u64,
     ) -> Option<MirrorAction> {
         if !answer_open {
-            followed.gave_up = true;
             return Some(match chained_to.filter(|_| !followed.answer_seen) {
-                Some(next) => MirrorAction::ChainOwnTalk(next),
-                None => MirrorAction::FinishOwnTalk(talk_id),
+                Some(next) => {
+                    // The copy stays led, so its buttons stay off while the presses take it on.
+                    followed.chained_to = Some((next.talk_id, now_ms));
+                    MirrorAction::ChainOwnTalk(next)
+                }
+                None => {
+                    followed.gave_up = true;
+                    MirrorAction::FinishOwnTalk(talk_id)
+                }
             });
         }
         let since_ms = *followed.finish_deferred_since_ms.get_or_insert(now_ms);
@@ -415,4 +537,14 @@ pub fn within_talk_range(distance_units: f32, already_showing: bool) -> bool {
 /// Whether a talk line's tag callbacks may run on this machine. Only the talker runs them.
 pub fn talk_tags_run_here(mirroring: bool, mirror_action_running: bool) -> bool {
     !mirroring && !mirror_action_running
+}
+
+/// A talk the local player started with the talk command is theirs alone: it is never led by
+/// the partner. A copy a script opened (stream entry, relayed call, shared event) follows `base`.
+pub fn leader_for_own_talk(base: TalkLeader, started_by_player_command: bool) -> TalkLeader {
+    if started_by_player_command && base == TalkLeader::Partner {
+        TalkLeader::Local
+    } else {
+        base
+    }
 }

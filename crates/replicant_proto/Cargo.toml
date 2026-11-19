@@ -11,10 +11,13 @@ name = "all"
 path = "tests/all.rs"
 
 [dependencies]
-nc_wire = { workspace = true }
+nt_wire = { workspace = true }
 serde = { workspace = true }
 postcard = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

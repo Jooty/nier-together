@@ -1,6 +1,7 @@
 mod event_callback;
 mod kind;
 mod lookup;
+mod own_body;
 mod place;
 mod scene_scope;
 mod table;
@@ -8,12 +9,14 @@ mod table;
 pub use event_callback::{is_event_callback_name, is_event_id_name};
 pub use kind::StoryCallKind;
 pub use lookup::{kind_in_table, name_hash, story_call_kind, story_call_kind_by_name};
+pub use own_body::is_own_body_callback_name;
 pub use place::{PartnerPlace, Whereabouts};
 pub use scene_scope::SceneScope;
 pub use table::STORY_CALL_TABLE;
 
 pub const LIBRARY_PACK_HASH: u64 = 0x7588_BE80_E701_6100;
 pub const SAME_PLACE_RANGE_UNITS: f32 = 30.0;
+pub const TALK_CALLS_THAT_GATHER_THE_PARTNER: [&str; 1] = ["Red_Bag_Get"];
 pub const LOCAL_SCENE_NAMES: [&str; 3] =
     ["PlayerActionDoor", "PlayerCloseDoor", "Reset_Camera_Flag"];
 pub const LOCAL_SCENE_NAME_PREFIXES: [&str; 16] = [
@@ -35,3 +38,6 @@ pub const LOCAL_SCENE_NAME_PREFIXES: [&str; 16] = [
     "knock_door_",
 ];
 pub const LOCAL_SCENE_NAME_PARTS_LOWERCASE: [&str; 2] = ["camera", "padshake"];
+pub const OWN_BODY_CALLBACK_NAMES: [&str; 3] =
+    ["PlayerDrawnCallback", "Fall_Warp", "SIDEVIEW_FALL01"];
+pub const OWN_BODY_CALLBACK_NAME_PREFIXES: [&str; 2] = ["Drown_Restart", "Fall_ReStart"];

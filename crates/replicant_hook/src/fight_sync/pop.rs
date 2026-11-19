@@ -1,5 +1,6 @@
 use std::panic;
 use std::sync::PoisonError;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use replicant_game::cutscene_skip::TRIGGER_MANAGER_RVA;
 use replicant_game::fight_sync::{
@@ -276,6 +277,16 @@ fn judge_host_pop(manager: u64, name: &str, arguments: u64, phase: u16) -> Fight
     if !open {
         return FightPop::Outside;
     }
+    if source != PopSource::Queued
+        && let Some(window) = host.repeats_start_chain(name)
+    {
+        drop(host);
+        log_line(&format!(
+            "fight stream: {name} repeats the start chain of fight window {} after it already ran, not run here and not sent",
+            window.page
+        ));
+        return FightPop::Hold;
+    }
     let verdict = host.judge_pop(name, source, arguments);
     drop(host);
     match verdict {
@@ -333,6 +344,35 @@ fn fired_by_this_player(manager: u64, arguments: u64) -> bool {
         .is_some_and(|kind| is_player_tested_callback_kind(*kind))
 }
 
+const HOLD_DIAGNOSTIC_EVERY_MS: u64 = 1000;
+static HOLD_DIAGNOSTIC_LAST_MS: AtomicU64 = AtomicU64::new(0);
+
+fn log_hold_against_queued_replay(
+    name: &str,
+    source: PopSource,
+    arguments: u64,
+    fired_by_player: bool,
+    queued_by_object: bool,
+) {
+    let Some(queued) = GUEST
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .queued_replay_arguments(name)
+    else {
+        return;
+    };
+    let now = net_clock_ms();
+    let last = HOLD_DIAGNOSTIC_LAST_MS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < HOLD_DIAGNOSTIC_EVERY_MS {
+        return;
+    }
+    HOLD_DIAGNOSTIC_LAST_MS.store(now, Ordering::Relaxed);
+    log_line(&format!(
+        "fight stream: hold diagnostic: {name} popped {source:?} at {arguments:#x}, the queued replay sits at {queued:#x}, same slot {}, armed by object {queued_by_object}, fired by this player {fired_by_player}",
+        queued == arguments
+    ));
+}
+
 fn judge_guest_pop(
     manager: u64,
     name: &str,
@@ -349,6 +389,13 @@ fn judge_guest_pop(
         .window()
         .map_or(&[][..], |window| window.player_local_messages);
     let registered_local = is_player_local_message_handler(phase, name, more_local_ids);
+    if crate::cutscene_skip::own_end_is_the_copy_the_waiting_host_end_needs(name) {
+        // The host's End popped before its window opened, so no stream copy pairs with this pop.
+        log_line(&format!(
+            "fight stream: your game's {name} is the copy the host's End waits for, it runs here"
+        ));
+        return FightPop::Outside;
+    }
     let fired_by_player = source == PopSource::Fired && fired_by_this_player(manager, arguments);
     let verdict = if is_pop_by_this_player(fired_by_player, queued_by_object) {
         let args = BUILD
@@ -411,7 +458,20 @@ fn judge_guest_pop(
             log_line(&format!(
                 "fight stream: your game's {name} not run, the host's stream runs the fight"
             ));
+            log_hold_against_queued_replay(
+                name,
+                source,
+                arguments,
+                fired_by_player,
+                queued_by_object,
+            );
             FightPop::Hold
+        }
+        GuestPop::RunMusicInOwnScene => {
+            log_line(&format!(
+                "fight stream: your game's {name} is music only and your scene plays, it runs here and the host's copy is dropped"
+            ));
+            FightPop::Outside
         }
         GuestPop::HeldForHostCopy => {
             log_line(&format!(

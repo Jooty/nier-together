@@ -1,14 +1,17 @@
 use replicant_proto::{DialogueLine, TalkChoice, TalkChoiceKind};
 
 use crate::dialogue::{
-    CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, TALK_PROMPT_KIND_MENU_LIST,
-    TALK_PROMPT_KIND_TALK_LIST, TALK_STATE_PROMPT_CURSOR, TALK_STATE_PROMPT_MENU_LIST,
-    TALK_STATE_PROMPT_TALK_LIST,
+    CHOICE_FOLLOW_GIVES_THE_GUEST_ITS_BUTTONS_AFTER_MS, HOST_ANSWER_KEPT_FOR_A_LATE_PROMPT_MS,
+    HOST_ANSWERS_KEPT, TALK_PROMPT_KIND_MENU_LIST, TALK_PROMPT_KIND_TALK_LIST,
+    TALK_STATE_PROMPT_CURSOR, TALK_STATE_PROMPT_MENU_LIST, TALK_STATE_PROMPT_TALK_LIST,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChoiceStep {
     Take(TalkChoice),
+    /// The guest's own copy of a prompt the host already answered opened late: the host's
+    /// answer, kept since it came, is taken.
+    TakeKept(TalkChoice),
     GiveUp(TalkChoice),
     Drop(TalkChoice),
 }
@@ -27,12 +30,22 @@ struct PendingChoice {
     received_ms: u64,
     seen_own_talk: bool,
     taken: bool,
+    kept: bool,
 }
 
-/// The host's answer to a prompt, kept until the guest's own copy of the talk can take it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct KeptAnswer {
+    choice: TalkChoice,
+    received_ms: u64,
+}
+
+/// The host's answer to a prompt, kept until the guest's own copy of the talk can take it. Each
+/// answer is also kept for a while after that, so a copy of the prompt the guest's game opens
+/// later (a step it runs after the host) takes the host's answer and never asks the guest.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChoiceFollower {
     pending: Option<PendingChoice>,
+    kept: Vec<KeptAnswer>,
 }
 
 /// The clock the wait for the host's answer runs on. It stands still while this player's menu
@@ -62,7 +75,10 @@ impl FollowClock {
 
 impl ChoiceFollower {
     pub const fn new() -> Self {
-        Self { pending: None }
+        Self {
+            pending: None,
+            kept: Vec::new(),
+        }
     }
 
     pub fn receive(&mut self, choice: TalkChoice, now_ms: u64) {
@@ -71,6 +87,17 @@ impl ChoiceFollower {
             received_ms: now_ms,
             seen_own_talk: false,
             taken: false,
+            kept: false,
+        });
+        self.kept.retain(|kept| {
+            kept.choice.talk_id != choice.talk_id || kept.choice.line != choice.line
+        });
+        if self.kept.len() >= HOST_ANSWERS_KEPT {
+            self.kept.remove(0);
+        }
+        self.kept.push(KeptAnswer {
+            choice,
+            received_ms: now_ms,
         });
     }
 
@@ -78,14 +105,36 @@ impl ChoiceFollower {
         self.pending = None;
     }
 
+    /// Forgets the kept answers too (the link is gone, or the guest left the area).
+    pub fn forget_all(&mut self) {
+        self.pending = None;
+        self.kept.clear();
+    }
+
     pub fn is_waiting(&self) -> bool {
         self.pending.is_some()
     }
 
     pub fn step(&mut self, input: ChoiceFollowInput) -> Option<ChoiceStep> {
+        self.kept.retain(|kept| {
+            input.now_ms.saturating_sub(kept.received_ms) < HOST_ANSWER_KEPT_FOR_A_LATE_PROMPT_MS
+        });
+        if self.pending.is_none()
+            && let Some(choice) = self.kept_answer_for(input)
+        {
+            self.kept.retain(|kept| kept.choice != choice);
+            self.pending = Some(PendingChoice {
+                choice,
+                received_ms: input.now_ms,
+                seen_own_talk: true,
+                taken: true,
+                kept: true,
+            });
+            return Some(ChoiceStep::TakeKept(choice));
+        }
         let pending = self.pending.as_mut()?;
         let choice = pending.choice;
-        if !input.follows_host {
+        if !input.follows_host && !pending.kept {
             self.pending = None;
             return Some(ChoiceStep::Drop(choice));
         }
@@ -117,9 +166,24 @@ impl ChoiceFollower {
             && input.own_talk.is_some_and(|own| own.line == choice.line);
         if at_the_prompt && !pending.taken {
             pending.taken = true;
+            self.kept.retain(|kept| kept.choice != choice);
             return Some(ChoiceStep::Take(choice));
         }
         None
+    }
+
+    fn kept_answer_for(&self, input: ChoiceFollowInput) -> Option<TalkChoice> {
+        let own = input.own_talk?;
+        let prompt = input.prompt?;
+        self.kept
+            .iter()
+            .rev()
+            .find(|kept| {
+                kept.choice.talk_id == own.talk_id
+                    && kept.choice.line == own.line
+                    && kept.choice.kind == prompt
+            })
+            .map(|kept| kept.choice)
     }
 }
 

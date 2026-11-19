@@ -684,6 +684,17 @@ fn the_clock_settles_only_after_a_scene_that_was_seen_ending() {
     assert!(!clock.settling(3_000 + NPC_EVENT_SCENE_SETTLE_MS));
 }
 
+#[test]
+fn the_clock_says_a_scene_is_playing_from_the_first_tick_in_it_to_the_last() {
+    let mut clock = EventSceneClock::default();
+    clock.observe(1_000, false);
+    assert!(!clock.playing());
+    clock.observe(2_000, true);
+    assert!(clock.playing());
+    clock.observe(3_000, false);
+    assert!(!clock.playing());
+}
+
 fn enemy_playing_on_its_second_layer_only(memory: &mut FakeMemory) {
     memory.put(VILLAGER + ACTOR_NEW_MOTION_PLAYER_FLAG_OFFSET, &[0]);
     memory.put(

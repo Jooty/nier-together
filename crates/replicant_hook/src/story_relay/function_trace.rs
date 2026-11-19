@@ -3,11 +3,11 @@ use core::ptr;
 use std::panic;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
-use replicant_game::GameMemory;
 use replicant_game::script_functions::{
-    DEBUG_PRINT_NATIVE_RVA, debug_print_tag_range, debug_print_text_range, traced_function_name,
-    traced_function_text_from_parts,
+    DEBUG_PRINT_NATIVE_RVA, debug_print_tag_range, debug_print_text_range,
+    traced_bare_unreachable_function, traced_function_name, traced_function_text_from_parts,
 };
+use replicant_game::{GameMemory, Replicant};
 
 use crate::build_gate::VerifiedBuild;
 use crate::cutscene_skip::on_function_traced;
@@ -82,6 +82,13 @@ fn note_printed_text(args_address: u64) {
         return;
     };
     if let Some(name) = traced_function_name(&text) {
+        on_function_traced(build, name);
+        return;
+    }
+    let Ok(label) = Replicant::new(memory).current_phase() else {
+        return;
+    };
+    if let Some(name) = traced_bare_unreachable_function(&label, &text) {
         on_function_traced(build, name);
     }
 }

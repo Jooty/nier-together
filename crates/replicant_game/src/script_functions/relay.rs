@@ -10,6 +10,8 @@ pub enum TracedRelay {
     CallbackPathRelays,
     /// Sent as a shared function; the partner runs its own copy and this one only fills in.
     Send,
+    /// A stream (fight or here-only room) ran it: the trace line prints, nothing is sent.
+    LoggedOnly,
 }
 
 /// What the shared function relay does with a function this game traced. `popped` says the
@@ -21,9 +23,13 @@ pub fn traced_relay(
     name: &str,
     popped: bool,
     message_handler: bool,
+    claimed_by_a_stream: bool,
 ) -> TracedRelay {
     let shared = script_function(phase_label, name).is_some();
     if !shared && !(popped && is_event_id_name(name)) {
+        if claimed_by_a_stream && is_event_id_name(name) {
+            return TracedRelay::LoggedOnly;
+        }
         return TracedRelay::NotRelayed;
     }
     if popped && (is_end_callback(name) || is_gated_callback(name) || message_handler) {

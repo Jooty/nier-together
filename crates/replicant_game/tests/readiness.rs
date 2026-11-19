@@ -1,6 +1,6 @@
 use replicant_game::readiness::{
-    JOINING_IGNORED_AFTER_MS, LocalGameReadiness, PartnerWatch, PlayChecks,
-    SILENT_PARTNER_FALLBACK_MS, classify, joining_label,
+    JOINING_IGNORED_AFTER_MS, LocalGameReadiness, PartnerWatch, PlayChecks, PlayReads,
+    ReadinessChangeLog, SILENT_PARTNER_FALLBACK_MS, classify, joining_label, waiting_on,
 };
 use replicant_proto::GameReadiness;
 
@@ -200,4 +200,140 @@ fn a_closed_partner_sending_its_position_again_is_no_longer_closed() {
     partner.partner_reported(GameReadiness::NotLinked);
     assert!(partner.partner_sent_state());
     assert!(!partner.is_game_closed());
+}
+
+#[test]
+fn each_change_of_the_report_logs_once_with_its_age_and_reason() {
+    let mut log = ReadinessChangeLog::default();
+    let first = log
+        .observe(
+            1_000,
+            GameReadiness::Loading,
+            "the player actor",
+            "r1",
+            "sent",
+        )
+        .expect("the first report logs");
+    assert!(first.contains("Loading"), "{first}");
+    assert!(first.contains("first report"), "{first}");
+    assert!(first.contains("waiting on the player actor"), "{first}");
+    assert!(first.contains("reads: r1"), "{first}");
+    assert!(first.contains("send: sent"), "{first}");
+    assert_eq!(
+        log.observe(1_500, GameReadiness::Loading, "x", "r", "sent"),
+        None
+    );
+    assert_eq!(
+        log.observe(2_900, GameReadiness::Loading, "x", "r", "sent"),
+        None
+    );
+    let second = log
+        .observe(4_500, GameReadiness::InPlay, "nothing", "r", "sent")
+        .expect("a change logs");
+    assert!(second.contains("InPlay"), "{second}");
+    assert!(second.contains("was Loading for 3500 ms"), "{second}");
+    assert!(second.contains("waiting on nothing"), "{second}");
+    let third = log
+        .observe(5_000, GameReadiness::Loading, "no report", "r", "refused")
+        .expect("going back logs");
+    assert!(third.contains("was InPlay for 500 ms"), "{third}");
+    assert!(third.contains("send: refused"), "{third}");
+}
+
+#[test]
+fn a_reset_log_logs_the_next_report_as_a_first() {
+    let mut log = ReadinessChangeLog::default();
+    log.observe(0, GameReadiness::Loading, "x", "r", "s");
+    log.reset();
+    let line = log
+        .observe(10, GameReadiness::Loading, "x", "r", "s")
+        .expect("logs");
+    assert!(line.contains("first report"), "{line}");
+}
+
+#[test]
+fn a_copy_that_stays_loading_logs_every_five_seconds_after_ten() {
+    let mut log = ReadinessChangeLog::default();
+    log.observe(0, GameReadiness::Loading, "x", "r", "s");
+    let mut lines = Vec::new();
+    for now_ms in (250..=26_000).step_by(250) {
+        lines.extend(log.observe(now_ms, GameReadiness::Loading, "x", "r", "s"));
+    }
+    assert_eq!(lines.len(), 4, "{lines:?}");
+    assert!(
+        lines[0].contains("still Loading after 10250 ms"),
+        "{lines:?}"
+    );
+    assert!(lines[1].contains("after 15250 ms"), "{lines:?}");
+}
+
+#[test]
+fn a_failing_check_is_named_while_loading_and_in_play_logs_once() {
+    let ready = PlayReads {
+        zone: Some("Play_Env_06".to_owned()),
+        phase_known: true,
+        player_actor_spawned: true,
+        position_readable: true,
+        max_health: Some(100),
+    };
+    let zero_health = PlayReads {
+        max_health: Some(0),
+        ..ready.clone()
+    };
+    let no_actor = PlayReads {
+        player_actor_spawned: false,
+        position_readable: false,
+        ..ready.clone()
+    };
+    let mut log = ReadinessChangeLog::default();
+    let mut lines = Vec::new();
+    for (now_ms, reads) in [
+        (0, &no_actor),
+        (250, &no_actor),
+        (500, &zero_health),
+        (750, &zero_health),
+        (1_000, &ready),
+        (1_250, &ready),
+    ] {
+        let checks = reads.checks();
+        lines.extend(log.observe(
+            now_ms,
+            classify(checks),
+            &waiting_on(checks, Some(100)),
+            &reads.describe(),
+            "sent",
+        ));
+    }
+    assert_eq!(lines.len(), 2, "{lines:?}");
+    assert!(lines[0].contains("Loading"), "{lines:?}");
+    assert!(
+        lines[0].contains("waiting on the player actor, the vitals"),
+        "{lines:?}"
+    );
+    assert!(lines[0].contains("actor=false"), "{lines:?}");
+    assert!(lines[1].contains("InPlay"), "{lines:?}");
+    assert!(lines[1].contains("was Loading for 1000 ms"), "{lines:?}");
+    assert!(lines[1].contains("max_health=100"), "{lines:?}");
+    assert!(zero_health.describe().contains("max_health=0"));
+    assert_eq!(waiting_on(zero_health.checks(), Some(0)), "the vitals");
+}
+
+#[test]
+fn the_wait_names_each_missing_check_or_a_stale_report() {
+    assert_eq!(waiting_on(ALL_READY, Some(100)), "nothing");
+    let none = PlayChecks::default();
+    assert_eq!(
+        waiting_on(none, Some(100)),
+        "the phase, the player actor, the vitals"
+    );
+    let only_vitals = PlayChecks {
+        vitals_readable: false,
+        ..ALL_READY
+    };
+    assert_eq!(waiting_on(only_vitals, Some(0)), "the vitals");
+    assert_eq!(
+        waiting_on(ALL_READY, Some(2_500)),
+        "no report from the game for 2500 ms"
+    );
+    assert_eq!(waiting_on(ALL_READY, None), "the game's first report");
 }

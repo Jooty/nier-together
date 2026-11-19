@@ -5,11 +5,15 @@ mod attack_gauge;
 #[cfg(windows)]
 mod blocks;
 #[cfg(windows)]
+mod bombs;
+#[cfg(windows)]
 mod boot;
 #[cfg(windows)]
 mod boss_messages;
 #[cfg(windows)]
 mod bullets;
+#[cfg(windows)]
+mod carts;
 #[cfg(windows)]
 mod containers;
 #[cfg(windows)]
@@ -39,10 +43,20 @@ mod fight_sync;
 mod frame_tuning;
 #[cfg(windows)]
 mod game_hooks;
-#[cfg(windows)]
+#[cfg(all(windows, feature = "probes"))]
 mod gimmick_probe;
 #[cfg(windows)]
+mod host_led_defeat;
+#[cfg(windows)]
+mod host_led_stretch;
+#[cfg(windows)]
+mod host_view;
+#[cfg(windows)]
 mod kaine;
+#[cfg(windows)]
+mod lift_rides;
+#[cfg(windows)]
+mod loading_text;
 #[cfg(windows)]
 mod minimap;
 #[cfg(windows)]
@@ -55,7 +69,15 @@ mod npcs;
 #[cfg(windows)]
 mod one_sided;
 #[cfg(windows)]
+mod open_door_state;
+#[cfg(windows)]
 mod overlay;
+#[cfg(windows)]
+mod own_ride;
+#[cfg(windows)]
+mod part_pickups;
+#[cfg(windows)]
+mod part_sets_log;
 #[cfg(windows)]
 mod paused_hits;
 #[cfg(windows)]
@@ -77,11 +99,15 @@ mod render_camera;
 #[cfg(windows)]
 mod rewind;
 #[cfg(windows)]
+mod rule_rooms;
+#[cfg(windows)]
 mod saves;
 #[cfg(windows)]
 mod script_rolls;
 #[cfg(windows)]
 mod sky;
+#[cfg(windows)]
+mod slot_zero;
 #[cfg(windows)]
 mod stay_together;
 #[cfg(windows)]
@@ -91,18 +117,22 @@ mod story_progress;
 #[cfg(windows)]
 mod story_relay;
 #[cfg(windows)]
+mod story_watch;
+#[cfg(windows)]
 mod story_writes;
 #[cfg(windows)]
 mod teleport;
 #[cfg(windows)]
+mod world_objects;
+#[cfg(windows)]
 mod zone_rules;
 
 #[cfg(windows)]
-use nc_hook::{build_gate, diagnostics, memory};
+use nt_hook::{build_gate, diagnostics, memory};
 
 #[cfg(windows)]
-pub use nc_hook::build_gate::{GateError, VerifiedBuild};
+pub use nt_hook::build_gate::{GateError, VerifiedBuild};
 #[cfg(windows)]
-pub use nc_hook::detour::{Detour, DetourError};
+pub use nt_hook::detour::{Detour, DetourError};
 #[cfg(windows)]
-pub use nc_hook::memory::InProcessMemory;
+pub use nt_hook::memory::InProcessMemory;

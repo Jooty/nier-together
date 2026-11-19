@@ -3,7 +3,9 @@ mod door_table;
 mod flip_watch;
 mod indoor_arrival;
 mod own_door;
+mod scene_arrival;
 mod view_off;
+mod view_on;
 
 pub use door_rules::{
     DoorMoveAction, DoorMoveFacts, door_action_for_a_move, door_by_id, door_entered_by,
@@ -13,10 +15,18 @@ pub use door_table::{SIDE_VIEW_DOORS, SideViewDoor};
 pub use flip_watch::SideViewWatch;
 pub use indoor_arrival::{ArrivalViewFix, IndoorArrivalReading, IndoorArrivalWatch};
 pub use own_door::OwnSideViewDoor;
-pub use view_off::{ViewOffArg, ViewOffCall, view_off_calls};
+pub use scene_arrival::{
+    SCENE_ARRIVAL_WAITS_FOR_THE_HOST_MS, SCENE_ARRIVALS, SceneArrival, SceneArrivalReading,
+    SceneArrivalWatch,
+};
+pub use view_off::{ViewArg, ViewCall, view_off_calls};
+pub use view_on::{SCENE_VIEW_ONS, SceneViewOn, scene_view_on, view_on_calls};
 
 pub const INDOOR_ARRIVAL_SETTLE_MS: u64 = 1_000;
+pub const SIDE_VIEW_MODE_ON_NATIVE_RVA: u32 = 0x70_6EE0;
 pub const SIDE_VIEW_MODE_OFF_NATIVE_RVA: u32 = 0x70_6ED0;
+pub const TERRAIN_PARTS_INVISIBLE_NATIVE_RVA: u32 = 0x70_B9A0;
+pub const MINI_MAP_DISACTIVE_NATIVE_RVA: u32 = 0x6E_E180;
 pub const SET_ACTION_MODE_NATIVE_RVA: u32 = 0x6F_40B0;
 pub const SET_CAMERA_LEVER_MODE_NATIVE_RVA: u32 = 0x6F_74A0;
 pub const SET_CAMERA_COLLISION_NATIVE_RVA: u32 = 0x6F_7440;

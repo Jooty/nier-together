@@ -1,11 +1,12 @@
 use replicant_game::new_game::first_save_permitted;
+use replicant_game::save_files::CoopSaveName;
 
 use crate::boot;
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::game_hooks::{
     cursor_calls, door_gate, focus_menu_block, invincibility, menu_free_calls, menu_no_pause,
-    mouse_block, noclip, popup_saved_mask, quiet_end, window_focus, zone_gate,
+    menu_open_test, mouse_block, noclip, popup_saved_mask, quiet_end, window_focus, zone_gate,
 };
 use crate::net::AutoConfig;
 use crate::player_names;
@@ -16,6 +17,7 @@ pub fn install(build: VerifiedBuild) {
     noclip::install(build);
     zone_gate::install(build);
     menu_no_pause::install(build);
+    menu_open_test::install(build);
     popup_saved_mask::install(build);
     menu_free_calls::install(build);
     door_gate::install(build);
@@ -25,8 +27,23 @@ pub fn install(build: VerifiedBuild) {
     player_names::install(build);
     match AutoConfig::load_beside_game() {
         Ok(Some(config)) => {
+            let mut veto_writes = config.block_saves;
             if config.link.is_some() {
-                saves::install_coop_files(build, !config.block_saves);
+                crate::loading_text::set_loading_screen_lines(
+                    config.loading_screen_lines_enabled(),
+                );
+                crate::loading_text::install(build);
+                match CoopSaveName::parse(config.coop_save_file.as_deref()) {
+                    Ok(name) => saves::install_coop_files(build, name, !config.block_saves),
+                    Err(refusal) => {
+                        log_line(&format!(
+                            "saves: the link file names the co-op file {:?}, refused ({refusal}); \
+                             co-op saving is off and no save is written this session",
+                            config.coop_save_file.as_deref().unwrap_or_default()
+                        ));
+                        veto_writes = true;
+                    }
+                }
                 crate::effects::install(build);
                 crate::npcs::install(build);
                 crate::music::install(build);
@@ -41,18 +58,29 @@ pub fn install(build: VerifiedBuild) {
                 crate::script_rolls::install(build);
                 crate::story_jump::install(build);
                 crate::downed::install(build);
+                crate::story_watch::install(build);
                 crate::puppet::install_book_native(build);
                 crate::boss_messages::install(build);
+                crate::part_pickups::install(build);
                 crate::rewind::install(build);
+                crate::host_led_defeat::install(build);
                 crate::fade_sync::install(build);
                 crate::cutscene_skip::install(build);
                 crate::enemies::install(build);
                 crate::enemy_bullets::install(build);
+                crate::enemy_bullets::install_script_commands(build);
+                crate::enemy_bullets::install_bullet_starts(build);
                 crate::blocks::install(build);
+                crate::open_door_state::install(build);
+                crate::world_objects::install(build);
+                crate::bombs::install(build);
+                crate::carts::install(build);
                 crate::attack_gauge::install(build);
-                crate::player_body::install(build, config.body.unwrap_or_default());
+                crate::player_body::install(build);
+                crate::player_body::install_missing_motion_twins(build);
+                crate::kaine::install_ai_hold(build);
             }
-            if config.block_saves {
+            if veto_writes {
                 saves::install(build);
             }
             if config.keep_running || config.link.is_some() {

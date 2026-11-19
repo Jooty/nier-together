@@ -3,7 +3,7 @@ use std::sync::PoisonError;
 use replicant_game::GameMemory;
 use replicant_game::fight_sync::{
     GuestArrival, GuestNotice, GuestOpen, GuestReceived, GuestRestart, HostRequestOut,
-    HostStreamOut, PHASE_SCRIPT_MANAGER_STATE_OFFSET, QUEUED_CALL_NAME_CAPACITY,
+    HostStreamOut, OwnSceneRelease, PHASE_SCRIPT_MANAGER_STATE_OFFSET, QUEUED_CALL_NAME_CAPACITY,
     QUEUED_CALL_NAME_OFFSET, QueueRefusal, QueuedCallNotice,
     REFUSED_REQUEST_RESENDS_BEFORE_RUNNING_HERE, RefusedRequestStep, RequestReceipt,
     SceneHoldChange, SlotState, StreamStall, format_stream_stall, is_our_queued_call,
@@ -60,6 +60,8 @@ pub(crate) fn tick(build: &VerifiedBuild) {
         Some(_) | None => leave_guest_stream("you are not in a session with the host"),
     }
     crate::fight_sync::prompt_follow::tick(build, here(build), &counts);
+    crate::fight_sync::scripted_camera::tick(build);
+    crate::fight_sync::camera_follow::tick(build);
 }
 
 fn split_prompt_counts(messages: Vec<Message>) -> (Vec<FightPromptCount>, Vec<Message>) {
@@ -360,10 +362,14 @@ fn guest_tick(build: &VerifiedBuild, here: Here, messages: Vec<Message>, restart
 }
 
 fn log_stream_stall(build: &VerifiedBuild) {
-    let stall = GUEST
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .stream_stall(net_clock_ms());
+    let (stall, held_by_own_scene) = {
+        let mut guest = GUEST.lock().unwrap_or_else(PoisonError::into_inner);
+        let stall = guest.stream_stall(net_clock_ms());
+        let held = stall
+            .as_ref()
+            .is_some_and(|(seq, ..)| guest.is_held_for_own_scene(*seq));
+        (stall, held)
+    };
     let Some((seq, name, waited_ms)) = stall else {
         return;
     };
@@ -375,6 +381,7 @@ fn log_stream_stall(build: &VerifiedBuild) {
         holder: holder
             .as_ref()
             .map(|(handler, in_slot_ms)| (handler.as_str(), *in_slot_ms)),
+        held_by_own_scene,
         last_yielding_native: last_yielding_native(),
         radio: read_radio_state(build),
     }));
@@ -440,6 +447,9 @@ fn send_guest_requests() {
             GuestNotice::HeldPopNeverMatched { name, epoch } => format!(
                 "fight stream: your game's {name} was held and the host's stream never ran it (epoch {epoch}), nor was it sent to the host"
             ),
+            GuestNotice::HeldPopDroppedAtFightEnd { name, epoch } => format!(
+                "fight stream: your game's {name} was held through the fight and dropped when the host ended it (epoch {epoch})"
+            ),
             GuestNotice::PlayerPopPairedWithHostCopy { name, held_ms } => format!(
                 "fight request: your player's {name} paired with the host's copy after {held_ms} ms, not sent"
             ),
@@ -490,6 +500,26 @@ fn send_guest_requests() {
             GuestNotice::NextWindowMessagesDropped { dropped } => format!(
                 "fight stream: {dropped} messages of the host's next fight came while it waited and were not kept"
             ),
+            GuestNotice::EntryWaitsForOwnScene { seq, name } => format!(
+                "fight stream: the host's {name} (seq {seq}) waits while your game is in a scene, the scene's own end runs first"
+            ),
+            GuestNotice::EntryGoesAfterOwnScene {
+                seq,
+                name,
+                waited_ms,
+                since_scene_cleared_ms,
+                by,
+            } => format!(
+                "fight stream: the host's {name} (seq {seq}) goes after {waited_ms} ms, {since_scene_cleared_ms} ms after your scene's lock cleared, {}",
+                match by {
+                    OwnSceneRelease::OwnEndPopped => "your scene's own end popped first",
+                    OwnSceneRelease::SettleCapReached =>
+                        "your scene's own end never popped, the settle cap let it go",
+                }
+            ),
+            GuestNotice::HostCopyOfOwnSceneMusicDropped { seq, name } => format!(
+                "fight stream: the host's {name} (seq {seq}) not run, your game ran its own in your scene"
+            ),
         });
     }
     let Some(net) = net::handle() else {
@@ -512,6 +542,9 @@ fn log_restart(restart: GuestRestart, why: &str) {
             "fight stream: {why}, the replay waits for your game's own restart (epoch {epoch})"
         )),
         GuestRestart::Joined(open) => log_open(open),
+        GuestRestart::EntryLoad => log_line(&format!(
+            "fight stream: {why} right after joining the host's fight, that is the host's own load of the phase, your game does not ask the host to restart"
+        )),
         GuestRestart::SameRestart | GuestRestart::NotInFight => {}
     }
 }

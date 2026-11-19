@@ -4,7 +4,8 @@ use replicant_game::callback_gate::{
     END_FOLLOW_STILL_WAITING_LOG_MS, EndArrival, EndDrop, EndFollow, EndQueue, GateRole, GateStep,
     LocalFire, MaskIdleTimer, ParkedCall, ParkedKind, PartnerFire, PartnerStartedCopies,
     QueueEvent, RanEnds, Released, WaitStep, end_follow, event_base, event_family, is_end_callback,
-    is_event_talk, is_gated_callback, is_scene_talk, wait_step,
+    is_event_talk, is_gated_callback, is_scene_talk, own_end_is_the_copy_a_waiting_host_end_needs,
+    wait_step,
 };
 use replicant_game::ui_scenes::PAUSE_MENU_CLOSE_MAX_REQUESTS_PER_SCENE_START;
 use replicant_proto::StoryCall;
@@ -813,4 +814,71 @@ fn a_parked_call_does_not_count_as_a_queued_end_of_the_same_name() {
     queue.park_call(hit(1), 1);
     assert!(!queue.contains(HIT));
     assert!(queue.take_through(HIT).is_empty());
+}
+
+#[test]
+fn the_guests_own_end_is_the_copy_a_waiting_host_end_needs() {
+    let mut waiting = EndQueue::new();
+    waiting.push("EID_2000_a0050_End", 1, 0);
+    assert!(own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0050_End",
+        &waiting
+    ));
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0042_End",
+        &waiting
+    ));
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "EID_2000_a0050_End",
+        &EndQueue::new()
+    ));
+}
+
+#[test]
+fn run_135601_the_guests_own_end_runs_once_through_the_waiting_host_end() {
+    const FIGHT_END: &str = "EID_2000_a0100_End";
+    let mut waiting = EndQueue::new();
+    waiting.push(FIGHT_END, 7, 0);
+    assert!(own_end_is_the_copy_a_waiting_host_end_needs(
+        FIGHT_END, &waiting
+    ));
+    waiting.take_through(FIGHT_END);
+    assert!(
+        !own_end_is_the_copy_a_waiting_host_end_needs(FIGHT_END, &waiting),
+        "the host's End was used up by the guest's own run, a second own pop is not this path"
+    );
+}
+
+#[test]
+fn a_waiting_name_that_is_not_an_end_is_not_the_copy_a_host_end_needs() {
+    let mut waiting = EndQueue::new();
+    waiting.push("Reset_EID_2000_a0050", 1, 0);
+    assert!(!own_end_is_the_copy_a_waiting_host_end_needs(
+        "Reset_EID_2000_a0050",
+        &waiting
+    ));
+}
+
+#[test]
+fn a_start_the_guest_ran_alone_is_not_started_again_when_the_hosts_fire_comes() {
+    const TEXT_SCENE_START: &str = "EID_1500_a0005_010_01_Start";
+    const GUEST_OWN_POP_MS: u64 = 6_477_019;
+    const HOSTS_FIRE_ARRIVED_MS: u64 = 6_477_133;
+    let mut gate = CallbackGate::new();
+    gate.note_partner_here(false);
+    assert_eq!(
+        gate.local_fire(GateRole::Guest, TEXT_SCENE_START, GUEST_OWN_POP_MS),
+        LocalFire::RunAlone,
+        "run 1115j 01:47:57.019: the guest's own copy of the text scene popped with the host 71.5 units away"
+    );
+    gate.note_partner_here(true);
+    assert_eq!(
+        gate.partner_fire(GateRole::Guest, TEXT_SCENE_START, HOSTS_FIRE_ARRIVED_MS),
+        PartnerFire::RanHereAlready
+    );
+    assert_eq!(
+        gate.partner_fire(GateRole::Guest, TEXT_SCENE_START, HOSTS_FIRE_ARRIVED_MS + 1),
+        PartnerFire::FollowHost,
+        "a later fire of the same step is a new one"
+    );
 }

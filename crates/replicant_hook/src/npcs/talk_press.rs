@@ -9,7 +9,7 @@ use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::event_log::post_event;
 use crate::memory::InProcessMemory;
-use crate::net::{self, NetState};
+use crate::net::{self, NetSharedExt, NetState};
 use crate::zone_rules::zone_radius;
 
 static REGISTRY: LazyLock<Mutex<TalkRegistry>> = LazyLock::new(Mutex::default);
@@ -34,31 +34,33 @@ pub(super) fn refuses_important_press(build: &VerifiedBuild, actor: u64) -> bool
     let Ok(actor_id) = memory.read_i32(actor + ACTOR_UNIQUE_ID_OFFSET) else {
         return false;
     };
-    let important = {
+    let (important, talk_id) = {
         let mut registry = REGISTRY.lock().unwrap_or_else(PoisonError::into_inner);
         registry.enter_phase(&phase_of(build));
         if registry.first_press(actor_id) {
             log_line(&registry.press_line(actor_id));
         }
-        registry
+        let talk = registry.important_talk_id_of(actor_id);
+        let important = registry
             .important_name_of(actor_id)
             .map(|name| format!("{name} is an important talk"))
-            .or_else(|| {
-                registry
-                    .important_talk_id_of(actor_id)
-                    .map(|(id, base)| format!("talk {id} ({base}) is an important talk"))
-            })
+            .or_else(|| talk.map(|(id, base)| format!("talk {id} ({base}) is an important talk")));
+        (important, talk.map(|(id, _)| id))
     };
     let Some(description) = important else {
         return false;
     };
-    let verdict = partner_verdict();
-    let PressVerdict::Wait { distance_units, .. } = &verdict else {
-        return false;
-    };
-    log_line(&format!(
-        "talk guard: {description}, waiting for the partner ({distance_units:.0} m away)"
-    ));
+    let verdict = partner_verdict(talk_id);
+    match &verdict {
+        PressVerdict::Allow => return false,
+        PressVerdict::Wait { distance_units, .. } => log_line(&format!(
+            "talk guard: {description}, waiting for the partner ({distance_units:.0} m away)"
+        )),
+        PressVerdict::WaitForTheHouse { distance_units, .. } => log_line(&format!(
+            "talk guard: {description} and needs the partner inside the house, waiting for the partner ({distance_units:.0} m away, {})",
+            crate::npcs::side_view_report::partner_side_view_text()
+        )),
+    }
     post_event(&verdict.prompt_text().unwrap_or_default());
     true
 }
@@ -69,12 +71,12 @@ fn phase_of(build: &VerifiedBuild) -> String {
         .unwrap_or_default()
 }
 
-fn partner_verdict() -> PressVerdict {
+fn partner_verdict(talk_id: Option<i32>) -> PressVerdict {
     let Some(net) = net::handle() else {
         return PressVerdict::Allow;
     };
     let view = net.view();
-    let partner = view.remote.as_ref().map(|remote| Companion {
+    let partner = view.partner_state().map(|remote| Companion {
         name: remote.name.clone(),
         placement: Some(Placement {
             phase: remote.state.phase,
@@ -84,12 +86,14 @@ fn partner_verdict() -> PressVerdict {
     });
     judge_press(&PressAsk {
         connected: view.state == NetState::Connected,
-        partner_game_open: !view.partner.is_game_closed(),
+        partner_game_open: !view.partner_watch().is_game_closed(),
         local: view.local.as_ref().map(|local| Placement {
             phase: local.phase,
             position: local.position,
         }),
         partner: partner.as_ref(),
         radius: zone_radius(),
+        talk_id,
+        partner_side_view: crate::npcs::side_view_report::partner_side_view(),
     })
 }

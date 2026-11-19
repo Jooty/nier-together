@@ -1,4 +1,4 @@
-use nc_hook::menu::{
+use nt_hook::menu::{
     AreaChangeRefusal, AreaEntry, CoOpStatus, ExtraPanel, FixEntry, FixOutcome, GameMenu, MenuNote,
     SectionKind, StoryJumpEntry,
 };
@@ -17,26 +17,6 @@ use crate::overlay::replicant_overlay::{
 use crate::overlay::status_lines::game_status_lines;
 use crate::story_jump::{host_can_offer_jump, jump_is_waiting_for_menu, last_refusal};
 use crate::teleport::last_outcome as last_teleport_outcome;
-
-const STORY_JUMPS: [(StoryJumpPoint, &str); 8] = [
-    (StoryJumpPoint::AfterPrologue, "Skip the prologue"),
-    (StoryJumpPoint::AtPopolaTalk, "Library: talk to Popola"),
-    (
-        StoryJumpPoint::BeforeNextDay,
-        "Village: before the next day",
-    ),
-    (
-        StoryJumpPoint::AtShrineEntrance,
-        "Lost Shrine: the entrance",
-    ),
-    (StoryJumpPoint::AtShrineTop, "Shrine top: the stone field"),
-    (StoryJumpPoint::AtShrineBoss, "Shrine boss: the arena"),
-    (StoryJumpPoint::AerieEntrance, "Aerie: the entrance"),
-    (
-        StoryJumpPoint::JunkHeapAfterFirstUpgrade,
-        "Junk Heap: after the first upgrade",
-    ),
-];
 
 impl GameMenu for ReplicantOverlay {
     fn co_op_status(&self) -> CoOpStatus {
@@ -111,22 +91,20 @@ impl GameMenu for ReplicantOverlay {
         if !host_can_offer_jump() {
             return Vec::new();
         }
-        STORY_JUMPS
-            .iter()
-            .enumerate()
-            .map(|(index, (_, label))| StoryJumpEntry {
-                id: u32::try_from(index).unwrap_or(u32::MAX),
-                label: (*label).to_owned(),
+        StoryJumpPoint::in_id_order()
+            .map(|point| StoryJumpEntry {
+                id: u32::from(point.id()),
+                label: point.name().to_owned(),
             })
             .collect()
     }
 
     fn run_story_jump(&self, id: u32) -> Result<String, String> {
-        let (point, _) = usize::try_from(id)
+        let point = u16::try_from(id)
             .ok()
-            .and_then(|index| STORY_JUMPS.get(index))
+            .and_then(StoryJumpPoint::from_id)
             .ok_or_else(|| format!("unknown story jump {id}"))?;
-        actions::enqueue(Action::StoryJump(*point))
+        actions::enqueue(Action::StoryJump(point))
             .map(|()| String::from("asked the game to jump"))
             .map_err(|error| format!("not queued: {error}"))
     }

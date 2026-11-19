@@ -1,5 +1,6 @@
-use crate::callback_gate::{END_FOLLOW_EVENT_SUFFIX, END_FOLLOW_MASK_IDLE_MS};
+use crate::callback_gate::{END_FOLLOW_EVENT_SUFFIX, END_FOLLOW_MASK_IDLE_MS, EndQueue};
 use crate::coop_pause::MENU_OWN_BITS;
+use crate::dialogue::WATCHER_HOLD_MASK;
 use crate::story_calls::is_event_callback_name;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +26,7 @@ pub enum EndDrop {
     OwnTalkOpen,
     ControlMaskBusy,
     AlreadyRanHere,
+    HostLeadsTheStretch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,6 +55,9 @@ impl EndDrop {
             Self::OwnTalkOpen => "your game is in its own talk",
             Self::ControlMaskBusy => "your controls are not free yet",
             Self::AlreadyRanHere => "your game ran it already",
+            Self::HostLeadsTheStretch => {
+                "you watch the host's stretch of the story, the host's game runs its steps"
+            }
         }
     }
 
@@ -97,6 +102,18 @@ pub fn control_slots_free(slots: [u32; 4], pause_menu_open: bool) -> bool {
     menu_slot | talk_slot | save_slot | message_slot == 0
 }
 
+/// The mask an End of the partner's waits on. The talk slot the watcher hold wrote while the
+/// partner's talk is mirrored here is not this player's own: the End is that talk's own step.
+pub fn slots_an_end_waits_on(slots: [u32; 4], watcher_hold_owns_talk_slot: bool) -> [u32; 4] {
+    let [menu_slot, talk_slot, save_slot, message_slot] = slots;
+    let talk_slot = if watcher_hold_owns_talk_slot {
+        talk_slot & !WATCHER_HOLD_MASK
+    } else {
+        talk_slot
+    };
+    [menu_slot, talk_slot, save_slot, message_slot]
+}
+
 pub fn is_end_callback(name: &str) -> bool {
     is_event_callback_name(name)
         && name
@@ -123,4 +140,8 @@ pub fn end_follow(arrival: &EndArrival) -> EndFollow {
         return EndFollow::Drop(EndDrop::ControlMaskBusy);
     }
     EndFollow::Mirror
+}
+
+pub fn own_end_is_the_copy_a_waiting_host_end_needs(name: &str, waiting_ends: &EndQueue) -> bool {
+    is_end_callback(name) && waiting_ends.contains(name)
 }
