@@ -76,6 +76,7 @@ mod overlay;
 mod own_ride;
 #[cfg(windows)]
 mod part_pickups;
+mod part_sets_log;
 #[cfg(windows)]
 mod paused_hits;
 #[cfg(windows)]

@@ -58,6 +58,7 @@ pub(crate) fn change_phase(
         return Err(PhaseChangeError::NameDoesNotFit);
     }
     crate::teleport::note_mod_area_change(build);
+    game.put_loaded_talk_set_letter_in_next_phase_name()?;
     let mut name = [0_u8; PHASE_NAME_BUFFER_LEN];
     name[..phase.name.len()].copy_from_slice(phase.name.as_bytes());
     let map_manager = game.map_manager_address() as usize as *mut c_void;

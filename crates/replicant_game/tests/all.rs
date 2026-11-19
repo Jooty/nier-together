@@ -293,6 +293,8 @@ mod party_frame;
 mod patches;
 #[path = "pe_identity.rs"]
 mod pe_identity;
+#[path = "phase_request.rs"]
+mod phase_request;
 #[path = "phase_state.rs"]
 mod phase_state;
 #[path = "phases.rs"]
