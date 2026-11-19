@@ -12,6 +12,10 @@ pub const POLL_MOUSE_FUNCTION: GameAddress = GameAddress::new(0x27_8FB0, 0x27_37
 
 pub const CURSOR_RECENTRE_FUNCTION: GameAddress = GameAddress::new(0x27_84F0, 0x27_2CD0);
 
+pub const INPUT_UPDATE_TAIL_FUNCTION: GameAddress = GameAddress::new(0x27_8220, 0x27_2A00);
+
+pub const PAD_SNAPSHOT_THE_GAME_READS: GameAddress = GameAddress::new(0x13F_CF80, 0x13F_0E00);
+
 pub const PAD_INPUT_SOURCE: GameAddress = GameAddress::new(0x177_FD80, 0x177_3BA0);
 
 pub const KEYBOARD_INPUT_SOURCE: GameAddress = GameAddress::new(0x177_FFB0, 0x177_3DD0);

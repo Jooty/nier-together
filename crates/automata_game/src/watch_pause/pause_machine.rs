@@ -1,8 +1,10 @@
 use crate::watch_pause::{
-    HOST_STATE_COUNTS_AS_FRESH_FOR_MS, OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
-    OWN_MENU_SHOULD_HAVE_OPENED_WITHIN_MS, host_pause_applied_line, host_pause_ended_line,
-    own_menu_closed_by_itself_line, own_menu_has_not_opened_line, own_menu_opened_line,
-    own_menu_still_open_line,
+    CLOSE_PRESSES_ARE_SPACED_MS, FIRST_CLOSE_PRESS_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
+    HOST_STATE_COUNTS_AS_FRESH_FOR_MS, MOST_CLOSE_PRESSES,
+    OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS, OWN_MENU_SHOULD_HAVE_OPENED_WITHIN_MS,
+    host_pause_applied_line, host_pause_ended_line, own_menu_close_gave_up_line,
+    own_menu_close_press_line, own_menu_closed_by_itself_line, own_menu_closed_by_presses_line,
+    own_menu_has_not_opened_line, own_menu_opened_line, own_menu_still_open_line,
 };
 
 /// What the watching guest reads each tick for the host's pause.
@@ -31,6 +33,7 @@ pub enum WatchPauseRelease {
 pub struct WatchPauseStep {
     /// The game's focus test is to answer "lost", so its own pause opens and holds.
     pub hold: bool,
+    pub press_back: bool,
     /// The note "<host> paused the game" is due on screen.
     pub note: bool,
     pub logs: Vec<String>,
@@ -42,11 +45,15 @@ enum Hold {
     Off,
     On {
         since_ms: u64,
+        own_menu_open_before: bool,
         own_menu_seen: bool,
         own_menu_missed_logged: bool,
     },
     Ended {
         at_ms: u64,
+        menu_was_opened_by_the_hold: bool,
+        presses: u32,
+        last_press_ms: Option<u64>,
     },
 }
 
@@ -61,12 +68,20 @@ impl WatchPause {
         let mut step = WatchPauseStep::default();
         let release = self.release_of(readings);
         match self.hold {
-            Hold::On { since_ms, .. } => {
+            Hold::On {
+                since_ms,
+                own_menu_open_before,
+                own_menu_seen,
+                ..
+            } => {
                 if let Some(release) = release {
                     let held_ms = readings.now_ms.saturating_sub(since_ms);
                     step.logs.push(host_pause_ended_line(release, held_ms));
                     self.hold = Hold::Ended {
                         at_ms: readings.now_ms,
+                        menu_was_opened_by_the_hold: !own_menu_open_before && own_menu_seen,
+                        presses: 0,
+                        last_press_ms: None,
                     };
                 } else {
                     self.watch_the_own_menu_open(readings, &mut step);
@@ -76,11 +91,21 @@ impl WatchPause {
                 step.logs.push(host_pause_applied_line());
                 self.hold = Hold::On {
                     since_ms: readings.now_ms,
+                    own_menu_open_before: readings.own_menu_open,
                     own_menu_seen: false,
                     own_menu_missed_logged: false,
                 };
             }
-            Hold::Ended { at_ms } => self.watch_the_own_menu_close(readings, at_ms, &mut step),
+            Hold::Ended {
+                at_ms,
+                menu_was_opened_by_the_hold,
+                presses,
+                last_press_ms,
+            } => self.watch_the_own_menu_close(
+                readings,
+                (at_ms, menu_was_opened_by_the_hold, presses, last_press_ms),
+                &mut step,
+            ),
             Hold::Off => {}
         }
         step.hold = matches!(self.hold, Hold::On { .. });
@@ -111,6 +136,7 @@ impl WatchPause {
     ) {
         let Hold::On {
             since_ms,
+            own_menu_open_before,
             own_menu_seen,
             own_menu_missed_logged,
         } = self.hold
@@ -130,6 +156,7 @@ impl WatchPause {
         }
         self.hold = Hold::On {
             since_ms,
+            own_menu_open_before,
             own_menu_seen: own_menu_seen || readings.own_menu_open,
             own_menu_missed_logged,
         };
@@ -138,17 +165,48 @@ impl WatchPause {
     fn watch_the_own_menu_close(
         &mut self,
         readings: &WatchPauseReadings,
-        ended_at_ms: u64,
+        ended: (u64, bool, u32, Option<u64>),
         step: &mut WatchPauseStep,
     ) {
+        let (ended_at_ms, opened_by_the_hold, presses, last_press_ms) = ended;
         let after_ms = readings.now_ms.saturating_sub(ended_at_ms);
         if !readings.own_menu_open {
-            step.logs.push(own_menu_closed_by_itself_line());
+            step.logs.push(if presses > 0 {
+                own_menu_closed_by_presses_line(presses, after_ms)
+            } else {
+                own_menu_closed_by_itself_line()
+            });
             self.hold = Hold::Off;
-        } else if after_ms >= OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS {
-            step.logs.push(own_menu_still_open_line(after_ms));
-            self.hold = Hold::Off;
+            return;
         }
+        if !opened_by_the_hold {
+            if after_ms >= OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS {
+                step.logs.push(own_menu_still_open_line(after_ms));
+                self.hold = Hold::Off;
+            }
+            return;
+        }
+        let press_is_due = match last_press_ms {
+            None => after_ms >= FIRST_CLOSE_PRESS_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
+            Some(last) => readings.now_ms.saturating_sub(last) >= CLOSE_PRESSES_ARE_SPACED_MS,
+        };
+        if !press_is_due {
+            return;
+        }
+        if presses >= MOST_CLOSE_PRESSES {
+            step.logs.push(own_menu_close_gave_up_line(presses));
+            self.hold = Hold::Off;
+            return;
+        }
+        step.press_back = true;
+        step.logs
+            .push(own_menu_close_press_line(presses + 1, after_ms));
+        self.hold = Hold::Ended {
+            at_ms: ended_at_ms,
+            menu_was_opened_by_the_hold: true,
+            presses: presses + 1,
+            last_press_ms: Some(readings.now_ms),
+        };
     }
 }
 

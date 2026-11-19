@@ -14,6 +14,7 @@ mod load_end_hold;
 mod object_read_wait_guard;
 mod own_input_guard;
 mod own_item_use_hold;
+mod pad_press;
 mod partner_harm_guard;
 mod partner_walk_guards;
 mod pod_aim;
@@ -52,6 +53,7 @@ pub use generator_spawns::{
     take_observed_spawns, with_guest_generators,
 };
 pub use input_block::{install_input_block, set_menu_open};
+pub use pad_press::{install_pad_press, press_back_on_the_pad};
 pub use input_feed::{
     FeedHooks, clear_autopilot_feed, clear_flight_stick_feed, clear_input_feed, install_input_feed,
     set_autopilot_feed, set_flight_stick_feed, set_input_feed,

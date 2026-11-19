@@ -1,7 +1,9 @@
 use automata_game::event_follow::SkipPrompt;
 use automata_game::watch_pause::{
-    HOST_STATE_COUNTS_AS_FRESH_FOR_MS, OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
-    OWN_MENU_SHOULD_HAVE_OPENED_WITHIN_MS, WatchPause, WatchPauseReadings, WatchPauseStep,
+    CLOSE_PRESSES_ARE_SPACED_MS, FIRST_CLOSE_PRESS_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
+    HOST_STATE_COUNTS_AS_FRESH_FOR_MS, MOST_CLOSE_PRESSES,
+    OWN_MENU_IS_CHECKED_AFTER_THE_HOSTS_PAUSE_ENDS_MS, OWN_MENU_SHOULD_HAVE_OPENED_WITHIN_MS,
+    WatchPause, WatchPauseReadings, WatchPauseStep,
 };
 
 fn watching(now_ms: u64, host_paused: bool) -> WatchPauseReadings {
@@ -189,4 +191,77 @@ fn the_note_names_the_host() {
         SkipPrompt::PartnerPausedTheGame.text("guy"),
         "guy paused the game"
     );
+}
+
+fn menu_open(now_ms: u64, host_paused: bool) -> WatchPauseReadings {
+    WatchPauseReadings {
+        own_menu_open: true,
+        ..watching(now_ms, host_paused)
+    }
+}
+
+#[test]
+fn a_menu_the_hold_opened_gets_back_presses_after_the_hosts_resume_until_it_closes() {
+    let mut machine = WatchPause::default();
+    machine.step(&watching(0, false));
+    machine.step(&watching(375, true));
+    machine.step(&menu_open(390, true));
+    machine.step(&menu_open(1_389, false));
+    let early = machine.step(&menu_open(
+        1_389 + FIRST_CLOSE_PRESS_AFTER_THE_HOSTS_PAUSE_ENDS_MS - 1,
+        false,
+    ));
+    assert!(!early.press_back);
+    let first = machine.step(&menu_open(
+        1_389 + FIRST_CLOSE_PRESS_AFTER_THE_HOSTS_PAUSE_ENDS_MS,
+        false,
+    ));
+    assert!(first.press_back && has_line(&first, "back press 1 is sent"));
+    let waiting = machine.step(&menu_open(1_389 + 516, false));
+    assert!(!waiting.press_back && waiting.logs.is_empty());
+    let closed = machine.step(&watching(1_389 + 700, false));
+    assert!(
+        !closed.press_back
+            && has_line(
+                &closed,
+                "closed 700 ms after the host's pause ended, after 1 back presses"
+            )
+    );
+    assert!(machine.step(&watching(5_000, false)).logs.is_empty());
+}
+
+#[test]
+fn a_menu_that_stays_open_gets_spaced_presses_and_is_then_left_to_the_player() {
+    let mut machine = WatchPause::default();
+    machine.step(&watching(0, false));
+    machine.step(&watching(100, true));
+    machine.step(&menu_open(115, true));
+    machine.step(&menu_open(1_100, false));
+    let mut pressed_at = Vec::new();
+    for now_ms in (1_100..30_000).step_by(100) {
+        let step = machine.step(&menu_open(now_ms, false));
+        if step.press_back {
+            pressed_at.push(now_ms);
+        }
+        if has_line(&step, "left to the player") {
+            break;
+        }
+    }
+    assert_eq!(pressed_at.len(), MOST_CLOSE_PRESSES as usize);
+    assert!(
+        pressed_at
+            .windows(2)
+            .all(|pair| pair[1] - pair[0] >= CLOSE_PRESSES_ARE_SPACED_MS)
+    );
+}
+
+#[test]
+fn a_menu_the_guest_opened_itself_is_never_pressed_closed() {
+    let mut machine = WatchPause::default();
+    machine.step(&menu_open(0, false));
+    machine.step(&menu_open(100, true));
+    machine.step(&menu_open(1_100, false));
+    for now_ms in (1_100..10_000).step_by(100) {
+        assert!(!machine.step(&menu_open(now_ms, false)).press_back);
+    }
 }

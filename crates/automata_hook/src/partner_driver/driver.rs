@@ -31,7 +31,7 @@ use crate::game_calls::{GameCalls, Vec4};
 use crate::game_hooks::{
     auto_item_use_checks_skipped_on_the_partner_body, clear_autopilot_feed, clear_input_feed,
     forget_recorded_start, hits_kept_off_the_partner_body, hold_body, install_camera_guard,
-    install_engine_partner_choice, install_focus_pass, install_input_feed,
+    install_engine_partner_choice, install_focus_pass, install_input_feed, install_pad_press,
     install_object_read_wait_guard, install_own_input_guard, install_own_item_use_hold,
     install_partner_harm_guard, install_partner_walk_guards, install_pod_aim,
     install_start_recorder, object_read_waits_refused, recorded_pod_aim, recorded_start,
@@ -1060,6 +1060,7 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings) {
     let calls = GameCalls::new(build, variant);
     start_link(port, variant, settings.partner);
     install_focus_pass(calls);
+    install_pad_press(calls);
     install_partner_walk_guards(calls);
     let spawn_is_guarded = install_object_read_wait_guard(calls);
     crate::extra_bodies::install(calls, spawn_is_guarded);
