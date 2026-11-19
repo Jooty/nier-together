@@ -23,7 +23,7 @@ use nt_hook::net::net_clock_ms;
 
 use crate::event_follow_driver::set_host_pause_note_due;
 use crate::game_calls::GameCalls;
-use crate::game_hooks::set_paused_with_the_host;
+use crate::game_hooks::{press_back_on_the_pad, set_paused_with_the_host};
 use crate::net::{
     SessionModeExt, current_session_mode, handle, local_playing_event, local_story_place,
     set_local_watching,
@@ -110,6 +110,9 @@ impl WatchContext {
             log_line(line);
         }
         set_paused_with_the_host(step.hold);
+        if step.press_back && !press_back_on_the_pad() {
+            log_line("watch: the back press cannot be sent, the pad press hook is not in place");
+        }
         set_host_pause_note_due(step.note);
     }
 

@@ -30,3 +30,21 @@ pub fn own_menu_still_open_line(after_ms: u64) -> String {
         "watch: this copy's pause menu is still open {after_ms} ms after the host's pause ended; the pause key here closes it"
     )
 }
+
+pub fn own_menu_close_press_line(number: u32, after_ms: u64) -> String {
+    format!(
+        "watch: this copy's pause menu was opened by the host's pause and is still open {after_ms} ms after it ended; back press {number} is sent"
+    )
+}
+
+pub fn own_menu_closed_by_presses_line(presses: u32, after_ms: u64) -> String {
+    format!(
+        "watch: this copy's pause menu closed {after_ms} ms after the host's pause ended, after {presses} back presses"
+    )
+}
+
+pub fn own_menu_close_gave_up_line(presses: u32) -> String {
+    format!(
+        "watch: this copy's pause menu is still open after {presses} back presses; left to the player"
+    )
+}

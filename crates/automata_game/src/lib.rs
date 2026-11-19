@@ -18,6 +18,7 @@ pub mod minute_line_budget;
 pub mod mode;
 pub mod partner;
 pub mod partner_flight;
+pub mod pad_press;
 pub mod partner_hud;
 pub mod pickups;
 pub mod save_redirect;
