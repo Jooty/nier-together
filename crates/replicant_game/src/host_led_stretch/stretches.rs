@@ -1,5 +1,6 @@
 use crate::host_led_stretch::{
     HOST_LED_LONG_STRETCH_ENDS_ITSELF_AFTER_MS, HOST_LED_STRETCH_ENDS_ITSELF_AFTER_MS,
+    HOST_LED_STRETCH_NEVER_ENDS_ITSELF_AFTER_MS,
 };
 
 /// A stretch of the story the guest watches from its first step to its last: the host's game runs
@@ -23,9 +24,13 @@ pub struct HostLedStretch {
     /// The story's own removal of the companion ends with the stretch's last step here, so the
     /// guest plays again from that step, not from the later call that brings her back.
     pub the_guest_plays_from_its_last_step: bool,
+    /// The stretch goes on through every pack the host walks into: the guest leaving the first
+    /// pack does not end it, and the story state alone says whether this game is inside it. It
+    /// ends at its last step, or when the story state is no longer inside it.
+    pub spans_every_pack: bool,
 }
 
-pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
+pub static HOST_LED_STRETCHES: [HostLedStretch; 4] = [
     HostLedStretch {
         pack: "C_FOREST_FIELD_01",
         first_step: "EID_1500_a0020g_0010_Start",
@@ -39,6 +44,7 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         story_on_flag: None,
         story_off_flag: None,
         the_guest_plays_from_its_last_step: false,
+        spans_every_pack: false,
     },
     HostLedStretch {
         pack: "A_SOUTH_MANSION_01",
@@ -53,6 +59,7 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         story_on_flag: Some(504),
         story_off_flag: Some(511),
         the_guest_plays_from_its_last_step: true,
+        spans_every_pack: false,
     },
     HostLedStretch {
         pack: "A_SEASIDE_TOWN_01",
@@ -67,6 +74,22 @@ pub static HOST_LED_STRETCHES: [HostLedStretch; 3] = [
         story_on_flag: None,
         story_off_flag: None,
         the_guest_plays_from_its_last_step: false,
+        spans_every_pack: false,
+    },
+    HostLedStretch {
+        pack: "B_CENTER_VILLAGE_01",
+        first_step: "EID_3000_a0012_Start",
+        last_pack: "B_CENTER_LIBRARY_01",
+        last_step: "EID_3200_a0052_End",
+        armed_by: None,
+        refuses_guest_doors: false,
+        guest_is_not_taken_along: false,
+        guest_waits_for_the_hosts_first_step: true,
+        ends_itself_after_ms: HOST_LED_STRETCH_NEVER_ENDS_ITSELF_AFTER_MS,
+        story_on_flag: Some(556),
+        story_off_flag: Some(125),
+        the_guest_plays_from_its_last_step: true,
+        spans_every_pack: true,
     },
 ];
 
@@ -90,7 +113,9 @@ pub fn stretch_the_story_is_inside(
         let (Some(on), Some(off)) = (stretch.story_on_flag, stretch.story_off_flag) else {
             return false;
         };
-        (stretch.pack == pack || stretch.last_pack == pack) && flag_on(on) && !flag_on(off)
+        let in_its_packs =
+            stretch.spans_every_pack || stretch.pack == pack || stretch.last_pack == pack;
+        in_its_packs && flag_on(on) && !flag_on(off)
     })
 }
 

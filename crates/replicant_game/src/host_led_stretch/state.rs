@@ -6,6 +6,7 @@ use crate::host_led_stretch::{
 pub enum StretchEnd {
     LastStep,
     LeftThePack,
+    StoryMovedOn,
     TookTooLong,
     SessionOver,
 }
@@ -138,7 +139,9 @@ impl HostLedStretchState {
         let Some((stretch, since_ms)) = self.on else {
             return self.check_armed(pack, now_ms);
         };
-        let end = if pack.is_some_and(|pack| pack != stretch.pack && pack != stretch.last_pack) {
+        let left_its_packs = !stretch.spans_every_pack
+            && pack.is_some_and(|pack| pack != stretch.pack && pack != stretch.last_pack);
+        let end = if left_its_packs {
             StretchEnd::LeftThePack
         } else if now_ms.saturating_sub(since_ms) >= stretch.ends_itself_after_ms {
             self.over_in_these_packs = Some(stretch);
@@ -148,6 +151,24 @@ impl HostLedStretchState {
         };
         self.on = None;
         Some(StretchChange::Ended(stretch, end))
+    }
+
+    /// Ends a stretch that spans every pack once the story state is no longer inside it (a save
+    /// from before it was loaded, or a step that was missed): without this it would never end.
+    pub fn end_when_the_story_moved_on(
+        &mut self,
+        flag_on: impl Fn(u16) -> bool,
+    ) -> Option<StretchChange> {
+        let (stretch, _) = self.on?;
+        let (Some(on), Some(off)) = (stretch.story_on_flag, stretch.story_off_flag) else {
+            return None;
+        };
+        if !stretch.spans_every_pack || (flag_on(on) && !flag_on(off)) {
+            return None;
+        }
+        self.on = None;
+        self.ended_at_its_last_step = Some(stretch);
+        Some(StretchChange::Ended(stretch, StretchEnd::StoryMovedOn))
     }
 
     pub fn end_with_the_session(&mut self) -> Option<StretchChange> {
