@@ -100,6 +100,7 @@ fn end_reason(stretch: &HostLedStretch, end: StretchEnd) -> String {
     match end {
         StretchEnd::LastStep => format!("its last step {} ran", stretch.last_step),
         StretchEnd::LeftThePack => format!("this game left {}", stretch.pack),
+        StretchEnd::StoryMovedOn => "the story state is no longer inside it".to_owned(),
         StretchEnd::TookTooLong => "it ran past its time limit".to_owned(),
         StretchEnd::SessionOver => "the session is over".to_owned(),
     }

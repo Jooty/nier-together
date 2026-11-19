@@ -279,6 +279,8 @@ mod own_ride;
 mod own_start_pause;
 #[path = "own_step_copy.rs"]
 mod own_step_copy;
+#[path = "part2_watch.rs"]
+mod part2_watch;
 #[path = "part_pickups.rs"]
 mod part_pickups;
 #[path = "partner_holds.rs"]

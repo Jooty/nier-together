@@ -20,3 +20,4 @@ pub const HOST_LED_LONG_STRETCH_ENDS_ITSELF_AFTER_MS: u64 = 3 * 60 * 60 * 1_000;
 pub const GUEST_REFUSED_DOOR_CALLBACK_PREFIX: &str = "Open_Door";
 pub const GUEST_DOOR_REFUSED_TEXT: &str = "The door will not open for you";
 pub const GUEST_WAITS_FOR_THE_HOSTS_TALK_TEXT: &str = "The host starts this talk";
+pub const HOST_LED_STRETCH_NEVER_ENDS_ITSELF_AFTER_MS: u64 = u64::MAX;

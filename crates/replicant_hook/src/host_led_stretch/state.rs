@@ -114,7 +114,9 @@ pub(crate) fn tick(build: &VerifiedBuild) {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .check(pack.as_deref(), net_clock_ms());
-        checked.or_else(|| start_from_the_story(build, pack.as_deref()?))
+        checked
+            .or_else(|| end_when_the_story_moved_on(build))
+            .or_else(|| start_from_the_story(build, pack.as_deref()?))
     } else {
         STRETCH
             .lock()
@@ -241,8 +243,34 @@ fn start_from_the_story(build: &VerifiedBuild, pack: &str) -> Option<StretchChan
     }
 }
 
+fn end_when_the_story_moved_on(build: &VerifiedBuild) -> Option<StretchChange> {
+    if STRETCH
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .current()
+        .is_none_or(|stretch| !stretch.spans_every_pack)
+    {
+        return None;
+    }
+    let end = |arrays: &StoryArrays| {
+        STRETCH
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .end_when_the_story_moved_on(|id| arrays.flag(StoryArray::GameFlags, id))
+    };
+    let change = if is_the_guest() {
+        with_host_story(end).flatten()
+    } else {
+        end(&read_live_arrays(build)?)
+    };
+    if let Some(change) = change {
+        give_her_back_at_the_last_step(change);
+    }
+    change
+}
+
 fn give_her_back_at_the_last_step(change: StretchChange) {
-    if let StretchChange::Ended(stretch, StretchEnd::LastStep) = change
+    if let StretchChange::Ended(stretch, StretchEnd::LastStep | StretchEnd::StoryMovedOn) = change
         && stretch.the_guest_plays_from_its_last_step
     {
         crate::story_watch::forget_removal();
