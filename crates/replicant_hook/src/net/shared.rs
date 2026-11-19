@@ -6,6 +6,16 @@ use crate::net::link_state::ReplicantLinkState;
 use crate::net::local_snapshot::LocalSnapshot;
 use crate::net::{NetState, net_clock_ms};
 
+#[cfg(windows)]
+fn guest_is_watched() -> bool {
+    crate::story_watch::guest_is_watched()
+}
+
+#[cfg(not(windows))]
+fn guest_is_watched() -> bool {
+    false
+}
+
 pub type NetShared =
     nt_hook::net::NetShared<LocalSnapshot, PlayerState, PartnerWatch, ReplicantLinkState>;
 pub type RemotePlayer = nt_hook::net::RemotePlayer<PlayerState>;
@@ -53,7 +63,7 @@ impl NetSharedExt for NetShared {
                 phase: remote.state.phase,
                 position: remote.state.position,
             }),
-            crate::story_watch::guest_is_watched(),
+            guest_is_watched(),
         )
     }
 

@@ -376,7 +376,7 @@ fn game_events_wait_while_the_partner_is_not_in_play() {
 fn the_games_readiness_report_reaches_the_launcher_and_goes_stale() {
     let (mut launcher, game) = start_game();
     link_up(&mut launcher, &game);
-    game.report_readiness(GameReadiness::InPlay);
+    game.report_readiness(GameReadiness::InPlay, Default::default());
     assert!(launcher.wait_until(|launcher| {
         launcher
             .received
