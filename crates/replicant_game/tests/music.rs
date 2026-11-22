@@ -1,7 +1,8 @@
 use replicant_game::music::{
     GuestSync, LocalMusic, MUSIC_DRIFT_RESEEK_MS, MUSIC_MIN_CHANGE_INTERVAL_MS,
-    MUSIC_REFRESH_INTERVAL_MS, MUSIC_SEEK_WAIT_LIMIT_MS, MUSIC_TARGET_STALE_MS, MusicChannel,
-    MusicSender, MusicStep, read_music_channel,
+    MUSIC_REFRESH_INTERVAL_MS, MUSIC_SEEK_WAIT_LIMIT_MS, MUSIC_TARGET_STALE_IN_A_HELD_FIGHT_MS,
+    MUSIC_TARGET_STALE_MS, MusicChannel, MusicSender, MusicStep, host_music_stale_after_ms,
+    read_music_channel,
 };
 use replicant_game::offsets::{
     AUDIO_MAN_LAYER_VOLUMES_OFFSET, AUDIO_MAN_MASTER_VOLUME_OFFSET, AUDIO_MAN_RVA,
@@ -325,4 +326,36 @@ fn a_silent_host_state_goes_stale_and_hands_the_music_back() {
     assert!(!sync.is_fresh(101 + MUSIC_TARGET_STALE_MS));
     sync.forget();
     assert!(sync.plan(&local(channel(TRACK), None), 0, 0).is_empty());
+}
+
+#[test]
+fn run_1119g_the_guest_keeps_the_hosts_track_through_the_final_jump_silence() {
+    let mut sync = GuestSync::new();
+    sync.receive(state(TRACK, 115_313), 1_000);
+    let silent_until_ms = 1_000 + 14_000;
+    let fight_window = host_music_stale_after_ms(Some("boss fight 6"));
+    assert!(!sync.is_fresh(silent_until_ms));
+    assert!(sync.is_fresh_within(silent_until_ms, fight_window));
+    assert!(!sync.is_fresh_within(
+        1_000 + MUSIC_TARGET_STALE_IN_A_HELD_FIGHT_MS + 1,
+        fight_window
+    ));
+}
+
+#[test]
+fn other_fights_and_no_fight_release_after_the_usual_stale_time() {
+    assert_eq!(host_music_stale_after_ms(None), MUSIC_TARGET_STALE_MS);
+    assert_eq!(
+        host_music_stale_after_ms(Some("boss fight 3")),
+        MUSIC_TARGET_STALE_MS
+    );
+}
+
+#[test]
+fn a_new_host_state_after_the_silence_moves_the_kept_track_at_once() {
+    let mut sync = GuestSync::new();
+    sync.receive(state(TRACK, 115_313), 1_000);
+    sync.receive(state(TRACK, 0), 15_000);
+    assert!(sync.is_fresh(15_000 + MUSIC_TARGET_STALE_MS));
+    assert_eq!(sync.expected_position_ms(15_000, 0), Some(0));
 }

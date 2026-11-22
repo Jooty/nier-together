@@ -36,6 +36,13 @@ impl SessionMode {
         }
     }
 
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Campaign => "campaign",
+            Self::FreeRoam => "free roam",
+        }
+    }
+
     pub fn story_rules_apply(self) -> bool {
         self == Self::Campaign
     }

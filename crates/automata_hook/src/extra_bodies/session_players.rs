@@ -24,7 +24,7 @@ pub fn session_mode_of(net: &NetThread<AutomataNet>) -> SessionMode {
 pub fn other_players_of(net: &NetThread<AutomataNet>) -> Vec<FurtherPlayer> {
     net.update(|shared| {
         shared
-            .others()
+            .counted_others()
             .map(|player| {
                 let latest = player.latest.as_ref();
                 let age_ms = latest.map(|remote| remote.age().as_millis() as u64);

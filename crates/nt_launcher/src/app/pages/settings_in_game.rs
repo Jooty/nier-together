@@ -1,5 +1,9 @@
 use eframe::egui::Ui;
 
+use nt_launcher_core::{
+    KEYBOARD_MOUSE_FIXES_HOVER_TEXT, KEYBOARD_MOUSE_FIXES_LABEL, offers_keyboard_mouse_fixes,
+};
+
 use crate::app::parts::{ControlLook, OptionNesting, option_line, section_heading};
 use crate::app::{Launcher, NetForms};
 
@@ -26,6 +30,20 @@ pub(super) fn draw_in_game_section(ui: &mut Ui, launcher: &mut Launcher, forms: 
     )
     .on_hover_text("The short messages at the bottom left of the game screen")
     .changed();
+    if offers_keyboard_mouse_fixes(launcher.profile) {
+        let mut on = launcher.config.keyboard_mouse.on;
+        let line = option_line(
+            ui,
+            KEYBOARD_MOUSE_FIXES_LABEL,
+            &mut on,
+            ControlLook::Editable,
+            OptionNesting::Top,
+        )
+        .on_hover_text(KEYBOARD_MOUSE_FIXES_HOVER_TEXT);
+        if line.changed() {
+            launcher.set_keyboard_mouse_fixes(on);
+        }
+    }
     if changed {
         launcher.apply_settings();
         forms.net.set_player_settings(launcher.player_settings());

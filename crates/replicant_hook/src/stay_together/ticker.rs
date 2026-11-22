@@ -250,6 +250,7 @@ fn follow_the_host(
         free_to_act: game_says_free_to_act(build).unwrap_or(false)
             || crate::fade_sync::guest_holds_fade(),
         owes_scene_end,
+        first_save_owed: crate::boot::save_is_owed(),
         local_phase,
         now_ms,
     };

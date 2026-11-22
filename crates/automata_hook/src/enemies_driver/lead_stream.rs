@@ -5,8 +5,9 @@ use crate::budgeted_log::log_held_back_note;
 use automata_game::enemies::{EnemyId, EnemySighting};
 use automata_game::enemy_lead::{
     EnemyLead, EnemyPose, HOLD_LIFTS_AFTER_THE_HOSTS_SILENCE_MS, LeadTarget, PlaceStep,
-    PlayerPlaces, facing_to_write, guest_target_handle, lead_parts, lead_target_of, place_line,
-    place_step, target_wanted_on_the_host,
+    PlayerPlaces, QueuedStart, StartToPlay, facing_to_write, guest_target_handle, lead_parts,
+    lead_target_of, place_line, place_step, played_start_line, sent_start_line,
+    target_wanted_on_the_host,
 };
 use automata_game::save_redirect::SaveRole;
 use automata_proto::Message;
@@ -74,6 +75,9 @@ impl EnemiesDriver {
             {
                 continue;
             }
+            if let Some(health) = self.calls.read_enemy_health(enemy.body) {
+                self.lead.boss_starts.note_health(enemy.id, health);
+            }
             let Some(pose) = self.lead.follower.fresh_pose(enemy.id, now_ms) else {
                 continue;
             };
@@ -107,6 +111,7 @@ impl EnemiesDriver {
     pub(super) fn stop_leading(&mut self) {
         self.lead.tally.forget();
         self.lead.follower.forget();
+        self.lead.boss_starts.forget();
         self.lead.enemies.clear();
         set_led_bodies(HashMap::new());
     }
@@ -151,16 +156,23 @@ impl EnemiesDriver {
                 .map(|place| [place[0], place[1], place[2]]),
         };
         let mut poses = Vec::new();
+        let mut queued_starts = Vec::new();
         let mut bodies = HashMap::new();
         for reading in shared {
             let Some(read) = self.calls.read_enemy_pose(reading.body) else {
                 continue;
             };
             let id = reading.sighting.id;
+            if let Some(health) = self.calls.read_enemy_health(reading.body) {
+                self.lead.boss_starts.note_health(id, health);
+            }
             let (starts, state) =
                 self.lead
                     .tally
                     .tally(id, read.state, hooked_starts_of(reading.body));
+            if !paused {
+                queued_starts.extend(self.lead.tally.take_queued(id, unix_millis_now()));
+            }
             let mut target = lead_target_of(read.target, hero_handle, partner_handle);
             let mut wanted_handle = None;
             if self.lead.targets_are_hooked
@@ -213,7 +225,10 @@ impl EnemiesDriver {
         self.lead.tally.keep_only(&ids);
         // A paused host sends nothing, so the guest's hold lifts within a second.
         if !paused {
-            for part in lead_parts(&poses) {
+            for part in lead_parts(&poses, &queued_starts) {
+                for start in &part.starts {
+                    self.log_boss_start_sent(start);
+                }
                 net.send_relayed(Message::EnemyLead(part));
             }
         }
@@ -300,13 +315,25 @@ impl EnemiesDriver {
         if !self.lead.states_are_hooked {
             return;
         }
-        let Some(state) = self.lead.follower.start_to_play(enemy.id, now_ms) else {
+        let Some(StartToPlay {
+            number,
+            state,
+            ago_ms,
+        }) = self.lead.follower.start_to_play(enemy.id, now_ms)
+        else {
             return;
         };
         // SAFETY: the body was resolved from its live handle this frame on the game thread and
         // is a shared enemy with health left.
         let started =
             while_a_lead_start_runs(|| unsafe { self.calls.start_enemy_state(enemy.body, state) });
+        if self.lead.boss_starts.is_boss(enemy.id) {
+            let admission = self.lead.boss_starts.take_line(unix_millis_now());
+            log_held_back_note(&admission);
+            if admission.allowed {
+                log_line(&played_start_line(enemy.id, number, state, ago_ms, started));
+            }
+        }
         if !self.lead.first_start_played {
             self.lead.first_start_played = true;
             log_line(&format!(
@@ -316,6 +343,22 @@ impl EnemiesDriver {
                 state[1],
                 state[2],
                 state[3]
+            ));
+        }
+    }
+
+    fn log_boss_start_sent(&mut self, start: &QueuedStart) {
+        if !self.lead.boss_starts.is_boss(start.id) {
+            return;
+        }
+        let admission = self.lead.boss_starts.take_line(unix_millis_now());
+        log_held_back_note(&admission);
+        if admission.allowed {
+            log_line(&sent_start_line(
+                start.id,
+                start.number,
+                start.state,
+                start.ago_ms,
             ));
         }
     }

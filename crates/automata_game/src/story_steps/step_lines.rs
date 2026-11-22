@@ -256,3 +256,13 @@ pub(crate) fn watching_long_wait_line(
         place.describe()
     )
 }
+
+pub(crate) fn late_done_applied_line(done: &StoryStepDone, place: &StoryPlace) -> String {
+    format!(
+        "story steps: the host's done {} of id {:#010X} is stamped with the place the host just left ({}), this game is at {}: applied",
+        done.number,
+        done.id,
+        done.place.describe(),
+        place.describe()
+    )
+}

@@ -59,6 +59,7 @@ pub fn install(build: VerifiedBuild) {
                 crate::story_jump::install(build);
                 crate::downed::install(build);
                 crate::story_watch::install(build);
+                crate::story_watch::install_status_hook(build);
                 crate::puppet::install_book_native(build);
                 crate::boss_messages::install(build);
                 crate::part_pickups::install(build);
@@ -89,6 +90,7 @@ pub fn install(build: VerifiedBuild) {
             if config.dev_no_focus_menu {
                 focus_menu_block::install(build);
             }
+            boot::set_started_alone(config.started_alone);
             if let Some(slot) = config.boot_slot {
                 boot::install(build, slot, config.link.is_some());
                 if config.new_game_slot.is_some() {

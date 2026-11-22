@@ -8,8 +8,8 @@ use replicant_game::quiet_end::{
     LUA_ARG_PAYLOAD_OFFSET, LUA_ARG_TAG_OFFSET, lua_arg_as_int, lua_arg_offset,
 };
 use replicant_game::story_watch::{
-    ACTIVATE_UNIQUE_ACTOR_NATIVE_RVA, COMPANION_SCRIPT_ID, DISACTIVATE_UNIQUE_ACTOR_NATIVE_RVA,
-    RemovalChange, StoryRemoval,
+    ACTIVATE_UNIQUE_ACTOR_NATIVE_RVA, AERIE_EXIT_SCRIPT_FUNCTION, COMPANION_SCRIPT_ID,
+    DISACTIVATE_UNIQUE_ACTOR_NATIVE_RVA, RemovalChange, StoryRemoval,
 };
 
 use crate::build_gate::VerifiedBuild;
@@ -53,6 +53,23 @@ pub(super) fn step_removal() -> Option<RemovalChange> {
         .step(net_clock_ms())
 }
 
+pub(super) fn restore_aerie_exit_removal(
+    aerie_exit_flag_on: bool,
+    companion_inactive: bool,
+) -> bool {
+    REMOVAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .restore_aerie_exit_from_game_state(aerie_exit_flag_on, companion_inactive)
+}
+
+pub(super) fn taken_at_the_aerie_exit() -> bool {
+    REMOVAL
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .taken_at_the_aerie_exit()
+}
+
 pub(super) fn story_has_taken_her() -> bool {
     REMOVAL
         .lock()
@@ -93,11 +110,14 @@ fn note_call(taken_out: bool, args: *mut c_void) {
     if mod_native_call_running() || first_argument(args) != COMPANION_SCRIPT_ID {
         return;
     }
-    REMOVAL
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .story_called(taken_out, net_clock_ms());
     let running = last_pop().map_or_else(|| "none".to_owned(), |(name, _)| name);
+    let mut removal = REMOVAL.lock().unwrap_or_else(PoisonError::into_inner);
+    if taken_out && running.contains(AERIE_EXIT_SCRIPT_FUNCTION) {
+        removal.aerie_exit_removed_her(net_clock_ms());
+    } else {
+        removal.story_called(taken_out, net_clock_ms());
+    }
+    drop(removal);
     log_line(&format!(
         "watching: the story called {} on script id {COMPANION_SCRIPT_ID} (running {running})",
         if taken_out {

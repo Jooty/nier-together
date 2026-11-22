@@ -383,3 +383,16 @@ fn a_guest_hit_on_the_boss_in_a_beat_is_diminished_but_never_to_nothing() {
         None
     );
 }
+
+#[test]
+fn the_guests_own_game_sets_its_side_view_traps_after_the_move_to_beat_2() {
+    let by_beat = |beat: u8| {
+        STAND_IN_BEATS
+            .iter()
+            .find(|row| row.beat == beat)
+            .expect("the beat exists")
+            .guest_runs_after_the_move
+    };
+    assert_eq!(by_beat(2), ["SET_SIDEVIEW_TRAP3"]);
+    assert!(by_beat(1).is_empty());
+}

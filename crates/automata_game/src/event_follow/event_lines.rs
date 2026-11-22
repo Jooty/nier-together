@@ -4,6 +4,14 @@ pub fn started_here_line(id: EventId, origin: StartOrigin) -> String {
     format!("event: {} started here {}", id.describe(), origin.label())
 }
 
+pub fn free_roam_scene_line(id: EventId, origin: StartOrigin, area_starts_held: bool) -> String {
+    format!(
+        "free roam: scene {} started here {}; event actions' area starts held: {area_starts_held}",
+        id.describe(),
+        origin.label()
+    )
+}
+
 pub fn ended_here_line(id: EventId, skipped: bool, played_ms: Option<u64>) -> String {
     let how = if skipped { "skipped" } else { "ended" };
     match played_ms {

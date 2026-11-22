@@ -1,14 +1,16 @@
+use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, ColorImage, UiBuilder, vec2};
 use egui_kittest::Harness;
+use egui_kittest::kittest::{NodeT, Queryable};
 use egui_kittest::wgpu::WgpuTestRenderer;
 use nt_launcher::app::{
-    ConsoleRun, JoinDialog, Launcher, NetForms, Screen, Tab, UpdateState, apply_launcher_look,
-    copy_line_id, draw, draw_parts_sheet, fixture_campaign_card, fixture_card_without_seat,
-    fixture_launcher,
+    ConsoleRun, JoinDialog, LaunchHost, Launcher, NetForms, STEAM_RUN_URL_PREFIX, Screen, Tab,
+    UpdateState, apply_launcher_look, copy_line_id, draw, draw_parts_sheet, fixture_campaign_card,
+    fixture_card_without_seat, fixture_launcher,
 };
 use nt_launcher::game_link::{StartChoice, write_start};
 use nt_launcher::home::{GameCard, MapBannerStore};
@@ -522,6 +524,20 @@ fn host_pressed_while_a_closed_lobby_lets_go_never_lands_on_settings() {
         (Screen::Game, Tab::Settings)
     );
     assert!(page.forms.console.is_some(), "the press started a host");
+}
+
+#[test]
+fn play_starts_the_same_session_host_started() {
+    let page = home_page("home-play-button");
+    let mut harness = stepped_harness(page, MOTION_FRAME_MS);
+    harness.run();
+    click_at(&mut harness, HOME_FIRST_COMMAND_POINT);
+    let page = harness.state();
+    assert!(page.forms.hosting_pending());
+    assert_eq!(
+        page.forms.console.as_ref().map(|run| run.task),
+        Some(ConsoleTask::Hosting)
+    );
 }
 
 fn ready_partner(link: &mut LinkStatus, ready: bool, character: Option<u8>) {
@@ -2112,4 +2128,266 @@ fn the_second_games_campaign_seen_by_the_guest_names_both_roles_without_a_choice
         "automata-campaign-guest",
         lobby_page(&AUTOMATA, "automata-campaign-guest", link, state),
     );
+}
+
+fn start_button_is_enabled(page: Page) -> bool {
+    let mut harness = stepped_harness(page, MOTION_FRAME_MS);
+    harness.run();
+    let button = harness.get_by_label("Start");
+    !button.accesskit_node().is_disabled()
+}
+
+#[test]
+fn a_host_alone_in_a_hosted_lobby_can_press_start_in_every_game_and_mode() {
+    let cases = [
+        (&REPLICANT, CO_OP_CAMPAIGN.rules(), LOBBY_MODE_NEW_GAME),
+        (&REPLICANT, FREE_ROAM.rules(), LOBBY_MODE_NEW_GAME),
+        (&AUTOMATA, CO_OP_CAMPAIGN.rules(), LOBBY_MODE_NEW_GAME),
+        (&AUTOMATA, FREE_ROAM.rules(), LOBBY_MODE_NEW_GAME),
+    ];
+    for (index, (profile, rules, mode)) in cases.into_iter().enumerate() {
+        let name = format!("hosted-alone-start-{index}");
+        let mut link = hosting_alone_link();
+        link.rules = rules;
+        let state = NetState::Hosting {
+            ticket: FIXTURE_TICKET.to_owned(),
+        };
+        let mut page = lobby_page(profile, &name, link, state);
+        page.launcher.lobby_mode = mode;
+        assert!(
+            start_button_is_enabled(page),
+            "{} with {:?} rules: the host alone has a disabled start button",
+            profile.display_name,
+            rules.mode
+        );
+    }
+}
+
+const FIXTURE_LINK_PORT: u16 = 48_151;
+const FIXTURE_STEAM_ACCOUNT_FOLDER_NAME: &str = "76561198000000000";
+const FIXTURE_COOP_SLOT: usize = 1;
+
+struct ScratchHost {
+    opened: Arc<Mutex<Vec<String>>>,
+    running_pids: Arc<Mutex<Vec<u32>>>,
+    cards: Vec<GameCard>,
+    root: PathBuf,
+}
+
+impl LaunchHost for ScratchHost {
+    fn open_url(&self, url: &str) -> io::Result<()> {
+        self.opened.lock().expect("opened").push(url.to_owned());
+        Ok(())
+    }
+
+    fn game_pids(&self, _profile: &GameProfile) -> Vec<u32> {
+        self.running_pids.lock().expect("pids").clone()
+    }
+
+    fn logs_dir(&self) -> Option<PathBuf> {
+        Some(self.root.join("logs"))
+    }
+
+    fn data_dir(&self) -> Option<PathBuf> {
+        Some(self.root.join("data"))
+    }
+
+    fn coop_backup_root(&self) -> Option<PathBuf> {
+        Some(self.root.join("data").join("coop-backups"))
+    }
+
+    fn cards(&self, _config: &nt_launcher::config::LauncherConfig) -> Vec<GameCard> {
+        self.cards.clone()
+    }
+}
+
+struct NoControllerCheck;
+
+impl nt_launcher_core::ControllerCheck for NoControllerCheck {
+    fn controller_connected(&self) -> bool {
+        false
+    }
+}
+
+struct SoloLobby {
+    page: Page,
+    opened: Arc<Mutex<Vec<String>>>,
+    running_pids: Arc<Mutex<Vec<u32>>>,
+    game_dir: PathBuf,
+}
+
+fn game_dir_of(page: &Page) -> PathBuf {
+    page.launcher
+        .game
+        .as_ref()
+        .expect("a game")
+        .game_dir
+        .clone()
+}
+
+fn hosted_solo_lobby(
+    profile: &'static GameProfile,
+    name: &str,
+    rules: nt_wire::SessionRules,
+    mode: u8,
+    guests: usize,
+) -> SoloLobby {
+    let root = scratch_dir(name);
+    let mut cards = both_games_found(&root);
+    for card in &mut cards {
+        if let Some(install) = card.install.as_mut() {
+            install.proton_prefix = Some(root.join("prefix"));
+        }
+    }
+    let mut link = if guests == 0 {
+        hosting_alone_link()
+    } else {
+        lobby_link(guests, false, 2)
+    };
+    link.rules = rules;
+    let state = if guests == 0 {
+        NetState::Hosting {
+            ticket: FIXTURE_TICKET.to_owned(),
+        }
+    } else {
+        net_state_for(&link, false)
+    };
+    let opened = Arc::new(Mutex::new(Vec::new()));
+    let running_pids = Arc::new(Mutex::new(Vec::new()));
+    let mut launcher = fixture_launcher(profile, cards.clone(), link, Screen::Game);
+    launcher.host = Box::new(ScratchHost {
+        opened: opened.clone(),
+        running_pids: running_pids.clone(),
+        cards,
+        root: root.clone(),
+    });
+    launcher.config_file = Some(root.join("config.toml"));
+    launcher.link_port = Some(FIXTURE_LINK_PORT);
+    launcher.lobby_mode = mode;
+    launcher.controller_check = Box::new(NoControllerCheck);
+    launcher.config.keyboard_mouse.asked = true;
+    if mode == LOBBY_MODE_CONTINUE && profile.support.saves {
+        let saves = nt_launcher::saves::save_dir(launcher.game.as_ref().expect("a game"))
+            .expect("a save folder");
+        let account = saves.join("Steam").join(FIXTURE_STEAM_ACCOUNT_FOLDER_NAME);
+        std::fs::create_dir_all(&account).expect("account folder");
+        let coop = nt_launcher::saves::coop_gamedata_path(&saves).expect("a co-op file path");
+        std::fs::write(coop, coop_file_with_a_used_slot()).expect("co-op file");
+    }
+    launcher.refresh_saves();
+    let mut page = game_page(launcher, state);
+    if mode == LOBBY_MODE_CONTINUE {
+        page.tab = Tab::Continue;
+    }
+    SoloLobby {
+        game_dir: game_dir_of(&page),
+        page,
+        opened,
+        running_pids,
+    }
+}
+
+fn coop_file_with_a_used_slot() -> Vec<u8> {
+    let mut bytes = vec![0u8; nt_launcher::saves::GAMEDATA_SIZE];
+    for index in 0..nt_launcher::saves::SLOT_COUNT as usize {
+        let start = nt_launcher::saves::SLOTS_START + index * nt_launcher::saves::SLOT_STRIDE;
+        bytes[start..start + 4].copy_from_slice(&200u32.to_le_bytes());
+    }
+    let start =
+        nt_launcher::saves::SLOTS_START + FIXTURE_COOP_SLOT * nt_launcher::saves::SLOT_STRIDE;
+    let phase = b"FIXTURE_PHASE";
+    bytes[start + 4..start + 4 + phase.len()].copy_from_slice(phase);
+    bytes[start + 0x2C..start + 0x2C + 3].copy_from_slice(b"Jay");
+    bytes[start + 0x64..start + 0x68].copy_from_slice(&12i32.to_le_bytes());
+    bytes
+}
+
+fn press_start(harness: &mut Harness<'static, Page>) {
+    harness.get_by_label("Start").click();
+    harness.run();
+}
+
+#[test]
+fn pressing_start_alone_in_a_hosted_lobby_launches_the_game_in_every_case() {
+    let rules_for = [CO_OP_CAMPAIGN.rules(), FREE_ROAM.rules()];
+    let modes = [LOBBY_MODE_NEW_GAME, LOBBY_MODE_CONTINUE];
+    let mut case = 0;
+    for profile in [&REPLICANT, &AUTOMATA] {
+        for rules in rules_for {
+            for mode in modes {
+                case += 1;
+                let label = format!(
+                    "{} rules {:?} mode {mode} (case {case})",
+                    profile.display_name, rules.mode
+                );
+                let lobby =
+                    hosted_solo_lobby(profile, &format!("solo-press-{case}"), rules, mode, 0);
+                let (opened, game_dir) = (lobby.opened.clone(), lobby.game_dir.clone());
+                let mut harness = stepped_harness(lobby.page, MOTION_FRAME_MS);
+                harness.run();
+                assert_eq!(
+                    harness.state().launcher.own_lobby_ready().mode,
+                    mode,
+                    "{label}: the lobby kept the mode"
+                );
+                press_start(&mut harness);
+                let requests = opened.lock().expect("opened").clone();
+                assert_eq!(
+                    requests,
+                    vec![format!("{STEAM_RUN_URL_PREFIX}{}", profile.steam_app_id)],
+                    "{label}: one launch request with the game's app id"
+                );
+                assert!(harness.state().launcher.lobby_started, "{label}: started");
+                let link_file = std::fs::read_to_string(game_dir.join(profile.link_file_name))
+                    .expect("link file");
+                assert!(
+                    link_file.contains("started_alone = true"),
+                    "{label}: link file says started alone:\n{link_file}"
+                );
+                press_start(&mut harness);
+                assert_eq!(
+                    opened.lock().expect("opened").len(),
+                    1,
+                    "{label}: a second press launches nothing"
+                );
+            }
+        }
+    }
+    assert_eq!(case, 8);
+}
+
+#[test]
+fn a_joined_player_who_is_not_ready_leaves_start_disabled() {
+    let mut lobby = hosted_solo_lobby(
+        &REPLICANT,
+        "solo-partner-not-ready",
+        CO_OP_CAMPAIGN.rules(),
+        LOBBY_MODE_NEW_GAME,
+        1,
+    );
+    ready_partner(&mut lobby.page.launcher.link, false, None);
+    assert!(!start_button_is_enabled(lobby.page));
+    let mut lobby = hosted_solo_lobby(
+        &REPLICANT,
+        "solo-partner-ready",
+        CO_OP_CAMPAIGN.rules(),
+        LOBBY_MODE_NEW_GAME,
+        1,
+    );
+    ready_partner(&mut lobby.page.launcher.link, true, None);
+    assert!(start_button_is_enabled(lobby.page));
+}
+
+#[test]
+fn a_game_already_running_leaves_start_disabled_outside_dev_builds() {
+    let mut lobby = hosted_solo_lobby(
+        &REPLICANT,
+        "solo-game-running",
+        CO_OP_CAMPAIGN.rules(),
+        LOBBY_MODE_NEW_GAME,
+        0,
+    );
+    lobby.running_pids.lock().expect("pids").push(4242);
+    lobby.page.launcher.any_game_running = true;
+    assert_eq!(start_button_is_enabled(lobby.page), nt_launcher::DEV_BUILD);
 }

@@ -18,6 +18,10 @@ mod followed_kind;
 mod home_entry;
 #[path = "iroh.rs"]
 mod iroh;
+#[path = "keyboard_mouse_offer.rs"]
+mod keyboard_mouse_offer;
+#[path = "late_start.rs"]
+mod late_start;
 #[path = "launcher_scale.rs"]
 mod launcher_scale;
 #[path = "lobby_rules.rs"]
@@ -38,10 +42,14 @@ mod profiles;
 mod replicant_session;
 #[path = "report.rs"]
 mod report;
+#[path = "scale_up_link.rs"]
+mod scale_up_link;
 #[path = "seat_assembler.rs"]
 mod seat_assembler;
 #[path = "session_end.rs"]
 mod session_end;
+#[path = "stable_seat_read.rs"]
+mod stable_seat_read;
 
 use std::collections::BTreeSet;
 use std::path::Path;

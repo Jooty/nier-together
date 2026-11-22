@@ -167,16 +167,10 @@ fn draw_actions(
 ) -> f32 {
     let last = match state {
         NetState::Idle | NetState::Failed(_) => return ui.max_rect().right(),
-        NetState::Joining | NetState::Hosting { .. } => {
-            let joining = matches!(state, NetState::Joining);
-            let start = start_button(joining, false);
+        NetState::Joining => {
+            let start = start_button(true, false);
             command_button(ui, start.label(), command_size(start), true, false);
-            let label = if matches!(state, NetState::Joining) {
-                LEAVE_LABEL
-            } else {
-                CLOSE_LOBBY_LABEL
-            };
-            let leave = plain_button(ui, label, true);
+            let leave = plain_button(ui, LEAVE_LABEL, true);
             if leave.clicked() {
                 launcher.before_leaving(&*forms.net);
                 forms.leave();
@@ -185,7 +179,9 @@ fn draw_actions(
             }
             leave
         }
-        NetState::Connected { .. } => draw_connected_actions(ui, launcher, forms),
+        NetState::Hosting { .. } | NetState::Connected { .. } => {
+            draw_connected_actions(ui, launcher, forms)
+        }
     };
     last.rect.left()
 }

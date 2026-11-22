@@ -1,11 +1,19 @@
 #[path = "character_setting.rs"]
 mod character_setting;
+#[path = "join_line.rs"]
+mod join_line;
+#[path = "late_join.rs"]
+mod late_join;
 #[path = "log_settings.rs"]
 mod log_settings;
 #[path = "menu.rs"]
 mod menu;
 #[path = "net.rs"]
 mod net;
+#[path = "raw_mouse_setting.rs"]
+mod raw_mouse_setting;
+#[path = "solo_session_rules.rs"]
+mod solo_session_rules;
 #[path = "start_setting.rs"]
 mod start_setting;
 

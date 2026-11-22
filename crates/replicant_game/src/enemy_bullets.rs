@@ -3,10 +3,12 @@
 
 mod board;
 mod bullet_start;
+mod bullet_trace;
 mod command_cues;
 mod copy_motion;
 mod copy_motion_tally;
 mod first_sightings;
+mod frustum_open;
 mod kinds;
 mod laser_beam;
 mod look_scale;
@@ -17,19 +19,26 @@ mod scale_growth;
 mod scan;
 mod script_bullet;
 mod sender;
+mod shooter_gone;
 mod shot_cue_gate;
 mod shot_cue_tally;
 mod shot_instances;
 mod shown_effects;
 mod sprite_frames;
+mod sprite_refusal;
 mod uncopied;
 
 pub use board::{EnemyBulletBoard, EnemyBulletStep};
 pub use bullet_start::{BulletStartMade, bullet_start_cue_kind};
+pub use bullet_trace::{
+    BULLET_TRACE_FRAME_GAP_MS, BulletMotionFields, GuestBulletTrace, HostBulletTrace, HostSighting,
+    MAX_BULLET_TRACE_LINES, MAX_TRACED_BULLETS, TracedDraw, read_bullet_motion_fields,
+};
 pub use command_cues::{effect_cue_of_command, end_cue_of_command, sound_cue_of_command};
 pub use copy_motion::{CopyCorrection, CopyMotion};
 pub use copy_motion_tally::CopyMotionTally;
 pub use first_sightings::BulletFirstSightings;
+pub use frustum_open::open_view_frustum_planes;
 pub use kinds::{EnemyBulletKinds, SpriteBulletKinds};
 pub use laser_beam::{
     BeamEnd, LaserBeam, LaserBeamTally, beam_end_text, longest_axis, read_laser_beam,
@@ -42,18 +51,21 @@ pub use puppet_pass::{
 pub use refusals::FlightRefusals;
 pub use scale_growth::{scale_growth_of_radius, shot_scale_growth};
 pub use scan::{
-    EnemyBullet, EnemyBulletCensus, EnemyBulletScan, NotDrawnNormalBullet, UncopiedScriptBullet,
-    bullets_of_enemies, read_not_drawn_normal_bullet, scan_enemy_bullets,
+    EnemyBullet, EnemyBulletCensus, EnemyBulletScan, NotDrawnNormalBullet, RememberedShooter,
+    RememberedShooters, UncopiedScriptBullet, bullets_of_enemies, read_not_drawn_normal_bullet,
+    scan_enemy_bullets, scan_enemy_bullets_remembering,
 };
 pub use script_bullet::{
     NotCopyable, UncopiedWhy, read_script_bullet, script_bullet_is_laser, why_not_copied,
 };
 pub use sender::EnemyBulletSender;
+pub use shooter_gone::ShooterGoneTally;
 pub use shot_cue_gate::{CueAdmission, ShotCueGate};
 pub use shot_cue_tally::ShotCueTally;
 pub use shot_instances::ShotInstances;
 pub use shown_effects::ShownEffectTally;
 pub use sprite_frames::{first_sprite_frame, next_sprite_frame};
+pub use sprite_refusal::{SpriteAddView, SpriteRefusal, SpriteRefusalTally, sprite_refusal};
 pub use uncopied::{UncopiedTally, uncopied_why_text};
 
 pub const ENEMY_BULLET_SCAN_INTERVAL_MS: u64 = 50;
@@ -66,6 +78,7 @@ pub const MAX_ENEMY_BULLET_KINDS_LOGGED: usize = 64;
 pub const MAX_SPRITE_BULLET_KINDS_LOGGED: usize = 16;
 pub const BULLET_SPRITE_FRAME_COUNT: u16 = 64;
 pub const MAX_UNCOPIED_SCRIPT_BULLETS_READ: usize = 32;
+pub const MAX_SHOOTER_GONE_LINES_LOGGED: u32 = 60;
 pub const SCRIPT_BULLET_LASER_FLAG_OFFSET: u64 = 0x1698;
 pub const SCRIPT_BULLET_EXECUTE_COMMAND_RVA: u32 = 0x33_0FA0;
 pub const SCRIPT_BULLET_COMMAND_RECEIVER_OFFSET: u64 = 0x1900;

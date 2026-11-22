@@ -2,10 +2,11 @@ use std::collections::{HashMap, HashSet};
 
 use replicant_proto::EnemyId;
 
-use crate::enemies::EnemySighting;
+use crate::enemies::{CUBE_GROUP, EnemySighting};
 
 const MAX_TAKEOVER_DISTANCE: f32 = 3.0;
 pub const FIGHT_SPAWN_FILL_IN_GRACE_MS: u64 = 3000;
+pub const CUBE_FIGHT_SPAWN_FILL_IN_GRACE_MS: u64 = 300;
 pub const FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS: u64 = 1000;
 pub const FIGHT_SPAWN_FILL_IN_RETRIES: u32 = 3;
 
@@ -111,7 +112,7 @@ impl FightSpawnFillIn {
             let grace_ms = if self.groups_the_replay_never_filled.contains(&id.group) {
                 0
             } else {
-                FIGHT_SPAWN_FILL_IN_GRACE_MS
+                fill_in_grace_ms(id.group)
             };
             if waited >= grace_ms && copyable.contains(&id) && retry_ready {
                 if waited >= FIGHT_SPAWN_FILL_IN_GRACE_MS {
@@ -156,6 +157,14 @@ impl FightSpawnFillIn {
         self.failed_tries.clear();
         self.groups_the_replay_never_filled.clear();
         self.snap_off_logged = false;
+    }
+}
+
+pub fn fill_in_grace_ms(group: u16) -> u64 {
+    if group == CUBE_GROUP {
+        CUBE_FIGHT_SPAWN_FILL_IN_GRACE_MS
+    } else {
+        FIGHT_SPAWN_FILL_IN_GRACE_MS
     }
 }
 

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::enemies::EnemyId;
 use crate::enemy_lead::{
     ENEMY_POSES_IN_ONE_LEAD_MESSAGE, HIGHEST_POSE_COORDINATE_ABS, HIGHEST_POSE_FACING_ABS_RADIANS,
-    MOST_ENEMIES_LED,
+    MOST_ENEMIES_LED, MOST_STARTS_IN_ONE_LEAD_MESSAGE,
 };
 
 /// Whom an enemy on the host aims at, in words both copies can map to a body of their own.
@@ -28,9 +28,20 @@ pub struct EnemyPose {
     pub target: LeadTarget,
 }
 
+/// One state start the host made since its last send: the number it has in the host's count,
+/// the four state ints, and how long before the send the host made it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueuedStart {
+    pub id: EnemyId,
+    pub number: u32,
+    pub state: [i32; 4],
+    pub ago_ms: u16,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnemyLead {
     pub poses: Vec<EnemyPose>,
+    pub starts: Vec<QueuedStart>,
 }
 
 impl EnemyPose {
@@ -46,22 +57,37 @@ impl EnemyPose {
 impl EnemyLead {
     pub fn is_valid(&self) -> bool {
         self.poses.len() <= ENEMY_POSES_IN_ONE_LEAD_MESSAGE
+            && self.starts.len() <= MOST_STARTS_IN_ONE_LEAD_MESSAGE
             && self.poses.iter().all(EnemyPose::is_valid)
     }
 }
 
-/// The host's poses of one round, cut into messages that each fit the wire; poses past the
-/// most led enemies are left out.
-pub fn lead_parts(poses: &[EnemyPose]) -> Vec<EnemyLead> {
-    poses
+/// The host's poses of one round, cut into messages that each fit the wire, then its queued
+/// starts of the enemies it sent poses for in messages of their own; poses past the most led
+/// enemies are left out.
+pub fn lead_parts(poses: &[EnemyPose], starts: &[QueuedStart]) -> Vec<EnemyLead> {
+    let sent: Vec<EnemyPose> = poses
         .iter()
         .filter(|pose| pose.is_valid())
         .take(MOST_ENEMIES_LED)
         .copied()
-        .collect::<Vec<_>>()
+        .collect();
+    let pose_parts = sent
         .chunks(ENEMY_POSES_IN_ONE_LEAD_MESSAGE)
         .map(|chunk| EnemyLead {
             poses: chunk.to_vec(),
-        })
-        .collect()
+            starts: Vec::new(),
+        });
+    let sent_starts: Vec<QueuedStart> = starts
+        .iter()
+        .filter(|start| sent.iter().any(|pose| pose.id == start.id))
+        .copied()
+        .collect();
+    let start_parts = sent_starts
+        .chunks(MOST_STARTS_IN_ONE_LEAD_MESSAGE)
+        .map(|chunk| EnemyLead {
+            poses: Vec::new(),
+            starts: chunk.to_vec(),
+        });
+    pose_parts.chain(start_parts).collect()
 }

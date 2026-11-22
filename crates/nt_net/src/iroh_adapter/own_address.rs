@@ -59,7 +59,7 @@ pub(super) async fn report_own_address(endpoint: Endpoint, sink: ProgressSink) {
     closed.run_until(watch_own_address(endpoint, sink)).await;
 }
 
-pub(super) fn relay_label(url: &RelayUrl) -> String {
+pub fn relay_label(url: &RelayUrl) -> String {
     // The first part of the server's name says where the relay stands.
     let host = url.host_str().unwrap_or_default();
     host.split('.').next().unwrap_or(host).to_owned()

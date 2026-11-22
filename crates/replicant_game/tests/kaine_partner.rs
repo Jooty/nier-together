@@ -5,14 +5,25 @@ use replicant_proto::PartnerBody;
 fn she_is_hidden_when_either_player_is_kaine_and_never_otherwise() {
     let kaine = Some(PartnerBody::SeedKaineE);
     let nier = Some(PartnerBody::Nier);
-    assert!(partner_kaine_hidden_wanted(kaine, nier));
-    assert!(partner_kaine_hidden_wanted(nier, kaine));
-    assert!(partner_kaine_hidden_wanted(None, kaine));
+    assert!(partner_kaine_hidden_wanted(kaine, nier, false));
+    assert!(partner_kaine_hidden_wanted(nier, kaine, false));
+    assert!(partner_kaine_hidden_wanted(None, kaine, false));
     assert!(!partner_kaine_hidden_wanted(
         nier,
-        Some(PartnerBody::PrologueCharacter)
+        Some(PartnerBody::PrologueCharacter),
+        false
     ));
-    assert!(!partner_kaine_hidden_wanted(None, None));
+    assert!(!partner_kaine_hidden_wanted(None, None, false));
+}
+
+#[test]
+fn she_is_shown_while_she_is_the_boss_even_when_the_guest_is_kaine() {
+    let kaine = Some(PartnerBody::SeedKaineE);
+    assert!(!partner_kaine_hidden_wanted(
+        Some(PartnerBody::Nier),
+        kaine,
+        true
+    ));
 }
 
 #[test]

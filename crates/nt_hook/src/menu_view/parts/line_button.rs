@@ -74,6 +74,11 @@ pub fn line_button(ui: &Ui, label: &str, held: bool, enabled: bool) -> bool {
 /// A run of line buttons that wraps onto a new line when the next one does not fit. `held` marks the ones
 /// drawn as held. Returns the index of the button clicked, if any.
 pub fn line_buttons(ui: &Ui, labels: &[&str], held: &[bool]) -> Option<usize> {
+    line_buttons_when(ui, labels, held, true)
+}
+
+/// As [`line_buttons`], and with `enabled` false every button is hatched and greyed and none can be clicked.
+pub fn line_buttons_when(ui: &Ui, labels: &[&str], held: &[bool], enabled: bool) -> Option<usize> {
     let available = ui.content_region_avail()[0];
     ui.dummy([0.0, MENU_LINE_BUTTONS_MARGIN_PX]);
     let mut used = 0.0;
@@ -92,7 +97,12 @@ pub fn line_buttons(ui: &Ui, labels: &[&str], held: &[bool]) -> Option<usize> {
                 used = 0.0;
             }
         }
-        if line_button(ui, label, held.get(index).copied().unwrap_or(false), true) {
+        if line_button(
+            ui,
+            label,
+            held.get(index).copied().unwrap_or(false),
+            enabled,
+        ) {
             clicked = Some(index);
         }
         used += width;

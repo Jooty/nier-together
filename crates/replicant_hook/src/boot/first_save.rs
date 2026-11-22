@@ -14,7 +14,7 @@ use replicant_game::offsets::{
     SAVE_MANAGER_RVA, SET_SAVE_USER_RVA, USER_ENTRY_RVA, USER_MANAGER_ACCESSOR_RVA,
 };
 
-use crate::boot::game_access::game_memory;
+use crate::boot::game_access::{game_memory, slot_holds_a_save};
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
@@ -53,6 +53,10 @@ pub(super) fn arm(slot: u8) {
     log_line(&format!("first save: armed for slot {slot}"));
 }
 
+pub fn save_is_owed() -> bool {
+    SLOT.load(Ordering::Acquire) != NO_SLOT
+}
+
 pub fn tick(build: &VerifiedBuild) {
     let slot = SLOT.load(Ordering::Acquire);
     if slot == NO_SLOT {
@@ -68,6 +72,7 @@ pub fn tick(build: &VerifiedBuild) {
         in_play: classify(read_play_checks(&game)).is_in_play(),
         phase: &phase,
         save_manager_busy: manager_is_loading(build) || manager_is_saving(build),
+        slot_holds_a_save: slot_holds_a_save(slot),
     };
     let step = GATE
         .lock()
@@ -78,6 +83,12 @@ pub fn tick(build: &VerifiedBuild) {
         FirstSaveStep::GiveUp => {
             log_line(&format!(
                 "first save: slot {slot} given up, the first phase never came"
+            ));
+            SLOT.store(NO_SLOT, Ordering::Release);
+        }
+        FirstSaveStep::SlotInUse => {
+            log_line(&format!(
+                "first save: slot {slot} already holds a save, it is never written over"
             ));
             SLOT.store(NO_SLOT, Ordering::Release);
         }

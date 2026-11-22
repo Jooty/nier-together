@@ -16,6 +16,7 @@ use nt_hook::diagnostics::log_line;
 use crate::game_calls::GameCalls;
 use crate::game_hooks::held_body_update_mark::while_a_held_body_update_runs;
 use crate::game_hooks::partner_walk_guards::body_is_held;
+use crate::look_driver::with_partner_hair;
 
 static ORIGINAL_BODY_UPDATE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static OWN_INPUT_CALLS: OnceLock<GameCalls> = OnceLock::new();
@@ -79,7 +80,7 @@ extern "system" fn body_update_detour(body: usize) -> usize {
     // SAFETY: the trampoline continues into the original function with the argument received.
     let update = || unsafe { core::mem::transmute::<*mut c_void, BodyUpdate>(original)(body) };
     let result = if held {
-        while_a_held_body_update_runs(update)
+        while_a_held_body_update_runs(|| with_partner_hair(body, update))
     } else {
         update()
     };

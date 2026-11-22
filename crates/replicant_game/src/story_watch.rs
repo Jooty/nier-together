@@ -1,10 +1,16 @@
+mod camera_call;
 mod guest_watch;
 mod host_word;
 mod input_leak;
 mod lines;
 mod place;
 mod removal;
+mod room_view;
 
+pub use camera_call::{
+    CHANGE_CAMERA_TO_FIXED_CAMERA_KIND, WatchedCameraRun, camera_call_is_followed,
+    watched_camera_applies_here, watched_camera_run,
+};
 pub use guest_watch::{GuestWatch, WatchEnd, WatchFacts, WatchStep};
 pub use host_word::GuestWord;
 pub use input_leak::{WATCHED_BODY_MOVES_ON_KEYS_ABOVE_SPEED, watched_body_moves_on_keys};
@@ -14,7 +20,11 @@ pub use lines::{
 };
 pub use place::{PlaceStep, place_step};
 pub use removal::{RemovalChange, StoryRemoval};
+pub use room_view::{RoomViewReading, RoomViewStep, WatchedRoomView};
 
+pub const AERIE_PACK_PREFIX: &str = "A_CLIFF_VILLAGE";
+pub const AERIE_EXIT_GAME_FLAG: u16 = 248;
+pub const AERIE_EXIT_SCRIPT_FUNCTION: &str = "EID_1000_a0070_01_End";
 pub const ACTIVATE_UNIQUE_ACTOR_NATIVE_RVA: u32 = 0x6E_3AA0;
 pub const DISACTIVATE_UNIQUE_ACTOR_NATIVE_RVA: u32 = 0x6E_8770;
 pub const COMPANION_SCRIPT_ID: i32 = -2;
@@ -26,3 +36,4 @@ pub const WATCH_BODY_TELEPORTED_ABOVE: f32 = 1.5;
 pub const WATCH_BODY_TELEPORT_EVERY_MS: u64 = 500;
 pub const WATCH_LINE_EVERY_MS: u64 = 1_000;
 pub const PACKS_WHERE_THE_GUEST_PLAYS_THOUGH_THE_STORY_TAKES_HER: [&str; 1] = ["B_STONE_FIELD_02"];
+pub const WATCHED_ROOM_STATUS_FRESH_MS: u64 = 3_000;

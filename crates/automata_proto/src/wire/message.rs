@@ -3,6 +3,7 @@ use automata_game::enemies::{
 };
 use automata_game::enemy_lead::EnemyLead;
 use automata_game::event_follow::{EventAsk, EventId};
+use automata_game::outfit_look::PlayerLook;
 use automata_game::pickups::ItemPickup;
 use automata_game::session_jump::SessionJumpOrder;
 use automata_game::shared_defeat::DefeatNote;
@@ -63,6 +64,9 @@ pub enum Message {
     StoryStepAnswer(StoryStepAnswer),
     EventPause { id: EventId, paused: bool },
     SessionJump(SessionJumpOrder),
+    Look(PlayerLook),
+    LookRule { any_look_allowed: bool },
+    BossWait { slot: u8, waiting: bool },
 }
 
 impl Message {
@@ -109,6 +113,9 @@ impl Message {
             Message::StoryStepAnswer(_) => "StoryStepAnswer",
             Message::EventPause { .. } => "EventPause",
             Message::SessionJump(_) => "SessionJump",
+            Message::Look(_) => "Look",
+            Message::LookRule { .. } => "LookRule",
+            Message::BossWait { .. } => "BossWait",
         }
     }
 
@@ -149,6 +156,9 @@ impl Message {
                 | Message::StoryStepAnswer(_)
                 | Message::EventPause { .. }
                 | Message::SessionJump(_)
+                | Message::Look(_)
+                | Message::LookRule { .. }
+                | Message::BossWait { .. }
         )
     }
 
@@ -296,6 +306,14 @@ impl Message {
                     })
                 }
             }
+            Message::Look(look) => {
+                if look.is_valid() {
+                    Ok(())
+                } else {
+                    Err(WireError::OutOfRange { field: "look" })
+                }
+            }
+            Message::BossWait { slot, .. } => validate_slot(*slot),
             Message::Reject(_)
             | Message::Ping(_)
             | Message::Pong(_)
@@ -308,7 +326,8 @@ impl Message {
             | Message::EnemyGone(_)
             | Message::StoryAskAnswer(_)
             | Message::HostSaved { .. }
-            | Message::StoryStepAnswer(_) => Ok(()),
+            | Message::StoryStepAnswer(_)
+            | Message::LookRule { .. } => Ok(()),
         }
     }
 }
@@ -372,6 +391,7 @@ impl GameMessage for Message {
                 | Message::LobbyCharacter(_)
                 | Message::LobbyReady(_)
                 | Message::Pickup(_)
+                | Message::Look(_)
         )
     }
 

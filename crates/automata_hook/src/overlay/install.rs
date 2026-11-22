@@ -9,13 +9,18 @@ use crate::actions;
 use crate::boot::boot_once;
 use crate::enemies_driver;
 use crate::event_follow_driver;
-use crate::game_hooks::{install_input_block, save_redirect_status, story_gate_status};
+use crate::game_hooks::{
+    install_input_block, install_raw_mouse_camera, save_redirect_status, set_raw_mouse_on,
+    story_gate_status,
+};
 use crate::guest_watches_driver;
 use crate::hud;
+use crate::look_driver;
 use crate::menu::{AutomataMenu, DownedHooks};
 use crate::net::co_op_status;
 use crate::partner_driver;
 use crate::pickups_driver;
+use crate::raw_mouse_setting::raw_mouse_from_launcher;
 use crate::save_together_driver;
 use crate::shared_defeat_driver;
 use crate::start_driver;
@@ -51,6 +56,10 @@ fn start_automata_hooks(build: VerifiedBuild) {
         log_line(&format!("actions: {error}"));
     }
     install_input_block(build);
+    let raw_mouse = raw_mouse_from_launcher();
+    log_line(&raw_mouse.log_line);
+    set_raw_mouse_on(raw_mouse.on);
+    install_raw_mouse_camera(build);
     let settings = &boot_once().settings;
     start_driver::install(
         build,
@@ -68,6 +77,7 @@ fn start_automata_hooks(build: VerifiedBuild) {
     shared_defeat_driver::install(build, settings);
     story_steps_driver::install(build, settings);
     guest_watches_driver::install(build, settings);
+    look_driver::install(build);
 }
 
 fn make_menu(gate: &Result<VerifiedBuild, GateError>) -> AutomataMenu {

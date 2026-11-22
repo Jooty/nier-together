@@ -1,6 +1,8 @@
+use replicant_game::host_led_stretch::host_run_replays_on_the_watching_guest;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_calls::{
     PartnerPlace, SAME_PLACE_RANGE_UNITS, STORY_CALL_TABLE, SceneScope, StoryCallKind, Whereabouts,
+    name_hash,
 };
 use replicant_game::story_relay::{
     ARG_STRIDE_BYTES, ARGS_HEADER_BYTES, ArgsRefusal, CallKey, DropReason, FireAction, FireFacts,
@@ -699,4 +701,81 @@ fn the_partner_is_in_the_same_place_within_range_in_the_same_phase() {
     );
     assert_eq!(PartnerPlace::judge(at(3, 0.0), None), PartnerPlace::Unknown);
     assert!(!PartnerPlace::Unknown.is_same());
+}
+
+const MANOR_PACK: &str = "B_SOUTH_MANSION_01";
+const STAIRCASE_SCENE_STEP: &str = "EID_3100_a0015g_03";
+const STAIRCASE_SHAKE_TIMER: &str = "SHAKE_CAMERA_X_OPEN_FIRST";
+const STAIRCASE_SCENE_BODY: &str = "OPEN_UNDERGROUND_WAY_FIRST";
+
+#[test]
+fn the_step_that_opens_the_secret_staircase_is_relayed_though_it_sets_no_flag() {
+    let pack = pack_hash_of_phase(MANOR_PACK);
+    assert_eq!(
+        relay_kind(pack, name_hash(STAIRCASE_SCENE_STEP)),
+        Some(StoryCallKind::Story)
+    );
+    for step in ["OPEN_UNDERGROUND_WAY", "CLOSE_UNDERGROUND_WAY"] {
+        assert_eq!(
+            relay_kind(pack, name_hash(step)),
+            Some(StoryCallKind::Story)
+        );
+    }
+    assert_eq!(
+        SceneScope::of(STAIRCASE_SCENE_STEP),
+        SceneScope::SharedProgress
+    );
+}
+
+#[test]
+fn the_staircase_shake_timer_stays_local_so_each_game_runs_its_own() {
+    assert_eq!(
+        SceneScope::of(STAIRCASE_SHAKE_TIMER),
+        SceneScope::LocalScene
+    );
+    assert_eq!(
+        SceneScope::of(STAIRCASE_SCENE_BODY),
+        SceneScope::SharedProgress
+    );
+    assert_eq!(
+        relay_kind(
+            pack_hash_of_phase(MANOR_PACK),
+            name_hash(STAIRCASE_SHAKE_TIMER)
+        ),
+        Some(StoryCallKind::Story)
+    );
+}
+
+#[test]
+fn the_host_runs_the_staircase_step_and_sends_it_to_the_guest() {
+    let mut ledger = StoryRelayLedger::new();
+    let key = CallKey {
+        function: name_hash(STAIRCASE_SCENE_STEP),
+        args: args_hash(&[]),
+    };
+    let mut fire = facts(FollowRole::Host);
+    fire.kind = relay_kind(
+        pack_hash_of_phase(MANOR_PACK),
+        name_hash(STAIRCASE_SCENE_STEP),
+    );
+    fire.scope = SceneScope::of(STAIRCASE_SCENE_STEP);
+    fire.can_gather_partner = false;
+    assert_eq!(
+        ledger.on_fire(SLOT, &fire, key, 0),
+        FireAction::RunAndAnnounce
+    );
+}
+
+#[test]
+fn a_watching_guest_replays_the_staircase_steps_the_host_sends() {
+    for step in [
+        STAIRCASE_SCENE_STEP,
+        "OPEN_UNDERGROUND_WAY",
+        "CLOSE_UNDERGROUND_WAY",
+    ] {
+        assert!(host_run_replays_on_the_watching_guest(step));
+    }
+    assert!(!host_run_replays_on_the_watching_guest(
+        STAIRCASE_SHAKE_TIMER
+    ));
 }

@@ -46,6 +46,12 @@ pub fn scene_view_on(
 /// The game's own natives that give a door's place its side view, as the door's entry step calls
 /// them, with none of the step's story work and without its later pause release.
 pub fn view_on_calls(scene: &SceneViewOn, door: &SideViewDoor) -> Vec<ViewCall> {
+    side_view_on_calls(door, Some(scene.indoor_camera_status))
+}
+
+/// The same calls with the indoor camera status given, or left out where the host's own
+/// status call is replayed beside them.
+pub fn side_view_on_calls(door: &SideViewDoor, camera_status: Option<i32>) -> Vec<ViewCall> {
     let call = |native_rva, args: &[ViewArg]| ViewCall {
         native_rva,
         args: args.to_vec(),
@@ -57,15 +63,13 @@ pub fn view_on_calls(scene: &SceneViewOn, door: &SideViewDoor) -> Vec<ViewCall> 
             &[ViewArg::Text(part)],
         ));
     }
-    calls.extend([
-        call(
+    if let Some(status) = camera_status {
+        calls.push(call(
             CHANGE_CAMERA_STATUS_NATIVE_RVA,
-            &[
-                ViewArg::Int(scene.indoor_camera_status),
-                ViewArg::Real(2.0),
-                ViewArg::Int(1),
-            ],
-        ),
+            &[ViewArg::Int(status), ViewArg::Real(2.0), ViewArg::Int(1)],
+        ));
+    }
+    calls.extend([
         call(
             SET_CAMERA_LEVER_MODE_NATIVE_RVA,
             &[ViewArg::Int(1), ViewArg::Int(0)],

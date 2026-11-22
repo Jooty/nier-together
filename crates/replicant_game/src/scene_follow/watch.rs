@@ -28,6 +28,9 @@ pub enum FollowStep {
     GaveUp {
         waited_ms: u64,
     },
+    HostSceneEnded {
+        waited_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -36,6 +39,7 @@ pub struct SceneFollowWatch {
     last_entry_ms: Option<u64>,
     was_in_scene: bool,
     host_in_scene: bool,
+    host_was_in_scene: bool,
     unplayed_start_ms: Option<u64>,
 }
 
@@ -47,6 +51,7 @@ struct Pending {
     pause_menu_close_requests: u8,
     injected: bool,
     cut_load_queued: bool,
+    host_seen_in_scene: bool,
 }
 
 impl SceneFollowWatch {
@@ -56,6 +61,7 @@ impl SceneFollowWatch {
             last_entry_ms: None,
             was_in_scene: false,
             host_in_scene: false,
+            host_was_in_scene: false,
             unplayed_start_ms: None,
         }
     }
@@ -80,6 +86,7 @@ impl SceneFollowWatch {
             pause_menu_close_requests: 0,
             injected: false,
             cut_load_queued: false,
+            host_seen_in_scene: false,
         });
     }
 
@@ -104,16 +111,23 @@ impl SceneFollowWatch {
             self.last_entry_ms = Some(now_ms);
         }
         self.was_in_scene = local_in_scene;
+        let host_left = self.host_was_in_scene && !self.host_in_scene;
+        self.host_was_in_scene = self.host_in_scene;
         let Some(pending) = self.pending.as_mut() else {
             return FollowStep::Idle;
         };
         let waited_ms = now_ms.saturating_sub(pending.received_ms);
+        pending.host_seen_in_scene |= self.host_in_scene;
         let entered_just_before = self.last_entry_ms.is_some_and(|entered| {
             entered + SCENE_FOLLOW_ALREADY_ENTERED_MS >= pending.received_ms
         });
         if entered_just_before || (local_in_scene && waited_ms > 0) {
             self.pending = None;
             return FollowStep::Followed { waited_ms };
+        }
+        if host_left && pending.host_seen_in_scene && !pending.injected && !local_in_scene {
+            self.pending = None;
+            return FollowStep::HostSceneEnded { waited_ms };
         }
         if waited_ms >= SCENE_FOLLOW_GIVE_UP_MS {
             self.pending = None;

@@ -9,6 +9,9 @@ mod fixture;
 mod forms;
 mod game_look;
 mod join_dialog;
+mod keyboard_mouse;
+mod late_seat;
+mod launch_host;
 mod lobby_failure;
 mod log_upload;
 mod motion;
@@ -35,6 +38,7 @@ pub use fixture::{
 pub use forms::NetForms;
 pub use game_look::{GameLook, GameMark, TitleFace, game_look};
 pub use join_dialog::JoinDialog;
+pub use launch_host::{LaunchHost, SystemHost};
 pub use lobby_failure::LobbyFailure;
 pub use log_upload::LogUploader;
 pub use pages::{Tab, draw};

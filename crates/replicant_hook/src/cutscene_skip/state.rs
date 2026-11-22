@@ -2,7 +2,7 @@ use std::sync::{Mutex, PoisonError};
 
 use replicant_game::GameMemory;
 use replicant_game::cutscene_skip::{
-    CutsceneSkipTracker, EVENT_SKIP_TAKEN_BYTE_RVA, PARTNER_SNAPSHOT_STALE_MS,
+    CutsceneSkipTracker, EVENT_SKIP_TAKEN_BYTE_RVA, GuestComingIntoScene, PARTNER_SNAPSHOT_STALE_MS,
 };
 use replicant_game::marker::EVENT_SCENE_BYTE_RVA;
 use replicant_proto::{CutsceneSkipAsk, Message, PartnerActivity};
@@ -13,6 +13,22 @@ use crate::memory::InProcessMemory;
 use crate::net::{NetShared, NetState, NetThread, net_clock_ms};
 
 pub(super) static TRACKER: Mutex<CutsceneSkipTracker> = Mutex::new(CutsceneSkipTracker::new());
+
+static GUEST_COMING: Mutex<GuestComingIntoScene> = Mutex::new(GuestComingIntoScene::new());
+
+pub(crate) fn note_guest_follow_sent() {
+    GUEST_COMING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .follow_sent(net_clock_ms());
+}
+
+pub(crate) fn guest_coming_into_scene() -> bool {
+    GUEST_COMING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .is_coming(net_clock_ms())
+}
 
 pub fn local_in_cutscene() -> bool {
     TRACKER
@@ -41,6 +57,12 @@ pub(super) fn observe_scene(build: &VerifiedBuild) -> Option<(bool, bool)> {
         .read_u8(base + u64::from(EVENT_SKIP_TAKEN_BYTE_RVA))
         .ok()?
         != 0;
+    if !in_scene {
+        GUEST_COMING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clear();
+    }
     let mut tracker = TRACKER.lock().unwrap_or_else(PoisonError::into_inner);
     if tracker.observe_scene(in_scene, skip_taken) {
         log_line(&format!(

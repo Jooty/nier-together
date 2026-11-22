@@ -14,9 +14,13 @@ pub struct TitleHoldInputs {
     pub waited_ms: u64,
     pub launcher_linked: bool,
     pub partner_readiness: GameReadiness,
+    pub started_alone: bool,
 }
 
 pub fn title_hold(inputs: TitleHoldInputs) -> TitleHold {
+    if inputs.started_alone {
+        return TitleHold::Release;
+    }
     if inputs.waited_ms >= TITLE_HOLD_TIMEOUT_MS {
         return TitleHold::TimedOut;
     }

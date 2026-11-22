@@ -1,4 +1,5 @@
 use replicant_game::Position;
+use replicant_game::new_game::{FIRST_SAVE_PHASE, FirstSaveGate, FirstSaveInputs, FirstSaveStep};
 use replicant_game::offsets::{ENTITY_ARRIVAL_POINT_OFFSET, ENTITY_RVA, ENTITY_ZONE_OFFSET};
 use replicant_game::stay_together::{
     ANNOUNCE_RESEND_MS, AnnounceConditions, DEFAULT_LEASH_UNITS, FOLLOW_RETRY_MS,
@@ -21,6 +22,7 @@ fn guest_conditions() -> FollowConditions {
         connected: true,
         free_to_act: true,
         owes_scene_end: false,
+        first_save_owed: false,
         local_phase: Some(1),
         now_ms: 10_000,
     }
@@ -590,6 +592,7 @@ fn a_scene_that_just_ended_with_the_mask_held_delays_the_follow() {
     follow.host_moved_to(TARGET);
     let conditions = FollowConditions {
         owes_scene_end: true,
+        first_save_owed: false,
         free_to_act: false,
         now_ms: 20_000,
         ..guest_conditions()
@@ -716,4 +719,76 @@ fn a_waiting_partner_end_that_runs_clears_the_debt() {
     };
     assert_eq!(watch.observe(&waiting), SceneEndOwed::Yes);
     assert_eq!(watch.observe(&scene_facts(1_100)), SceneEndOwed::No);
+}
+
+#[test]
+fn a_new_game_joiner_far_from_the_host_saves_first_and_only_then_follows() {
+    let prologue = u16::try_from(
+        PHASE_TABLE
+            .iter()
+            .position(|entry| entry.name == FIRST_SAVE_PHASE)
+            .expect("the first save phase is in the table"),
+    )
+    .expect("fits");
+    let far_target = PhaseTarget {
+        phase: prologue + 3,
+        point: 1,
+    };
+    let mut gate = FirstSaveGate::new();
+    gate.arm(0);
+    let mut follow = FollowState::new();
+    follow.host_moved_to(far_target);
+    let mut save_requested_at = None;
+    let mut save_written_at = None;
+    let mut followed_at = None;
+    for now_ms in (0..60_000).step_by(100) {
+        if save_requested_at.is_none() {
+            let inputs = FirstSaveInputs {
+                in_play: true,
+                phase: FIRST_SAVE_PHASE,
+                save_manager_busy: false,
+                slot_holds_a_save: false,
+            };
+            if gate.step(inputs, now_ms) == FirstSaveStep::Save {
+                save_requested_at = Some(now_ms);
+            }
+        } else if save_written_at.is_none() && now_ms >= save_requested_at.unwrap_or(0) + 1_500 {
+            save_written_at = Some(now_ms);
+        }
+        let step = follow.step(&FollowConditions {
+            first_save_owed: save_written_at.is_none(),
+            local_phase: Some(prologue),
+            now_ms,
+            ..guest_conditions()
+        });
+        if matches!(step, FollowStep::Go(_)) && followed_at.is_none() {
+            followed_at = Some(now_ms);
+        }
+    }
+    let written = save_written_at.expect("the first save is written");
+    assert!(followed_at.expect("the follow runs") >= written);
+}
+
+#[test]
+fn a_guest_that_owes_nothing_still_follows_at_once() {
+    let mut follow = FollowState::new();
+    follow.host_moved_to(TARGET);
+    assert!(matches!(
+        follow.step(&guest_conditions()),
+        FollowStep::Go(_)
+    ));
+}
+
+#[test]
+fn a_first_save_owed_is_a_named_wait() {
+    let mut follow = FollowState::new();
+    follow.host_moved_to(TARGET);
+    let owed = FollowConditions {
+        first_save_owed: true,
+        ..guest_conditions()
+    };
+    assert_eq!(
+        follow.step(&owed),
+        FollowStep::Waiting(WaitReason::FirstSaveOwed)
+    );
 }

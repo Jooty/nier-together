@@ -3,11 +3,13 @@ mod start_choice;
 
 pub use file::{
     clear_boot, clear_link, write_boot, write_character, write_coop_save_file, write_dev_switches,
-    write_link, write_log, write_new_game, write_settings, write_start,
+    write_keyboard_mouse, write_link, write_log, write_new_game, write_settings, write_start,
+    write_started_alone,
 };
 pub use start_choice::{START_CHOICES, StartChoice, StartSetting};
 
 pub const LINK_KEY: &str = "link";
+pub const STARTED_ALONE_KEY: &str = "started_alone";
 pub const CHARACTER_KEY: &str = "character";
 pub const PARTNER_CHARACTER_KEY: &str = "partner_character";
 pub const START_KEY: &str = "start";
@@ -29,6 +31,7 @@ pub const SHOW_PING_KEY: &str = "show_ping";
 pub const EVENT_LOG_KEY: &str = "event_log";
 pub const SHOW_NAMES_KEY: &str = "show_names";
 pub const SHOW_PARTY_FRAME_KEY: &str = "show_party_frame";
+pub const RAW_MOUSE_KEY: &str = "raw_mouse";
 pub const LOG_KEY: &str = "log";
 pub const ENEMY_HEALTH_PERCENT_KEY: &str = "enemy_health_percent";
 pub const ENEMY_DAMAGE_PERCENT_KEY: &str = "enemy_damage_percent";

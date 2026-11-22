@@ -1,5 +1,6 @@
 #[cfg(feature = "probes")]
 mod boss_bar_probe;
+mod boss_gauge_log;
 mod boss_hit_log;
 #[cfg(feature = "probes")]
 mod boss_motion_probe;
@@ -11,6 +12,8 @@ mod combat_view;
 mod companion;
 mod counters;
 mod drop_hook;
+#[cfg(feature = "probes")]
+mod fight_actor_probe;
 mod game_calls;
 mod gauge_opening_replay;
 mod guest_combat;
@@ -18,6 +21,8 @@ mod hit_hook;
 mod hold_hook;
 mod host_combat;
 mod install;
+pub(crate) mod kaine_boss;
+mod kaine_boss_gauge;
 mod shared_actors;
 mod spawn_hook;
 mod status;
@@ -28,8 +33,11 @@ mod word_drop_hook;
 pub(crate) use combat_view::applying_remote;
 pub use counters::CombatCounts;
 pub(crate) use gauge_opening_replay::{OpeningReplayStep, replay_guest_opening_hit};
-pub(crate) use hold_hook::{cut_copy_step_before_move, is_held};
+pub(crate) use hold_hook::{cut_copy_step_before_move, is_held, set_driven_boss};
 pub use install::install;
+pub(crate) use kaine_boss::{
+    apply_guest_boss_hits, boss_kaine_life, drive_kaine_boss, reset_boss_pvp,
+};
 pub use shared_actors::{shared_actor_id, shared_actor_of, shared_enemy_actors};
 pub use status::{
     EnemySyncRole, EnemySyncStatus, enemy_id_text, enemy_sync_status, set_snap_enabled,

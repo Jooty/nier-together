@@ -18,7 +18,7 @@ impl ShownPlayersExt for NetShared {
         let mode = self.session_mode();
         let candidates: Vec<&Player<PlayerState, PartnerWatch>> = match mode {
             SessionMode::Campaign => self.campaign_partner().into_iter().collect(),
-            SessionMode::FreeRoam => self.others().collect(),
+            SessionMode::FreeRoam => self.counted_others().collect(),
         };
         let entries: Vec<PlayerEntry> = candidates
             .iter()

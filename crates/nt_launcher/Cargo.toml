@@ -41,6 +41,9 @@ nt_net = { workspace = true, features = ["iroh"] }
 egui_kittest = { version = "0.37", default-features = false, features = ["wgpu"], optional = true }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_UI_Input_XboxController"] }
+
 [features]
 dev = []
 snapshots = ["dep:egui_kittest"]

@@ -40,6 +40,7 @@ fn watch_facts(host_leads_a_stretch: bool) -> WatchFacts<'static> {
         setting_on: true,
         guest_in_session: true,
         story_has_taken_her: false,
+        taken_at_the_aerie_exit: false,
         host_leads_a_stretch,
         pack: FOREST,
     }

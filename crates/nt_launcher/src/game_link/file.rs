@@ -1,7 +1,7 @@
 use std::io;
 use std::path::Path;
 
-use nt_launcher_core::GameProfile;
+use nt_launcher_core::{GameProfile, KeyboardMouseFixes};
 use toml::{Table, Value};
 
 use nt_launcher_core::{
@@ -12,8 +12,9 @@ use crate::game_link::{
     BLOCK_SAVES_KEY, BODY_KEY, BOOT_SLOT_KEY, CHARACTER_KEY, COOP_SAVE_FILE_KEY,
     DEV_NO_FOCUS_MENU_KEY, ENEMY_DAMAGE_PERCENT_KEY, ENEMY_HEALTH_PERCENT_KEY, EVENT_LOG_KEY,
     KEEP_RUNNING_KEY, LINK_KEY, LOG_KEY, NAME_KEY, NEW_GAME_NAME_KEY, NEW_GAME_SLOT_KEY,
-    PARTNER_CHARACTER_KEY, ROLE_KEY, SHOW_DISTANCE_KEY, SHOW_NAMES_KEY, SHOW_PARTY_FRAME_KEY,
-    SHOW_PING_KEY, START_INDEX_KEY, START_KEY, START_SLOT_KEY, STORY_KEY, StartSetting,
+    PARTNER_CHARACTER_KEY, RAW_MOUSE_KEY, ROLE_KEY, SHOW_DISTANCE_KEY, SHOW_NAMES_KEY,
+    SHOW_PARTY_FRAME_KEY, SHOW_PING_KEY, START_INDEX_KEY, START_KEY, START_SLOT_KEY,
+    STARTED_ALONE_KEY, STORY_KEY, StartSetting,
 };
 
 pub fn write_link(profile: &GameProfile, game_dir: &Path, port: u16, name: &str) -> io::Result<()> {
@@ -21,6 +22,17 @@ pub fn write_link(profile: &GameProfile, game_dir: &Path, port: u16, name: &str)
     let mut table = read_table(&path);
     table.insert(LINK_KEY.to_owned(), Value::Integer(i64::from(port)));
     table.insert(NAME_KEY.to_owned(), Value::String(name.to_owned()));
+    std::fs::write(path, render(&table))
+}
+
+pub fn write_started_alone(
+    profile: &GameProfile,
+    game_dir: &Path,
+    started_alone: bool,
+) -> io::Result<()> {
+    let path = game_dir.join(profile.link_file_name);
+    let mut table = read_table(&path);
+    set_flag(&mut table, STARTED_ALONE_KEY, started_alone, false);
     std::fs::write(path, render(&table))
 }
 
@@ -125,6 +137,17 @@ pub fn write_settings(
     std::fs::write(path, render(&table))
 }
 
+pub fn write_keyboard_mouse(
+    profile: &GameProfile,
+    game_dir: &Path,
+    fixes: KeyboardMouseFixes,
+) -> io::Result<()> {
+    let path = game_dir.join(profile.link_file_name);
+    let mut table = read_table(&path);
+    set_flag(&mut table, RAW_MOUSE_KEY, fixes.on, false);
+    std::fs::write(path, render(&table))
+}
+
 pub fn write_dev_switches(
     profile: &GameProfile,
     game_dir: &Path,
@@ -209,6 +232,7 @@ pub fn clear_boot(profile: &GameProfile, game_dir: &Path) -> io::Result<()> {
             START_INDEX_KEY,
             START_SLOT_KEY,
             STORY_KEY,
+            STARTED_ALONE_KEY,
         ],
     )
 }

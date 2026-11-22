@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use nt_launcher::config::{ConfigRole, LauncherConfig, open_config_home};
 use nt_launcher::game_link::{StartChoice, StartSetting};
-use nt_launcher_core::{LauncherScale, REPLICANT};
+use nt_launcher_core::{KeyboardMouseFixes, LauncherScale, REPLICANT};
 use std::ffi::OsStr;
 
 use crate::scratch::fresh_dir;
@@ -23,6 +23,7 @@ fn game_folder_override_survives_a_save_and_load() {
         show_party_frame: true,
         enemy_health_percent: 100,
         enemy_damage_percent: 20,
+        any_look_allowed: true,
         check_for_updates: false,
         update_url: Some("http://localhost/test/manifest.json".to_owned()),
         send_logs: false,
@@ -37,6 +38,10 @@ fn game_folder_override_survives_a_save_and_load() {
         character_ids: BTreeMap::from([("made-up".to_owned(), "red".to_owned())]),
         motion: false,
         scale: LauncherScale::Large,
+        keyboard_mouse: KeyboardMouseFixes {
+            on: true,
+            asked: true,
+        },
     };
     config.save(&path).unwrap();
     assert_eq!(LauncherConfig::load(&path), config);
@@ -132,6 +137,30 @@ fn enemy_difficulty_defaults_to_sixty_and_ten_and_leaves_no_key() {
     let text = config.render();
     assert!(!text.contains("enemy_health_percent"));
     assert!(!text.contains("enemy_damage_percent"));
+}
+
+#[test]
+fn the_any_look_switch_is_off_by_default_and_leaves_no_key() {
+    let config = LauncherConfig::default();
+    assert!(!config.session_options().any_look_allowed);
+    assert!(!config.render().contains("any_look_allowed"));
+}
+
+#[test]
+fn the_any_look_switch_is_saved_and_read_back_like_the_other_lobby_rules() {
+    let mut config = LauncherConfig::default();
+    config.take_session_options(nt_launcher_core::SessionOptions {
+        any_look_allowed: true,
+        ..nt_launcher_core::SessionOptions::default()
+    });
+    assert!(config.session_options().any_look_allowed);
+    let text = config.render();
+    assert!(text.contains("any_look_allowed = true"));
+    assert!(
+        LauncherConfig::parse(&text)
+            .session_options()
+            .any_look_allowed
+    );
 }
 
 #[test]

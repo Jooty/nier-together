@@ -16,11 +16,35 @@ pub struct StackFrame {
     pub module: ModuleSpot,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CrashRegisters {
+    pub rax: u64,
+    pub rbx: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub rbp: u64,
+    pub rsp: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+}
+
+pub type CrashProbe = fn(&CrashFacts, &dyn Fn(u64) -> Option<u64>) -> Vec<String>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CrashFacts {
     pub code: u32,
     pub address: u64,
     pub thread_id: u32,
+    pub game_thread_id: Option<u32>,
+    pub registers: Option<CrashRegisters>,
     pub module: Option<ModuleSpot>,
     pub in_our_module: bool,
     pub access: Option<(u64, u64)>,
@@ -67,7 +91,21 @@ pub fn last_lines(text: &str, count: usize) -> Vec<&str> {
     lines[lines.len().saturating_sub(count)..].to_vec()
 }
 
+pub fn thread_line(thread_id: u32, game_thread_id: Option<u32>) -> String {
+    match game_thread_id {
+        Some(game) if game == thread_id => format!("crash: thread {thread_id} is the game thread"),
+        Some(game) => {
+            format!("crash: thread {thread_id} is not the game thread (the game thread is {game})")
+        }
+        None => format!("crash: thread {thread_id}, the game thread is not known yet"),
+    }
+}
+
 pub fn report_text(facts: &CrashFacts, log_tail: &[&str]) -> String {
+    report_text_with(facts, &[], log_tail)
+}
+
+pub fn report_text_with(facts: &CrashFacts, probe_lines: &[String], log_tail: &[&str]) -> String {
     let stage = if facts.last_chance {
         "unhandled exception"
     } else if facts.in_our_module {
@@ -98,6 +136,12 @@ pub fn report_text(facts: &CrashFacts, log_tail: &[&str]) -> String {
             "crash: {} of 0x{target:016X}\n",
             access_violation_kind(kind)
         ));
+    }
+    text.push_str(&thread_line(facts.thread_id, facts.game_thread_id));
+    text.push('\n');
+    for line in probe_lines {
+        text.push_str(line);
+        text.push('\n');
     }
     for (index, frame) in facts.stack.iter().enumerate() {
         text.push_str(&format!(

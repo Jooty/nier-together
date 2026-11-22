@@ -8,6 +8,7 @@ mod copy_feedback;
 mod core;
 mod error;
 mod event;
+mod keyboard_mouse_offer;
 mod launcher_game;
 mod launcher_net;
 mod launcher_scale;
@@ -47,7 +48,8 @@ pub use bridge::{protocol_version_of, version_difference_text};
 pub use campaign_flow::{
     GuestSeatSync, GuestStartPlan, HostStartGate, HostStore, MAX_CAMPAIGN_ID_CHARACTERS,
     MIN_CAMPAIGN_ID_CHARACTERS, SEAT_DELIVERY_TIMEOUT_SECONDS, SESSION_FILE_ID_CHARACTERS,
-    SESSION_FILE_PREFIX, SeatCandidate, SeatSource, StartGateStep, campaign_file_stem,
+    SESSION_FILE_PREFIX, STABLE_READ_GIVE_UP_SECONDS, SeatCandidate, SeatSource, StableSeatRead,
+    StableSeatStep, StartGateStep, UNUSABLE_SAVE_SETTLE_SECONDS, campaign_file_stem,
     host_store_decision, pick_newest_seat, plan_guest_start, seat_error_words, seat_refusal_words,
     session_file_name,
 };
@@ -65,6 +67,12 @@ pub use event::{
     ConnectionState, LauncherEvent, LinkStatus, MemberChange, MemberStatus, NetState, NetStatus,
     options_differ_from_last,
 };
+pub use keyboard_mouse_offer::{
+    ControllerCheck, KEYBOARD_MOUSE_FIXES_EXPLAINER_LINES, KEYBOARD_MOUSE_FIXES_HOVER_TEXT,
+    KEYBOARD_MOUSE_FIXES_LABEL, KEYBOARD_MOUSE_OFFER_CLOSING_LINE, KEYBOARD_MOUSE_OFFER_INTRO,
+    KEYBOARD_MOUSE_OFFER_NOT_NOW_LABEL, KEYBOARD_MOUSE_OFFER_TITLE,
+    KEYBOARD_MOUSE_OFFER_TURN_ON_LABEL, KeyboardMouseFixes, offers_keyboard_mouse_fixes,
+};
 pub use launcher_game::{
     GameSaves, LauncherGame, SeatError, changed_slot, check_seat, coop_file_name,
     fix_header_checksum, is_coop_session_file_name, save_game, seat_bytes_of, seat_slot_bytes,
@@ -73,14 +81,14 @@ pub use launcher_game::{
 pub use launcher_net::LauncherNet;
 pub use launcher_scale::LauncherScale;
 pub use lobby_rules::{
-    AfterSessionEnd, LobbyOption, LobbyPermissions, PlayerStatus, ROSTER_COLUMN_SEATS, ReadyInputs,
-    Roster, RosterSeat, ScaleUpInputs, SeatNameChoice, SeatNameInputs, SessionEndCause,
-    SessionEndSide, StartButton, StartInputs, after_session_end, campaign_character,
-    characters_shareable, current_map, current_mode, declined_scale_up_kept, followed_lobby_kind,
-    hosting_kind, lobby_permissions, lobby_ready, map_banner_path, map_pick_offered,
-    option_available, own_seat_name, player_status, remove_offered, roster, rules_for_mode,
-    rules_with_map, scale_up_offered, session_end_log_line, start_allowed, start_button,
-    ticket_check,
+    ANY_LOOK_LABEL, ANY_LOOK_NOTE, AfterSessionEnd, LobbyOption, LobbyPermissions, PlayerStatus,
+    ROSTER_COLUMN_SEATS, ReadyInputs, Roster, RosterSeat, ScaleUpInputs, SeatNameChoice,
+    SeatNameInputs, SessionEndCause, SessionEndSide, StartButton, StartInputs, after_session_end,
+    any_look_switch_offered, campaign_character, characters_shareable, current_map, current_mode,
+    declined_scale_up_kept, followed_lobby_kind, hosting_kind, lobby_permissions, lobby_ready,
+    map_banner_path, map_pick_offered, option_available, own_seat_name, player_status,
+    remove_offered, roster, rules_for_mode, rules_with_map, scale_up_offered, session_end_log_line,
+    start_allowed, start_button, ticket_check,
 };
 pub use log_upload::{
     BUNDLE_TITLE_LINE, BundleFile, BundleHeader, LOG_FILE_TAIL_CAP_BYTES, LogFileEntry,

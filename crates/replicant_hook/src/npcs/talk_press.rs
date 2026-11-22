@@ -86,7 +86,7 @@ fn partner_verdict(talk_id: Option<i32>) -> PressVerdict {
     });
     judge_press(&PressAsk {
         connected: view.state == NetState::Connected,
-        partner_game_open: !view.partner_watch().is_game_closed(),
+        partner_game_open: view.partner_game_binds_the_rules(),
         local: view.local.as_ref().map(|local| Placement {
             phase: local.phase,
             position: local.position,

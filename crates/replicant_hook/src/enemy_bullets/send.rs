@@ -3,16 +3,18 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 
 use replicant_game::enemy_bullets::{
     CueAdmission, ENEMY_BULLET_SCAN_INTERVAL_MS, EnemyBulletCensus, EnemyBulletKinds,
-    EnemyBulletSender, FlightRefusals, LaserBeamTally, REPEAT_WITHIN_THE_GAP,
-    SHOT_CUE_SUMMARY_INTERVAL_MS, ShotCueGate, ShotCueTally, ShotInstances, SpriteBulletKinds,
-    UncopiedTally, look_scale, scan_enemy_bullets,
+    EnemyBulletSender, FlightRefusals, HostBulletTrace, LaserBeamTally, REPEAT_WITHIN_THE_GAP,
+    RememberedShooters, SHOT_CUE_SUMMARY_INTERVAL_MS, ShooterGoneTally, ShotCueGate, ShotCueTally,
+    ShotInstances, SpriteBulletKinds, UncopiedTally, look_scale, scan_enemy_bullets_remembering,
 };
 use replicant_proto::{BULLET_EFFECT_SLOTS, EnemyId, Message, ShotCue};
 
+use crate::boss_messages::boss_fights_started;
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::enemies::enemy_id_text;
 use crate::enemy_bullets::ENEMY_BULLET_SUMMARY_INTERVAL_MS;
+use crate::enemy_bullets::host_trace::{ScanFlights, log_host_trace};
 use crate::enemy_bullets::script_commands::set_shared_enemy_actors;
 use crate::enemy_bullets::shot_cues::take_captured;
 use crate::memory::InProcessMemory;
@@ -41,6 +43,10 @@ struct Sending {
     cue_tally: ShotCueTally,
     last_cue_summary_ms: u64,
     not_drawn_kinds: HashSet<(EnemyId, [i32; BULLET_EFFECT_SLOTS], i32)>,
+    trace: HostBulletTrace,
+    shooters: RememberedShooters,
+    shooter_gone: ShooterGoneTally,
+    boss_fights_seen: u32,
 }
 
 pub(super) fn send_enemy_bullets(
@@ -52,6 +58,7 @@ pub(super) fn send_enemy_bullets(
     let Some(enemies) = enemies else {
         // Not hosting a partner in play: the guest drops what it shows when the flights stop.
         let _ = sending.sender.end_all();
+        sending.shooters.clear();
         set_shared_enemy_actors(core::iter::empty());
         let _ = take_captured();
         return;
@@ -63,9 +70,16 @@ pub(super) fn send_enemy_bullets(
     }
     sending.last_scan_ms = now_ms;
     let memory = InProcessMemory::new(build);
-    let Ok(scan) = scan_enemy_bullets(&memory, enemies) else {
+    let Ok(mut scan) = scan_enemy_bullets_remembering(&memory, enemies, &sending.shooters) else {
         return;
     };
+    sending.shooters = core::mem::take(&mut scan.shooters);
+    for line in sending
+        .shooter_gone
+        .note_scan(&scan.kept_after_shooter, now_ms)
+    {
+        log_line(&line);
+    }
     sending.most_in_the_air.keep_highest(&scan.census);
     for not_drawn in &scan.not_drawn {
         let kind = (
@@ -95,6 +109,8 @@ pub(super) fn send_enemy_bullets(
         log_line(&line);
     }
     sending.instances.note_scan(&scan.bullets);
+    let mut sent_slots = Vec::new();
+    let mut ended_slots = Vec::new();
     for flight in sending.sender.update(&scan.bullets, now_ms) {
         if let Err(error) = flight.validate() {
             sending.refusals.note(error.to_string());
@@ -143,9 +159,30 @@ pub(super) fn send_enemy_bullets(
         }
         if flight.flight.ended {
             sending.ended += 1;
+            ended_slots.push(flight.flight.instance);
+        } else {
+            sent_slots.push(flight.flight.instance);
         }
         net.send_relayed(Message::EnemyBulletFlight(flight));
     }
+    let boss_fights_started = boss_fights_started();
+    if sending.boss_fights_seen != boss_fights_started {
+        sending.boss_fights_seen = boss_fights_started;
+        sending.trace.restart_line_budget();
+        sending.shooter_gone.restart_line_budget();
+    }
+    let started_slots = sending.sender.started_in_last_update().to_vec();
+    log_host_trace(
+        &mut sending.trace,
+        &memory,
+        &scan.bullets,
+        &ScanFlights {
+            started: &started_slots,
+            sent: &sent_slots,
+            ended: &ended_slots,
+        },
+        now_ms,
+    );
     let resized = sending.sender.resized_in_last_update().to_vec();
     for (instance, scale) in resized {
         sending.cue_tally.note_resize(instance, scale);
@@ -179,6 +216,9 @@ pub(super) fn send_enemy_bullets(
                 most.trace,
                 most.past_the_limit
             ));
+        }
+        if let Some(line) = sending.shooter_gone.take_summary() {
+            log_line(&line);
         }
         if let Some(line) = sending.uncopied.take_summary() {
             log_line(&line);

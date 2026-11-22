@@ -1,4 +1,4 @@
-use eframe::egui::{FontId, Response, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
+use eframe::egui::{FontId, Response, Role, Sense, Stroke, StrokeKind, Ui, WidgetInfo, pos2, vec2};
 
 use crate::app::motion::sweep_toward;
 use crate::app::palette::{HATCH_LINE, INK, INK_MUTED, INK_ON_SAND, INK_UNAVAILABLE};
@@ -31,6 +31,7 @@ pub fn command_button(
         Sense::hover()
     };
     let (rect, response) = ui.allocate_exact_size(vec2(size.0, size.1), sense);
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, enabled, label));
     let filled = enabled && (inverted || response.hovered());
     let sweep = sweep_toward(ui, response.id.with(SELECTION_SWEEP_SALT), filled);
     let painter = ui.painter();

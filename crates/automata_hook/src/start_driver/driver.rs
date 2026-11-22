@@ -7,6 +7,7 @@ use automata_game::address::{
     STARTED_FROM_CHAPTER_SELECT_VALUE, UI_BOOKKEEPING_FLAG_VALUE, UI_BOOKKEEPING_WORD_VALUE,
 };
 use automata_game::build::variant_of_image_size;
+use automata_game::late_join::{BossWait, JoinerTakeIn, LateLanding};
 use automata_game::load_gate::{
     BootScreenInputs, BootScreenKeep, GateInputs, HoldReading, LOAD_HOLD_WAITING_LOG_INTERVAL_MS,
     LOADING_SCREEN_LINES_LOGGED_AT_MOST, LOADING_SCREEN_MODE_OFFSET,
@@ -32,15 +33,16 @@ use nt_hook::net::net_clock_ms;
 use crate::game_calls::GameCalls;
 use crate::game_hooks::{
     arm_story_gate, boot_load_passed_behind_its_screen, coop_save_file_exists,
-    coop_save_slot_times, disarm_story_gate, install_boot_screen_band_hold,
-    install_boot_screen_keep, install_load_end_hold, install_story_gate, load_end_hold_reading,
-    release_load_end_hold, run_as_ours, set_boot_screen_kept, set_load_end_hold_wanted,
+    coop_save_slot_times, disarm_story_gate, install_area_scene_hold,
+    install_boot_screen_band_hold, install_boot_screen_keep, install_load_end_hold,
+    install_story_gate, load_end_hold_reading, release_load_end_hold, run_as_ours,
+    set_area_starts_held, set_boot_screen_kept, set_load_end_hold_wanted,
     take_title_asked_by_the_defeat_flow,
 };
 use crate::guest_watches_driver::{character_for_a_start, note_the_start_hero};
 use crate::net::{
-    current_session_mode, handle, local_story_place, set_local_in_play, set_local_load_signal,
-    snapshot_without_body,
+    current_session_mode, handle, local_story_place, note_the_game_has_played, set_local_free,
+    set_local_in_play, set_local_load_signal, snapshot_without_body,
 };
 use crate::partner_driver::{ask_for_partner_data, partner_data_reading};
 use crate::start_driver::chapter_table_read::read_chapter_table;
@@ -68,6 +70,9 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings, saves_redirected: 
         );
     }
     let in_a_session = settings.link_port.is_some();
+    if in_a_session {
+        install_area_scene_hold(calls);
+    }
     let campaign_loads_wanted =
         settings.start_together && settings.every_load_together && in_a_session;
     let (gate, boot_screen, loader_hooked) = if machine.is_finished() {
@@ -80,6 +85,7 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings, saves_redirected: 
             (hold_wanted || settings.one_loading_screen) && install_load_end_hold(calls, variant);
         let (gate, logs) = LoadGate::new(
             settings.start_together,
+            settings.started_alone,
             in_a_session,
             hold_wanted && loader_hooked,
         );
@@ -136,6 +142,10 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings, saves_redirected: 
             route_lead: start_config.route_lead,
         },
         session_jump_to_tell: None,
+        joiner: JoinerTakeIn::default(),
+        boss_wait: BossWait::default(),
+        landing: LateLanding::default(),
+        late_arming_checked: false,
     });
 }
 
@@ -166,6 +176,7 @@ pub fn tick() {
         driver.start_again_after_a_defeat();
     }
     driver.publish_story_place();
+    driver.step_late_join();
     if driver.machine.is_finished() {
         driver.watch_play();
         driver.step_session_jump();
@@ -202,8 +213,10 @@ impl Driver {
         log_all(step.logs);
         if self.machine.is_past_title() {
             if current_session_mode().story_rules_apply() {
+                set_area_starts_held(false);
                 arm_story_gate();
             } else {
+                set_area_starts_held(true);
                 disarm_story_gate("free roam has no story rule");
             }
         }
@@ -294,7 +307,7 @@ impl Driver {
         let loading_screen_ready = self.loading_screen_is_ready() && partner_data_ready;
         let step = self.gate.step(&GateInputs {
             now_ms: gate_now_ms,
-            role: link.role,
+            role: link.load_role,
             loading_screen_ready,
             partner: link.partner,
         });
@@ -305,7 +318,7 @@ impl Driver {
         }
         self.log_the_hold_waiting(
             gate_now_ms,
-            link.role != JumpRole::Solo,
+            link.load_role != JumpRole::Solo,
             &link.partner,
             &link.partner_place,
         );
@@ -435,9 +448,13 @@ impl Driver {
         let free = self.calls.read_free();
         // Ready from the first free moment of a stay in play, so a cutscene on arrival is waited out.
         let in_play = self.ready.observe(free.in_play, free.is_free());
+        set_local_free(free.is_free());
         if in_play != self.in_play {
             self.in_play = in_play;
             set_local_in_play(in_play);
+            if in_play {
+                note_the_game_has_played();
+            }
             log_line(if in_play {
                 "start: in play, the player is free"
             } else {

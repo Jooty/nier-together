@@ -370,3 +370,11 @@ fn an_unusable_coop_save_file_still_reads_so_the_mod_can_refuse_it() {
     assert_eq!(config.link, Some(5000));
     assert_eq!(config.coop_save_file.as_deref(), Some("../GAMEDATA"));
 }
+
+#[test]
+fn a_start_with_nobody_else_is_read_and_defaults_to_off() {
+    let alone = AutoConfig::parse("link = 47200\nstarted_alone = true\n").expect("valid");
+    assert!(alone.started_alone);
+    let default = AutoConfig::parse("link = 47200\n").expect("valid");
+    assert!(!default.started_alone);
+}

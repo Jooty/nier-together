@@ -267,6 +267,7 @@ fn samples() -> Vec<Message> {
             show_ping: false,
             enemy_health_percent: 150,
             enemy_damage_percent: 75,
+            any_look_allowed: false,
         }),
         Message::Readiness(GameReadiness::InPlay),
         Message::Notice(PartnerNotice::HostWantsToGo { phase: Some(3) }),
@@ -770,6 +771,7 @@ fn samples() -> Vec<Message> {
                 eye_height: 3.0,
                 look_offset_xz: [4.0, 5.0],
                 look_height: 6.0,
+                eye_is_absolute: true,
             }),
         }),
         Message::ShotCue(ShotCue {
@@ -841,6 +843,25 @@ fn samples() -> Vec<Message> {
             in_side_view: true,
             side_view_door: 1,
         }),
+        Message::WatchedCameraCall(WatchedCameraCall {
+            phase: 1,
+            native: WatchedCameraNative::ChangeCameraStatus,
+            numbers: [2.0, 2.0, 1.0, 0.0, 0.0, 0.0],
+        }),
+        Message::BossHitOnNier(BossHitOnNier {
+            phase: 2,
+            hit_id: 5,
+            motion_name_hash: 0xABCD_1234,
+            attack_kind: 3,
+            flags: 0x10,
+            push: 1.5,
+            direction: pos(),
+        }),
+        Message::ScaleUpAsk(ScaleUpAsk::Open {
+            slot: 1,
+            name: "Guest".to_owned(),
+        }),
+        Message::ScaleUpAnswer(ScaleUpAnswer { slot: 1, yes: true }),
     ]
 }
 
@@ -858,7 +879,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 81);
+    assert_eq!(PROTOCOL_VERSION, 88);
 }
 
 #[test]

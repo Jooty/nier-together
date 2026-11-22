@@ -12,7 +12,7 @@ pub struct RoundTracker {
 struct Round {
     tick: u32,
     parts: u8,
-    arrived: u32,
+    arrived: u64,
     held: u16,
     total: u16,
     round: u16,
@@ -50,14 +50,14 @@ impl RoundTracker {
         let Some(current) = &mut self.current else {
             return;
         };
-        let bit = 1_u32 << u32::from(snapshot.part);
+        let bit = 1_u64 << u32::from(snapshot.part);
         if current.arrived & bit == 0 {
             current.arrived |= bit;
             current.held = current
                 .held
                 .saturating_add(u16::try_from(snapshot.enemies.len()).unwrap_or(u16::MAX));
         }
-        let every_part = (1_u32 << u32::from(current.parts)) - 1;
+        let every_part = (1_u64 << u32::from(current.parts)) - 1;
         if current.arrived == every_part && current.held == current.round {
             self.complete = Some(CompleteRound {
                 at_ms,

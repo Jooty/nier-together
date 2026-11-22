@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 use replicant_game::offsets::{ITEM_MANAGER_ADD_FUNCTION_RVA, ITEM_MANAGER_RVA};
 use replicant_game::pickups::{
     classify_add_caller, is_key_item, is_story_item, local_key_item_notice,
+    world_pickup_refused_while_watching,
 };
 use replicant_proto::{ItemPickup, MAX_ITEM_COUNT, MAX_ITEM_ID, Message};
 use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureStackBackTrace;
@@ -81,6 +82,16 @@ extern "system" fn add_item_detour(manager: *mut c_void, item_id: i32, count: i3
     }
     SEEN_MANAGER.store(manager, Ordering::Release);
     let caller_rva = caller_rva_of_this_detour();
+    if world_pickup_refused_while_watching(
+        crate::story_watch::this_game_is_watching(),
+        classify_add_caller(caller_rva),
+        item_id,
+    ) {
+        log_line(&format!(
+            "pickups: a watching guest does not take item id {item_id} from the world (not a key item)"
+        ));
+        return 0;
+    }
     // SAFETY: the trampoline continues into the original Add, which has this exact signature.
     let added =
         unsafe { core::mem::transmute::<*mut c_void, AddItem>(original)(manager, item_id, count) };

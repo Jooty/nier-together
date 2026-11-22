@@ -24,7 +24,7 @@ const RULE_TO_METER_PX: f32 = 22.0;
 const METER_ROW_PX: f32 = 16.0;
 const METER_TO_COUNT_PX: f32 = 18.0;
 const METER_CELL_PITCH_PX: f32 = 17.0;
-const HOSTING_LABEL: &str = "Hosting";
+const STARTING_LABEL: &str = "Starting";
 const JOINING_LABEL: &str = "Joining";
 const STEPS_LABEL: &str = "Steps";
 const METER_SALT: &str = "boot-console-meter";
@@ -46,7 +46,7 @@ pub(super) fn paint_console_heading(
         INK,
     );
     let task_label = match task {
-        ConsoleTask::Hosting => HOSTING_LABEL,
+        ConsoleTask::Hosting => STARTING_LABEL,
         ConsoleTask::Joining => JOINING_LABEL,
     };
     let task_galley = painter.layout_job(spaced_job(

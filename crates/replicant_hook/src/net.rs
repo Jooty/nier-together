@@ -10,6 +10,8 @@ mod shared;
 mod game_side;
 #[cfg(windows)]
 mod global;
+#[cfg(windows)]
+mod joiner_safety;
 
 pub use auto_config::{
     AUTO_CONFIG_FILE_NAME, AutoConfig, AutoConfigError, BLOCK_SAVES_ENV, BOOT_SLOT_ENV,

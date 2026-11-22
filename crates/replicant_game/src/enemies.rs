@@ -2,7 +2,9 @@ mod aggro;
 mod attack_record;
 mod boss_bar_probe;
 mod boss_fight;
+mod boss_gauge_watch;
 mod boss_hit_log;
+mod boss_motion_log;
 mod bullet_credit;
 mod ca_gauge;
 mod companion;
@@ -14,6 +16,7 @@ mod cube_log;
 mod difficulty;
 mod dying_bodies;
 mod enemy_log;
+mod fight_actor_probe;
 mod fight_binding;
 mod ghosts;
 mod guest_only;
@@ -47,15 +50,18 @@ mod time_scale;
 pub use aggro::{AggroPlanner, AggroPlayers, AggroTarget, choose_target};
 pub use attack_record::{ActorHandle, AttackRecord};
 pub use boss_bar_probe::{
-    BOSS_BAR_DUMP_BYTES, BOSS_BAR_DUMP_INTERVAL_MS, BOSS_BAR_INIT_FUNCTION_RVA,
-    BOSS_BAR_SCRIPT_COMMAND_RVA, BossBarDump, boss_bar_dump_text, boss_bar_init_text,
-    boss_bar_script_text, boss_bar_state_is_open, read_boss_bar_dump_text, read_boss_bar_handle,
-    read_boss_bar_open, read_script_argument, script_argument_value,
+    BOSS_BAR_DUMP_BYTES, BOSS_BAR_DUMP_INTERVAL_MS, BOSS_BAR_HUD_OBJECT_RVA,
+    BOSS_BAR_INIT_FUNCTION_RVA, BOSS_BAR_SCRIPT_COMMAND_RVA, BossBarDump, boss_bar_dump_text,
+    boss_bar_init_text, boss_bar_script_text, boss_bar_state_is_open, read_boss_bar_dump_text,
+    read_boss_bar_handle, read_boss_bar_open, read_boss_bar_state, read_script_argument,
+    script_argument_value,
 };
 pub use boss_fight::{
     BOSS_HP_LOG_INTERVAL_MS, BossFight, BossFightChange, BossPick, boss_fight_hp_text, boss_hp_text,
 };
+pub use boss_gauge_watch::{BossGaugeReading, BossGaugeWatch};
 pub use boss_hit_log::{BossHitLog, BossHitPlayer};
+pub use boss_motion_log::{BOSS_MOTION_LINES_PER_TICK, BossMotionLog, boss_motion_changed_text};
 pub use bullet_credit::credited_enemy;
 pub use ca_gauge::{
     CA_GAUGE_CHANGE_LINES_PER_SECOND, CA_GAUGE_ENTRIES_RVA, CA_GAUGE_ENTRY_COUNT,
@@ -83,6 +89,12 @@ pub use difficulty::{
 };
 pub use dying_bodies::DyingBodies;
 pub use enemy_log::{EnemyLog, relayed_spawn_text, sighting_text};
+pub use fight_actor_probe::{
+    ACTOR_MODEL_SLOT_COUNT, ACTOR_MODEL_SLOTS_OFFSET, FIGHT_7_BOSS_CLASS_ID, FIGHT_7_BOSS_GROUP,
+    FIGHT_11_BOSS_GROUP, FIGHT_11_LIBRARY_BOSS_GROUP, FIGHT_ACTOR_PROBE_GROUP_COUNT,
+    FIGHT_ACTOR_PROBE_INTERVAL_MS, FIGHT_ACTOR_PROBE_NEW_KEY_GAP_MS, FightActorProbe, ProbedActor,
+    ProbedFight, actor_dump_lines, probed_fight, raw_group_count_line, read_live_actors,
+};
 pub use fight_binding::{FightBindingPlan, HostFightEnemy, WaitingFightSpawn, plan_fight_bindings};
 pub use ghosts::{GhostPlan, ghost_is_same_spawn, plan_ghosts};
 pub use guest_only::GuestOnlyWatch;
@@ -106,20 +118,20 @@ pub use own_hit_log::{
     OWN_HITS_LOGGED_EACH_PER_PHASE, OWN_HITS_LOGGED_EVERY_NTH_AFTER, OwnHitInputs, OwnHitLimiter,
     OwnHitRecord, own_hit_text, spec_class_of,
 };
-pub use partners::{partner_actors, unique_companion_pose};
+pub use partners::{partner_actors, partner_actors_for_enemy_scan, unique_companion_pose};
 pub use player_hit_guard::PlayerHitGuard;
 pub use removal_cause::RemovalCause;
 pub use roster::{EnemyRoster, RosterUpdate};
-pub(crate) use scan::read_group_counts;
-pub use scan::{read_group_count, scan_enemies};
+pub use scan::{read_group_count, read_group_counts, scan_enemies};
 pub use shadow_matrix::{creation_matrix_scale, scaled_matrix, shadow_matrix};
 pub use sighting::EnemySighting;
 pub use slide_probe::{SlideReading, horizontal_distance, read_slide_reading, slide_check_text};
 pub use snapshot::{ENEMY_ROUND_CAPACITY, enemy_state, split_snapshot};
 pub use takeover::{
-    FIGHT_SPAWN_FILL_IN_GRACE_MS, FIGHT_SPAWN_FILL_IN_RETRIES, FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS,
-    FightFillInStep, FightSpawnFillIn, fight_spawn_fill_in_gave_up_text,
-    fight_spawn_fill_in_snap_off_text, fight_spawn_filled_in_text, plan_takeovers,
+    CUBE_FIGHT_SPAWN_FILL_IN_GRACE_MS, FIGHT_SPAWN_FILL_IN_GRACE_MS, FIGHT_SPAWN_FILL_IN_RETRIES,
+    FIGHT_SPAWN_FILL_IN_RETRY_GAP_MS, FightFillInStep, FightSpawnFillIn,
+    fight_spawn_fill_in_gave_up_text, fight_spawn_fill_in_snap_off_text,
+    fight_spawn_filled_in_text, fill_in_grace_ms, plan_takeovers,
 };
 pub use time_scale::{NORMAL_TIME_SCALE, restored_time_scale, stalled_copy_time_scale_fix};
 
@@ -130,6 +142,8 @@ pub const ENEMY_ID_LIST_INTERVAL_MS: u64 = 1000;
 pub const ENEMY_HIT_LOG_GAP_MS: u64 = 400;
 pub const ENEMY_COUNT_LOG_INTERVAL_MS: u64 = 2000;
 pub const ENEMY_MIRROR_DELAY_MS: u64 = 100;
+pub const CUBE_MIRROR_DELAY_MS: u64 = 66;
+pub const CUBE_MIRROR_EXTRAPOLATION_MS: u64 = 100;
 pub const AGGRO_PUSH_RANGE: f32 = 15.0;
 pub const AGGRO_SWITCH_MARGIN: f32 = 1.5;
 pub const AGGRO_REFRESH_MS: u64 = 2000;

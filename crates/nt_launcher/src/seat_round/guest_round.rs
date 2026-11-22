@@ -19,6 +19,7 @@ pub struct GuestSeatRound {
     backups: PathBuf,
     card: Option<CampaignCard>,
     prepared: Option<PreparedSession>,
+    seat_written_this_session: bool,
     pub log: Vec<String>,
 }
 
@@ -34,6 +35,7 @@ impl GuestSeatRound {
             backups,
             card: None,
             prepared: None,
+            seat_written_this_session: false,
             log: Vec::new(),
         }
     }
@@ -57,6 +59,10 @@ impl GuestSeatRound {
         let prepared = self.prepared.as_ref()?;
         let card = self.card.as_ref()?;
         (prepared.sync.campaign_id() == card.campaign_id).then_some(prepared.file_name.as_str())
+    }
+
+    pub fn seat_written_this_session(&self) -> bool {
+        self.seat_written_this_session && self.session_file_name().is_some()
     }
 
     pub fn prepared(&self) -> Option<&PreparedSession> {
@@ -138,6 +144,7 @@ impl GuestSeatRound {
                     ));
                 }
                 self.prepared = Some(prepared);
+                self.seat_written_this_session = true;
                 self.send_pending(net);
             }
             Err(reason) => self.log.push(format!(
@@ -224,6 +231,7 @@ impl GuestSeatRound {
 
     fn link_lost(&mut self) {
         self.card = None;
+        self.seat_written_this_session = false;
         if let Some(prepared) = self.prepared.as_mut() {
             prepared.sync.link_lost();
         }

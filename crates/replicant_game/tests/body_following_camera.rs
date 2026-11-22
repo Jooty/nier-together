@@ -1,6 +1,7 @@
 use replicant_game::fight_sync::{
     CAMERA_AIM_SENT_AGAIN_AFTER_MS, CameraBodyOffset, FIXED_CAMERA_INDEX, FixedCameraPose,
     GuestAimStep, GuestCameraAimFollow, HostCameraAim, HostCameraAimResend, camera_follows_body,
+    look_follows_body_under_a_still_eye,
 };
 
 const SWITCH_POSE: FixedCameraPose = FixedCameraPose {
@@ -169,4 +170,79 @@ fn the_offset_survives_both_players_standing_apart() {
         (pose.eye[0] - FOLLOWED_POSE.eye[0]).abs() > 10.0,
         "players apart see different absolute poses"
     );
+}
+
+const FIGHT7_EYE: [f32; 3] = [0.27, 17.89, -27.67];
+
+fn fight7_pose(look_x: f32, look_z: f32) -> FixedCameraPose {
+    FixedCameraPose {
+        eye: FIGHT7_EYE,
+        look_at: [look_x, 0.0, look_z],
+    }
+}
+
+#[test]
+fn a_look_chasing_the_body_under_a_still_eye_is_framed_on_the_guests_own_body() {
+    let mut host = HostCameraAimResend::default();
+    host.sent_with_a_switch(
+        fight7_pose(-15.874, -18.257),
+        Some([-17.424, 0.0, -18.575]),
+        1_000,
+    );
+    let aim = host_update(
+        &mut host,
+        fight7_pose(-16.833, -17.865),
+        [-18.056, 0.0, -18.073],
+    );
+    assert!(host.follows_the_body());
+    let offset = aim.follows_body.expect("the look chases the body");
+    assert!(offset.eye_is_absolute);
+    assert!(near(offset.look_offset_xz[0], 1.223));
+    assert!(near(offset.look_offset_xz[1], 0.208));
+
+    let mut guest = guest_taking(aim);
+    guest.tick(true, Some(FIXED_CAMERA_INDEX), Some(GUEST_BODY));
+    let Some(Ok(GuestAimStep::AroundYourBody { pose, first, .. })) =
+        guest.tick(true, Some(FIXED_CAMERA_INDEX), Some(GUEST_BODY))
+    else {
+        panic!("a still eye with a chasing look is built around the guest's body");
+    };
+    assert!(first);
+    assert_eq!(pose.eye, FIGHT7_EYE, "the host's eye stays");
+    assert!(near(pose.look_at[0], GUEST_BODY[0] + 1.223));
+    assert!(near(pose.look_at[2], GUEST_BODY[2] + 0.208));
+
+    let walked = [GUEST_BODY[0] + 3.0, GUEST_BODY[1], GUEST_BODY[2] + 2.0];
+    let Some(Ok(GuestAimStep::AroundYourBody { pose: moved, .. })) =
+        guest.tick(true, Some(FIXED_CAMERA_INDEX), Some(walked))
+    else {
+        panic!("the look goes where the guest's body goes");
+    };
+    assert_eq!(moved.eye, FIGHT7_EYE);
+    assert!(near(moved.look_at[0] - pose.look_at[0], 3.0));
+}
+
+#[test]
+fn a_still_eye_with_a_look_that_ignores_the_body_stays_a_fixed_pose() {
+    let from = (fight7_pose(-15.0, -18.0), [-17.0, 0.0, -18.0]);
+    let away_from_the_body = (fight7_pose(-12.0, -18.0), [-18.0, 0.0, -18.0]);
+    assert!(!look_follows_body_under_a_still_eye(
+        from,
+        away_from_the_body,
+        false
+    ));
+    let far_from_the_body = (fight7_pose(-40.0, -18.0), [-17.0, 0.0, -18.0]);
+    assert!(!look_follows_body_under_a_still_eye(
+        from,
+        far_from_the_body,
+        true
+    ));
+    let moved_eye = (
+        FixedCameraPose {
+            eye: [3.0, 17.89, -27.67],
+            look_at: [-16.0, 0.0, -18.0],
+        },
+        [-18.0, 0.0, -18.0],
+    );
+    assert!(!look_follows_body_under_a_still_eye(from, moved_eye, true));
 }

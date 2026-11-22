@@ -4,6 +4,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use automata_game::story_steps::{ObservedDone, StepVerdict, StepsMachine, StoryStepsMode};
 use nt_hook::net::net_clock_ms;
 
+use crate::net::local_story_place;
+
 static MACHINE: Mutex<Option<StepsMachine>> = Mutex::new(None);
 static UNSEEN_WHILE_BUSY: AtomicU32 = AtomicU32::new(0);
 
@@ -29,7 +31,11 @@ pub(super) fn take_unseen_while_busy() -> u32 {
 }
 
 pub fn consult_the_steps_machine_on_a_done(done: &ObservedDone) -> StepVerdict {
-    consult(|machine| machine.on_own_done(done, net_clock_ms()))
+    let live_place = local_story_place();
+    consult(|machine| {
+        machine.note_live_place(live_place);
+        machine.on_own_done(done, net_clock_ms())
+    })
 }
 
 pub fn consult_the_steps_machine_on_leaving_done(id: u32) -> StepVerdict {

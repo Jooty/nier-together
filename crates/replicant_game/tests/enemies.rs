@@ -442,6 +442,34 @@ fn the_scan_keeps_live_enemies_and_skips_the_player_puppets_and_props() {
 }
 
 #[test]
+fn the_scan_reaches_all_128_cubes_of_one_group() {
+    let mut memory = FakeMemory::new();
+    let table_bytes = usize::from(ENEMY_GROUP_COUNT) * ACTOR_MANAGER_GROUP_STRIDE as usize;
+    memory.put_at_rva(
+        u32::try_from(u64::from(ACTOR_MANAGER_RVA) + ACTOR_MANAGER_GROUP_COUNT_OFFSET)
+            .expect("rva"),
+        &vec![0_u8; table_bytes],
+    );
+    put_actor(&mut memory, ENEMY, 1, 0x8, 77);
+    set_group_count(&mut memory, 1001, 128);
+    let found = scan_enemies(
+        &memory,
+        None,
+        &[],
+        |group, index| {
+            if group == 1001 && index < 128 {
+                ENEMY
+            } else {
+                0
+            }
+        },
+        |_| Some((60, 60)),
+    )
+    .expect("scan");
+    assert_eq!(found.len(), 128);
+}
+
+#[test]
 fn the_companions_are_the_two_static_partners_and_the_variant_when_it_is_set() {
     let mut memory = FakeMemory::new();
     let base = memory.module_base();

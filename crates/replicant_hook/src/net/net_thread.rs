@@ -5,6 +5,7 @@ use std::time::Instant;
 use nt_hook::net::LinkPeer;
 use nt_net::Transport;
 use replicant_game::readiness::PlayReads;
+use replicant_game::scale_up_prompt::{OpenAsk, PressSample, PromptStep};
 use replicant_proto::{GameReadiness, Message, PlayerSettings, SessionOptions};
 
 use crate::net::replicant_net::ReplicantNet;
@@ -53,10 +54,36 @@ impl NetThread {
             .send_to_launcher(Message::GameSaved { succeeded });
     }
 
-    pub fn report_readiness(&self, readiness: GameReadiness, reads: PlayReads) {
+    pub fn step_scale_up_prompt(&self, now_ms: u64, input: PressSample) -> PromptStep {
+        let step = self.inner.update(|shared| {
+            let safe = shared.safe_to_take_a_joiner();
+            shared.scale_up.step(safe, now_ms, input)
+        });
+        if let Some(answer) = step.answer {
+            self.inner.send_to_launcher(Message::ScaleUpAnswer(answer));
+        }
+        step
+    }
+
+    pub fn shown_scale_up_ask(&self) -> Option<OpenAsk> {
+        self.inner.update(|shared| shared.scale_up.shown().cloned())
+    }
+
+    pub fn scale_up_input_masked(&self) -> bool {
+        self.inner
+            .update(|shared| shared.scale_up.wants_input_masked())
+    }
+
+    pub fn report_readiness(
+        &self,
+        readiness: GameReadiness,
+        reads: PlayReads,
+        safe_for_a_joiner: bool,
+    ) {
         self.inner.update(|shared| {
             shared.local_readiness = readiness;
             shared.local_reads = reads;
+            shared.local_safe_for_a_joiner = safe_for_a_joiner;
             shared.local_readiness_at = Some(Instant::now());
         });
     }

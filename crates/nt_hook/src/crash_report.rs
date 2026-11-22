@@ -2,8 +2,9 @@ mod format;
 mod process_lines;
 
 pub use format::{
-    CrashFacts, ModuleSpot, StackFrame, access_violation_kind, early_line, is_fatal_code,
-    is_return_address_candidate, last_lines, report_text,
+    CrashFacts, CrashProbe, CrashRegisters, ModuleSpot, StackFrame, access_violation_kind,
+    early_line, is_fatal_code, is_return_address_candidate, last_lines, report_text,
+    report_text_with, thread_line,
 };
 pub use process_lines::{ExitCaller, at_exit_line, detach_line, exit_call_line, panic_line};
 

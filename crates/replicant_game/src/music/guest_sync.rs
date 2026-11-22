@@ -56,9 +56,12 @@ impl GuestSync {
     }
 
     pub fn is_fresh(&self, now_ms: u64) -> bool {
-        self.target.is_some_and(|target| {
-            now_ms.saturating_sub(target.received_at_ms) <= MUSIC_TARGET_STALE_MS
-        })
+        self.is_fresh_within(now_ms, MUSIC_TARGET_STALE_MS)
+    }
+
+    pub fn is_fresh_within(&self, now_ms: u64, stale_after_ms: u64) -> bool {
+        self.target
+            .is_some_and(|target| now_ms.saturating_sub(target.received_at_ms) <= stale_after_ms)
     }
 
     pub fn forget(&mut self) {

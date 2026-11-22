@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use nt_wire::SessionRules;
 use replicant_proto::{
-    CampaignCard, GameReadiness, LobbyReady, PartnerBody, PlayerSettings, RejectReason,
+    CampaignCard, GameReadiness, LobbyReady, PartnerBody, PlayerSettings, RejectReason, ScaleUpAsk,
     SeatRefusal, SessionOptions,
 };
 
@@ -68,6 +68,13 @@ pub enum LauncherEvent {
     },
     CampaignCardReceived {
         card: CampaignCard,
+    },
+    ScaleUpAnswered {
+        slot: u8,
+        yes: bool,
+    },
+    HostAsked {
+        ask: ScaleUpAsk,
     },
     SeatReceived {
         slot: u8,
@@ -202,6 +209,11 @@ impl LinkStatus {
 
     pub fn partner_character(&self) -> Option<u8> {
         self.partner().and_then(|partner| partner.character)
+    }
+
+    pub fn host_readiness(&self) -> GameReadiness {
+        self.member(0)
+            .map_or(GameReadiness::NotLinked, |host| host.readiness)
     }
 
     pub fn partner_readiness(&self) -> GameReadiness {

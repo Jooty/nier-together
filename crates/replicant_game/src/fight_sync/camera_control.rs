@@ -15,6 +15,10 @@ pub const CAMERA_SWITCH_ONLY_CAMERA_2_BYTE_RVA: u32 = 0x38E_2E00;
 pub const CAMERA_SWITCH_ONLY_CAMERA_2_OVERRIDE_BYTE_RVA: u32 = 0x32C_6164;
 pub const SNOW_CAMERA_INDEX: i32 = 0;
 pub const FIXED_CAMERA_INDEX: i32 = 8;
+pub const PATH_CAMERA_INDEX: i32 = 2;
+pub const SCRIPT_CAMERA_INDEX: i32 = 6;
+pub const CHANGE_CAMERA_KIND_FOR_SCRIPT_CAMERA: i32 = 2;
+pub const CHANGE_CAMERA_KIND_FOR_PATH_CAMERA: i32 = 3;
 pub const DIRECTION_SET_MATCH_RADIANS: f32 = 0.01;
 pub const REFUSED_CAMERA_CALL_RETRY_EVERY_MS: u64 = 250;
 pub const REFUSED_CAMERA_CALL_GIVE_UP_MS: u64 = 10_000;
@@ -220,6 +224,8 @@ pub fn camera_index_of_change_kind(kind: f64) -> Option<i32> {
     match kind as i32 {
         0 => Some(SNOW_CAMERA_INDEX),
         1 => Some(FIXED_CAMERA_INDEX),
+        CHANGE_CAMERA_KIND_FOR_SCRIPT_CAMERA => Some(SCRIPT_CAMERA_INDEX),
+        CHANGE_CAMERA_KIND_FOR_PATH_CAMERA => Some(PATH_CAMERA_INDEX),
         _ => None,
     }
 }

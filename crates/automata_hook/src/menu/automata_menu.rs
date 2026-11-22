@@ -10,8 +10,8 @@ use nt_hook::menu::{
 };
 
 use crate::menu::{
-    DownedHooks, GIVE_UP_FIX_ID, GIVE_UP_FIX_LABEL, GO_TO_PLAYER_FIX_ID_BASE, NOT_DOWN_TEXT,
-    TeleportHooks,
+    DownedHooks, GIVE_UP_FIX_ID, GIVE_UP_FIX_LABEL, GO_TO_PLAYER_FIX_ID_BASE, LOOK_PANEL_ID,
+    LOOK_PANEL_LABEL, NOT_DOWN_TEXT, TeleportHooks,
 };
 use crate::net::link_not_started_status;
 
@@ -252,7 +252,10 @@ impl GameMenu for AutomataMenu {
     }
 
     fn extra_panels(&self) -> Vec<ExtraPanel> {
-        Vec::new()
+        vec![ExtraPanel {
+            id: LOOK_PANEL_ID,
+            label: LOOK_PANEL_LABEL,
+        }]
     }
 
     fn section_notes(&self, section: SectionKind) -> Vec<MenuNote> {

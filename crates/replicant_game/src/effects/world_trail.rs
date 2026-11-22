@@ -1,7 +1,7 @@
 use replicant_proto::WORLD_EFFECT_TRANSFORM_FLOATS;
 
 pub const WORLD_EFFECT_MOVE_INTERVAL_MS: u64 = 50;
-pub const MAX_TRAILED_WORLD_EFFECTS: usize = 32;
+pub const MAX_TRAILED_WORLD_EFFECTS: usize = 160;
 pub const WORLD_EFFECT_MOVE_EPSILON: f32 = 0.01;
 
 type Transform = [f32; WORLD_EFFECT_TRANSFORM_FLOATS];

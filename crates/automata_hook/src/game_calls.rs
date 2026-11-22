@@ -1,3 +1,4 @@
+mod boss_calls;
 mod call_context;
 mod defeat_calls;
 mod enemy_calls;
@@ -8,8 +9,10 @@ mod game_over_menu_calls;
 mod generator_calls;
 mod item_calls;
 mod lead_calls;
+mod look_calls;
 mod new_game_calls;
 mod partner_calls;
+mod partner_look_calls;
 mod phase_request_calls;
 mod save_calls;
 mod scene_calls;

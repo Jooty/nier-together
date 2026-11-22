@@ -86,6 +86,7 @@ pub const AUTOMATA: GameProfile = GameProfile {
     link_file_name: "niertogether.toml",
     characters: &AUTOMATA_CHARACTERS,
     characters_shareable: false,
+    any_look_switch: true,
     character_art: &AUTOMATA_CHARACTER_ART,
     modes: &AUTOMATA_MODES,
     free_roam_maps: &AUTOMATA_FREE_ROAM_MAPS,

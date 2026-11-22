@@ -4,8 +4,8 @@ use std::time::Instant;
 use replicant_game::marker::read_world_flags;
 use replicant_game::music::{
     DroppedCall, GuestSync, LocalMusic, MusicChannel, MusicSender, MusicStep,
-    drive_release_replays_dropped_calls, host_music_drives, host_reports_a_scene,
-    read_music_channel,
+    drive_release_replays_dropped_calls, host_music_drives, host_music_stale_after_ms,
+    host_reports_a_scene, read_music_channel,
 };
 use replicant_game::offsets::BGM_CHANNEL_STATE_EVENT_POSTED;
 use replicant_game::stay_together::FollowRole;
@@ -124,7 +124,10 @@ impl MusicTick {
         let paused = read_world_flags(&memory)
             .map(|flags| flags.activity().world_paused())
             .unwrap_or(true);
-        let fresh = self.guest.is_fresh(now_ms);
+        let fresh = self.guest.is_fresh_within(
+            now_ms,
+            host_music_stale_after_ms(crate::kaine::companion_off_fight()),
+        );
         let host_in_scene = view.partner_state().is_some_and(|remote| {
             host_reports_a_scene(remote.state.activity, remote.age().as_millis() as u64)
         });

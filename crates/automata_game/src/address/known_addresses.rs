@@ -239,6 +239,8 @@ pub const ENTITY_LAYOUTS_LIST_HEAD_VALUE: GameAddress = GameAddress::new(0xFC_98
 
 pub const ENEMY_DAMAGE_FUNCTION: GameAddress = GameAddress::new(0x66_D2F0, 0x66_5F60);
 
+pub const BULLET_SHOT_SETUP_FUNCTION: GameAddress = GameAddress::new(0x60_F310, 0x60_82D0);
+
 pub const ENEMY_FLAT_DAMAGE_FUNCTION: GameAddress = GameAddress::new(0x66_D760, 0x66_63D0);
 
 pub const ENEMY_FORCED_DEFEAT_STATE_TEST_FUNCTION: GameAddress =
@@ -380,3 +382,63 @@ pub const EVENT_CURRENT_FRAME_FUNCTION: GameAddress = GameAddress::new(0x15_ADA0
 pub const EVENT_LAST_FRAME_FUNCTION: GameAddress = GameAddress::new(0x15_AE30, 0x15_ABF0);
 
 pub const EVENT_IS_PAUSED_FUNCTION: GameAddress = GameAddress::new(0x15_B150, 0x15_AF10);
+
+pub const APPLY_STICK_TO_ANGLES_FUNCTION: GameAddress = GameAddress::new(0x72_9960, 0x72_1B90);
+
+pub const GET_CAMERA_STICK_FUNCTION: GameAddress = GameAddress::new(0x4F_DCC0, 0x4F_77A0);
+
+pub const CONTROLLER_INPUT_BLOCKED_FUNCTION: GameAddress = GameAddress::new(0x49_F120, 0x49_85A0);
+
+pub const ADD_FRAME_TIME_TO_HINT_RECORD_FUNCTION: GameAddress =
+    GameAddress::new(0x8E_7F50, 0x8D_F750);
+
+pub const CAMERA_EASE_WINDOW_OPEN_FUNCTION: GameAddress = GameAddress::new(0x72_60F0, 0x71_E380);
+
+pub const CAMERA_TARGET_AS_INPUT_BODY_FUNCTION: GameAddress =
+    GameAddress::new(0x49_14C0, 0x48_B550);
+
+pub const BODY_OR_INPUT_BITS_FUNCTION: GameAddress = GameAddress::new(0x4A_32F0, 0x49_D350);
+
+pub const SENSITIVITY_X_VALUE: GameAddress = GameAddress::new(0x149_5A68, 0x148_98E8);
+
+pub const SENSITIVITY_Y_VALUE: GameAddress = GameAddress::new(0x149_5A64, 0x148_98E4);
+
+pub const CAMERA_OPTION_FLAGS_WORD_VALUE: GameAddress = GameAddress::new(0x102_9B30, 0x101_D9B0);
+
+pub const SET_OUTFIT_VARIANT_FUNCTION: GameAddress = GameAddress::new(0x47_5FB0, 0x47_0140);
+
+pub const SET_ACCESSORY_CODE_FUNCTION: GameAddress = GameAddress::new(0x4E_CB60, 0x4E_6980);
+
+pub const SPAWN_ACCESSORY_ENTITY_FUNCTION: GameAddress = GameAddress::new(0x48_2460, 0x47_C590);
+
+pub const REFRESH_LOOK_PARTS_FUNCTION: GameAddress = GameAddress::new(0x51_BA40, 0x51_5420);
+
+pub const SPAWN_PODS_FUNCTION: GameAddress = GameAddress::new(0x48_4550, 0x47_E650);
+
+pub const SET_CLOTH_STATE_FUNCTION: GameAddress = GameAddress::new(0x4F_5690, 0x4E_F230);
+
+pub const LOOK_SANITIZE_FUNCTION: GameAddress = GameAddress::new(0x9C_A5A0, 0x9C_1CD0);
+
+pub const LOOK_CLEAR_OTHER_SLOTS_FUNCTION: GameAddress = GameAddress::new(0x82_3990, 0x81_B360);
+
+pub const LOOK_CLOTH_STATE_VALUE: GameAddress = GameAddress::new(0x149_46A0, 0x148_8520);
+
+pub const LOOK_ACCESSORY_CODE_VALUE: GameAddress = GameAddress::new(0x149_46B8, 0x148_8538);
+
+pub const LOOK_OUTFIT_VARIANT_VALUE: GameAddress = GameAddress::new(0x149_46C4, 0x148_8544);
+
+pub const LOOK_HAIR_INDEX_VALUE: GameAddress = GameAddress::new(0x149_4940, 0x148_87C0);
+
+pub const LOOK_GUN_SKIN_VALUE: GameAddress = GameAddress::new(0x149_4943, 0x148_87C3);
+
+pub const LOOK_POD_SKIN_VALUE: GameAddress = GameAddress::new(0x149_48B4, 0x148_8734);
+
+pub const PHASE_EVENT_ACTION_UPDATE_FUNCTION: GameAddress = GameAddress::new(0x3A_3C10, 0x39_DDE0);
+
+pub const UI_REGISTRY_HEADER_VALUE: GameAddress = GameAddress::new(0x177_4AF0, 0x176_8910);
+
+pub const UI_REGISTRY_IS_KEPT_FLAG_VALUE: GameAddress = GameAddress::new(0x176_D808, 0x176_1628);
+
+pub const UI_BOSS_GAUGE_PER_ENEMY_VFTABLE: GameAddress = GameAddress::new(0xD0_B988, 0xD0_1970);
+
+pub const UI_BOSS_GAUGE_HUD_VFTABLE: GameAddress = GameAddress::new(0xD0_B3F8, 0xD0_13E0);

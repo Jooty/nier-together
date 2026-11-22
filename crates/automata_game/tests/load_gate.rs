@@ -28,7 +28,7 @@ const COMPAT_END_OF_STAGE_THREE: [u8; 20] = [
 ];
 
 fn armed() -> LoadGate {
-    LoadGate::new(true, true, true).0
+    LoadGate::new(true, false, true, true).0
 }
 
 fn waiting_since(now_ms: u64) -> LoadGate {
@@ -402,12 +402,14 @@ fn nothing_is_released_before_the_load_is_done() {
 
 #[test]
 fn the_gate_is_off_without_the_setting_a_session_or_the_hold() {
-    for (start_together, in_a_session, hold_installed) in [
-        (false, true, true),
-        (true, false, true),
-        (true, true, false),
+    for (start_together, started_alone, in_a_session, hold_installed) in [
+        (false, false, true, true),
+        (true, true, true, true),
+        (true, false, false, true),
+        (true, false, true, false),
     ] {
-        let (mut gate, logs) = LoadGate::new(start_together, in_a_session, hold_installed);
+        let (mut gate, logs) =
+            LoadGate::new(start_together, started_alone, in_a_session, hold_installed);
         assert!(!gate.wants_hold());
         assert_eq!(logs.len(), 1);
         assert!(gate.load_done(0).is_empty());
@@ -767,4 +769,21 @@ fn a_host_never_moves_its_own_release_to_the_guests_word() {
     };
     assert!(!host.step(&inputs(1_100, JumpRole::Host, echo)).release);
     assert_eq!(host.signal().release_at_ms, Some(1_000 + RELEASE_LEAD_MS));
+}
+
+#[test]
+fn a_start_with_nobody_else_keeps_no_load_and_says_why() {
+    let (gate, logs) = LoadGate::new(true, true, true, true);
+    assert_eq!(
+        gate.state(),
+        &GateState::Off("the start had nobody else in the lobby".to_owned())
+    );
+    assert!(logs[0].contains("nobody else in the lobby"));
+}
+
+#[test]
+fn a_start_with_a_partner_in_the_lobby_keeps_the_load_for_the_old_wait() {
+    let (gate, logs) = LoadGate::new(true, false, true, true);
+    assert_eq!(gate.state(), &GateState::Loading);
+    assert!(logs[0].contains(&format!("{} s", PARTNER_READY_WAIT_LIMIT_MS / 1000)));
 }

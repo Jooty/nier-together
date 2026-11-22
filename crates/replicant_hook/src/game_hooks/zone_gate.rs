@@ -18,7 +18,10 @@ use replicant_game::offsets::{
 };
 use replicant_game::rule_rooms::RulePop;
 use replicant_game::shared_sequence::LedStepPop;
-use replicant_game::zone_rules::{ZoneChangeSource, is_zone_exit_callback};
+use replicant_game::zone_rules::{
+    WARP_MENU_CANCEL_POINT, WARP_MENU_KEEP_ORIGIN_POINT, ZoneChangeSource, is_zone_exit_callback,
+    warp_pick_is_a_cancel,
+};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
@@ -28,6 +31,7 @@ use crate::game_hooks::door_walk::take_recent_door_use;
 use crate::game_hooks::script_runner_log;
 use crate::game_hooks::side_view_log;
 use crate::game_hooks::teleport::request_teleport;
+use crate::game_hooks::warp_menu_pause::{note_change_let_through, note_warp_menu_vetoed};
 use crate::memory::InProcessMemory;
 use crate::story_relay::suppress_fired_call;
 use crate::zone_rules::veto_zone_change;
@@ -324,6 +328,7 @@ fn run_native_unless_vetoed(original: &AtomicPtr<c_void>, path: &str, lua_state:
     if original.is_null() || vetoed(path, ZoneChangeSource::Scripted) {
         return;
     }
+    note_change_let_through();
     // SAFETY: the trampoline continues into the original native, which has this exact signature.
     unsafe { core::mem::transmute::<*mut c_void, LuaNative>(original)(lua_state) };
 }
@@ -337,14 +342,34 @@ extern "system" fn select_warp_point_detour(point: i32, other: i32) {
     if original.is_null() || guest_called_a_lift(point, other) {
         return;
     }
-    if vetoed("warp menu", ZoneChangeSource::PlayerChosen) {
+    if !warp_pick_is_a_cancel(point) && vetoed("warp menu", ZoneChangeSource::PlayerChosen) {
+        note_warp_menu_vetoed();
+        release_the_vetoed_warp_menu(original);
         return;
+    }
+    if !warp_pick_is_a_cancel(point) {
+        note_change_let_through();
     }
     log_line(&format!(
         "zone rules: SelectWarpPoint(point {point}, other {other}) passed"
     ));
     // SAFETY: the trampoline continues into the original function, which takes these two ints.
     unsafe { core::mem::transmute::<*mut c_void, SelectWarpPoint>(original)(point, other) };
+}
+
+#[expect(
+    unsafe_code,
+    reason = "calls the original warp selection through the trampoline MinHook built"
+)]
+fn release_the_vetoed_warp_menu(original: *mut c_void) {
+    // SAFETY: the trampoline continues into the original function, which takes these two ints.
+    unsafe {
+        core::mem::transmute::<*mut c_void, SelectWarpPoint>(original)(
+            WARP_MENU_CANCEL_POINT,
+            WARP_MENU_KEEP_ORIGIN_POINT,
+        );
+    }
+    log_line("zone rules: warp menu pick vetoed, ran the game's cancel to release the menu pause");
 }
 
 fn guest_called_a_lift(point: i32, other: i32) -> bool {

@@ -17,6 +17,13 @@ pub struct PlayingCampaign {
     pub campaign_id: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LateJoinSeat {
+    Sent,
+    Empty,
+    NotReadable,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostStartStep {
     LaunchNow,
@@ -113,15 +120,32 @@ impl HostSeatRound {
         net: &dyn LauncherNet,
         guest_name: &str,
     ) -> Result<(), String> {
+        let slot_index = self
+            .card_for
+            .as_ref()
+            .map(|(slot, _)| slot.index)
+            .ok_or_else(|| "no campaign is picked".to_owned())?;
+        let file = std::fs::read(&self.coop_file)
+            .map_err(|error| format!("the co-op save file could not be read: {error}"))?;
+        let host_seat = seat_bytes_of(&file, slot_index)
+            .map_err(|error| format!("the host's save failed its checks ({error:?})"))?;
+        self.give_seat_copy_of(net, &host_seat, guest_name)
+            .map(|_| ())
+    }
+
+    /// Stores `host_seat`, already read whole and checked, under the guest's name as the campaign's
+    /// second seat, sends the card again and returns the stored seat.
+    pub fn give_seat_copy_of(
+        &mut self,
+        net: &dyn LauncherNet,
+        host_seat: &[u8],
+        guest_name: &str,
+    ) -> Result<Vec<u8>, String> {
         let (slot, campaign) = self
             .card_for
             .clone()
             .ok_or_else(|| "no campaign is picked".to_owned())?;
-        let file = std::fs::read(&self.coop_file)
-            .map_err(|error| format!("the co-op save file could not be read: {error}"))?;
-        let host_seat = seat_bytes_of(&file, slot.index)
-            .map_err(|error| format!("the host's save failed its checks ({error:?})"))?;
-        let renamed = seat_with_name(&host_seat, guest_name)
+        let renamed = seat_with_name(host_seat, guest_name)
             .ok_or_else(|| "the host's save could not be given the guest's name".to_owned())?;
         match store_arrived_seat(
             &self.coop_file,
@@ -140,7 +164,77 @@ impl HostSeatRound {
             guest_name.trim()
         ));
         self.pick(net, &slot);
-        Ok(())
+        Ok(renamed)
+    }
+
+    /// Start pressed with nobody else in the lobby: the campaign of `slot` is the one being played.
+    pub fn begin_alone(&mut self, net: &dyn LauncherNet, slot: &SlotSummary) {
+        self.gate = None;
+        self.pick(net, slot);
+        self.playing = self
+            .card_for
+            .as_ref()
+            .filter(|(picked, _)| picked.index == slot.index)
+            .map(|(_, campaign)| PlayingCampaign {
+                host_slot: slot.index,
+                campaign_id: campaign.id.clone(),
+            });
+    }
+
+    /// Someone joined while the campaign of `slot` is being played: its card goes to everyone and
+    /// the second seat's stored save, when there is one, to the newcomer. The host's own save file
+    /// is never touched.
+    pub fn late_join(
+        &mut self,
+        net: &dyn LauncherNet,
+        joiner: u8,
+        slot: &SlotSummary,
+    ) -> LateJoinSeat {
+        self.pick(net, slot);
+        let Some((_, campaign)) = self
+            .card_for
+            .clone()
+            .filter(|(picked, _)| picked.index == slot.index)
+        else {
+            self.log.push(
+                "a player joined, but the campaign being played could not be read or made; no save was sent"
+                    .to_owned(),
+            );
+            return LateJoinSeat::NotReadable;
+        };
+        let id = shown_campaign_id(&campaign.id).to_owned();
+        self.playing = Some(PlayingCampaign {
+            host_slot: slot.index,
+            campaign_id: campaign.id,
+        });
+        match read_campaign_seat(&self.coop_file, slot.index) {
+            Ok(None) => {
+                self.log.push(format!(
+                    "campaign {id}: a player joined and the second seat is empty"
+                ));
+                LateJoinSeat::Empty
+            }
+            Ok(Some(seat)) => match net.send_seat(joiner, seat) {
+                Some(transfer) => {
+                    self.log.push(format!(
+                        "campaign {id}: a player joined, sending the second seat's save (transfer {transfer})"
+                    ));
+                    LateJoinSeat::Sent
+                }
+                None => {
+                    self.log.push(format!(
+                        "campaign {id}: a player joined but the network is not running, so no save was sent"
+                    ));
+                    LateJoinSeat::NotReadable
+                }
+            },
+            Err(error) => {
+                self.log.push(format!(
+                    "campaign {id}: a player joined; the second seat's stored save failed its checks ({error}) and was not sent"
+                ));
+                LateJoinSeat::NotReadable
+            }
+        }
     }
 
     /// Start pressed: the campaign of `slot` is the one played until the next start, and its seat

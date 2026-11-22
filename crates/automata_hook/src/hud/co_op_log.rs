@@ -17,7 +17,9 @@ use crate::hud::{
     OVERLAY_LOG_BACKDROP_ALPHA, OVERLAY_LOG_BACKDROP_ROUNDING_REFERENCE_PIXELS, TEXT_SHADOW_ALPHA,
     TEXT_SHADOW_OFFSET_REFERENCE_PIXELS,
 };
-use crate::net::{self, NetShared, PartnerWatch, local_in_play};
+use crate::net::{
+    self, NetShared, PartnerWatch, local_free, local_in_play, take_postable_announced_lines,
+};
 
 static CO_OP_LINES: Mutex<ManyCoOpLines> = Mutex::new(ManyCoOpLines::new());
 static OVERLAY_LOG: Mutex<OverlayLog> = Mutex::new(OverlayLog::new());
@@ -58,6 +60,12 @@ pub(super) fn note_session(shared: &NetShared, players: &[&Player<PlayerState, P
             net_clock_ms(),
         );
     for line in lines {
+        post_line(&line);
+    }
+}
+
+pub(super) fn post_announced_lines() {
+    for line in take_postable_announced_lines(local_in_play(), local_free()) {
         post_line(&line);
     }
 }

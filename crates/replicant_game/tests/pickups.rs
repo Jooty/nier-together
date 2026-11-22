@@ -1,7 +1,7 @@
 use replicant_game::offsets::{KEY_ITEM_FIRST_ID, KEY_ITEM_LAST_ID};
 use replicant_game::pickups::{
     classify_add_caller, is_key_item, is_story_item, item_name, local_key_item_notice,
-    plan_partner_pickup, story_item_raise_amount,
+    plan_partner_pickup, story_item_raise_amount, world_pickup_refused_while_watching,
 };
 use replicant_proto::{ItemPickup, PickupSource};
 
@@ -116,4 +116,46 @@ fn a_story_item_is_raised_to_the_senders_count_and_never_above() {
     assert_eq!(story_item_raise_amount(2, 1), 1);
     assert_eq!(story_item_raise_amount(1, 1), 0);
     assert_eq!(story_item_raise_amount(1, 3), 0);
+}
+
+const WORLD_ITEMS_A_WATCHING_GUEST_WALKED_INTO: [i32; 4] = [0, 209, 212, 225];
+const KEY_ITEM_A_WATCHING_GUEST_PICKED_UP: i32 = 526;
+
+#[test]
+fn a_watching_guest_takes_no_item_from_the_world_unless_it_is_a_key_item() {
+    for item_id in WORLD_ITEMS_A_WATCHING_GUEST_WALKED_INTO {
+        assert!(world_pickup_refused_while_watching(
+            true,
+            PickupSource::World,
+            item_id
+        ));
+    }
+    assert!(!world_pickup_refused_while_watching(
+        true,
+        PickupSource::World,
+        KEY_ITEM_A_WATCHING_GUEST_PICKED_UP
+    ));
+}
+
+#[test]
+fn a_guest_that_plays_takes_every_world_item() {
+    assert!(!world_pickup_refused_while_watching(
+        false,
+        PickupSource::World,
+        209
+    ));
+}
+
+#[test]
+fn a_watching_guest_still_gets_shop_and_script_items() {
+    assert!(!world_pickup_refused_while_watching(
+        true,
+        PickupSource::Shop,
+        209
+    ));
+    assert!(!world_pickup_refused_while_watching(
+        true,
+        PickupSource::Other,
+        209
+    ));
 }

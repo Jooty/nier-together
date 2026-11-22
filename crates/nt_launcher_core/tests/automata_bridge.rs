@@ -19,7 +19,7 @@ use nt_wire::{
     SessionRules, Welcome, decode_enveloped_ignoring_trailing, encode_enveloped,
 };
 use replicant_game::build::PeIdentity;
-use replicant_proto::{CampaignCard, SaveSummary};
+use replicant_proto::{CampaignCard, SaveSummary, SessionOptions};
 
 use crate::bridge::wait_until;
 
@@ -856,4 +856,58 @@ fn a_game_on_this_protocol_is_not_named() {
             .iter()
             .any(|event| matches!(event, LauncherEvent::BuildsDiffer { .. }))
     );
+}
+
+fn any_look_options(any_look_allowed: bool) -> SessionOptions {
+    SessionOptions {
+        any_look_allowed,
+        ..SessionOptions::default()
+    }
+}
+
+#[test]
+fn the_hosts_any_look_switch_reaches_both_games_stamped_from_the_host() {
+    let mut rig = connected_rig();
+    rig.host.set_session_options(any_look_options(true));
+    let rule = |message: &Message| {
+        matches!(
+            message,
+            Message::LookRule {
+                any_look_allowed: true
+            }
+        )
+    };
+    assert!(wait_until(|| rig.host_hook.saw(rule)));
+    assert!(wait_until(|| rig.guest_hook.saw(rule)));
+    assert_eq!(rig.host_hook.sender_of(rule), Some(0));
+    assert_eq!(rig.guest_hook.sender_of(rule), Some(0));
+}
+
+#[test]
+fn the_guests_launcher_shows_the_hosts_any_look_switch() {
+    let rig = connected_rig();
+    rig.host.set_session_options(any_look_options(true));
+    assert!(saw_event(&rig.guest, |event| matches!(
+        event,
+        LauncherEvent::SessionOptionsChanged { options } if options.any_look_allowed
+    )));
+}
+
+#[test]
+fn a_guest_cannot_change_the_any_look_switch() {
+    let mut rig = connected_rig();
+    rig.guest.set_session_options(any_look_options(true));
+    rig.host.set_session_options(any_look_options(false));
+    assert!(wait_until(|| rig.guest_hook.saw(|message| matches!(
+        message,
+        Message::LookRule {
+            any_look_allowed: false
+        }
+    ))));
+    assert!(!rig.host_hook.saw(|message| matches!(
+        message,
+        Message::LookRule {
+            any_look_allowed: true
+        }
+    )));
 }

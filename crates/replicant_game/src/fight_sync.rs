@@ -24,7 +24,7 @@ mod window;
 
 pub use body_following_camera::{
     CAMERA_MOVE_PAST_THE_BODY_MOVE_IS_A_JUMP_WORLD_UNITS, CameraBodyOffset, body_and_offset_text,
-    camera_follows_body,
+    camera_follows_body, look_follows_body_under_a_still_eye,
 };
 pub use camera_aim_follow::{
     CAMERA_AIM_MOVE_SENT_AGAIN_WORLD_UNITS, CAMERA_AIM_SENT_AGAIN_AFTER_MS, CameraAimReceipt,
@@ -34,16 +34,17 @@ pub use camera_control::{
     CAMERA_FOLLOW_UP_LOG_MIN_MS, CAMERA_STATE_LOG_EVERY_MS, CAMERA_SWITCH_BLOCK_BYTE_RVA,
     CAMERA_SWITCH_FORCES_SNOW_BYTE_RVA, CAMERA_SWITCH_LOCK_BYTE_RVA,
     CAMERA_SWITCH_ONLY_CAMERA_2_BYTE_RVA, CAMERA_SWITCH_ONLY_CAMERA_2_OVERRIDE_BYTE_RVA,
-    CameraCallOutcome, CameraSwitchGates, DIRECTION_SET_MATCH_RADIANS, FIXED_CAMERA_INDEX,
+    CHANGE_CAMERA_KIND_FOR_PATH_CAMERA, CHANGE_CAMERA_KIND_FOR_SCRIPT_CAMERA, CameraCallOutcome,
+    CameraSwitchGates, DIRECTION_SET_MATCH_RADIANS, FIXED_CAMERA_INDEX,
     FREE_CAMERA_BASE_PITCH_OFFSET, FREE_CAMERA_BASE_YAW_OFFSET, FREE_CAMERA_DIRECTION_CONTROL_RVA,
     FREE_CAMERA_DIRECTION_SLOT_COUNT, FREE_CAMERA_DIRECTION_SLOT_PITCH_LERP_OFFSET,
-    FREE_CAMERA_DIRECTION_SLOT_STRIDE_BYTES, FreeDirectionState, REFUSED_CAMERA_CALL_GIVE_UP_MS,
-    REFUSED_CAMERA_CALL_RETRY_EVERY_MS, RefusedCallStep, RefusedCameraCall, RefusedCameraCalls,
-    SCRIPTED_FREE_DIRECTION_SLOT, SNOW_CAMERA_INDEX, angle_gap_radians,
-    camera_index_of_change_kind, camera_outcome_text, camera_state_line,
-    free_direction_matches_request, free_direction_text, integer_argument_slots, judge_camera_call,
-    read_camera_switch_gates, read_free_direction_state, requested_blend_seconds,
-    requested_free_direction, runs_again_when_refused, switch_gates_text,
+    FREE_CAMERA_DIRECTION_SLOT_STRIDE_BYTES, FreeDirectionState, PATH_CAMERA_INDEX,
+    REFUSED_CAMERA_CALL_GIVE_UP_MS, REFUSED_CAMERA_CALL_RETRY_EVERY_MS, RefusedCallStep,
+    RefusedCameraCall, RefusedCameraCalls, SCRIPT_CAMERA_INDEX, SCRIPTED_FREE_DIRECTION_SLOT,
+    SNOW_CAMERA_INDEX, angle_gap_radians, camera_index_of_change_kind, camera_outcome_text,
+    camera_state_line, free_direction_matches_request, free_direction_text, integer_argument_slots,
+    judge_camera_call, read_camera_switch_gates, read_free_direction_state,
+    requested_blend_seconds, requested_free_direction, runs_again_when_refused, switch_gates_text,
 };
 pub use camera_follow::{
     CAMERA_SWITCH_TO_RVA, CameraSwitch, CameraSwitchAsker, FixedCameraPose, GuestCameraFollow,

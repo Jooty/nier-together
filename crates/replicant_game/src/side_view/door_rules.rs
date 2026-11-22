@@ -22,22 +22,32 @@ impl DoorMoveAction {
     }
 }
 
+pub fn same_place(a: &str, b: &str) -> bool {
+    place_without_stage(a) == place_without_stage(b)
+}
+
+fn place_without_stage(area: &str) -> &str {
+    area.strip_prefix("A_")
+        .or_else(|| area.strip_prefix("B_"))
+        .unwrap_or(area)
+}
+
 pub fn door_by_id(area: &str, id: u16) -> Option<&'static SideViewDoor> {
     SIDE_VIEW_DOORS
         .iter()
-        .find(|door| door.id == id && door.area == area)
+        .find(|door| door.id == id && same_place(door.area, area))
 }
 
 pub fn door_entered_by(area: &str, callback: &str) -> Option<&'static SideViewDoor> {
     SIDE_VIEW_DOORS
         .iter()
-        .find(|door| door.area == area && door.entry_callback == callback)
+        .find(|door| same_place(door.area, area) && door.entry_callback == callback)
 }
 
 pub fn door_with_start_point(area: &str, point: i32) -> Option<&'static SideViewDoor> {
     SIDE_VIEW_DOORS
         .iter()
-        .find(|door| door.area == area && door.indoor_start_points.contains(&point))
+        .find(|door| same_place(door.area, area) && door.indoor_start_points.contains(&point))
 }
 
 /// What the mod does for the side view of a player it moves across one: the target place's

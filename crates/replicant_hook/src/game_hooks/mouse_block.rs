@@ -110,7 +110,7 @@ pub fn game_mouse_acquired() -> bool {
     })
 }
 
-pub(super) fn cursor_mode_active() -> bool {
+pub(crate) fn cursor_mode_active() -> bool {
     CURSOR_MODE.load(Ordering::Relaxed)
 }
 

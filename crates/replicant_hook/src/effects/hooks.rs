@@ -94,13 +94,12 @@ struct PendingWorldEffect {
     wire: WorldEffectPlay,
     frames_waited: u32,
     in_hit: bool,
-    cube_glow: bool,
 }
 
 thread_local! {
     static CREATE_BY_ID_CALLER_RVA: Cell<u32> = const { Cell::new(0) };
     static ATTACHING_ACTOR: Cell<u64> = const { Cell::new(0) };
-    static CUBE_GLOW_RELAYED: Cell<bool> = const { Cell::new(false) };
+    static CUBE_GLOW_ATTACHING: Cell<bool> = const { Cell::new(false) };
     static NESTED_EFFECT_CALLS: Cell<u32> = const { Cell::new(0) };
     static OWN_HIT_IN_FLIGHT: Cell<bool> = const { Cell::new(false) };
     static HIT_SPARK_VIA: Cell<&'static str> = const { Cell::new(SPAWN_BY_NAME_CALL_NAME) };
@@ -483,14 +482,15 @@ extern "system" fn spawn_by_name_detour(
         });
     }
     let cube_glow = panic::catch_unwind(|| note_cube_effect(name)).unwrap_or(false);
+    if cube_glow {
+        CUBE_GLOW_ATTACHING.with(|cell| cell.set(true));
+    }
     let due = SENDING.load(Ordering::Relaxed)
-        && (spawn_is_sent(outermost, hit_related_spawn()) || cube_glow);
+        && !cube_glow
+        && spawn_is_sent(outermost, hit_related_spawn());
     if due && spawn_is_drawn_by_shot_sync(CREATE_BY_ID_CALLER_RVA.with(Cell::get)) {
         let _ = panic::catch_unwind(note_shot_slot_not_resent);
     } else if due {
-        if cube_glow {
-            CUBE_GLOW_RELAYED.with(|cell| cell.set(true));
-        }
         let (handle, name, matrix) = (handle as usize, name as usize, matrix as usize);
         let arguments = [
             spawned_scale.to_bits(),
@@ -500,13 +500,7 @@ extern "system" fn spawn_by_name_detour(
             eighth.cast_unsigned(),
         ];
         let _ = panic::catch_unwind(|| {
-            send_world_effect(
-                handle as u64,
-                name as u64,
-                matrix as u64,
-                arguments,
-                cube_glow,
-            )
+            send_world_effect(handle as u64, name as u64, matrix as u64, arguments)
         });
     }
     result
@@ -532,7 +526,7 @@ extern "system" fn attach_effect_by_id_detour(
         return 0;
     }
     let was_attaching = ATTACHING_ACTOR.with(|cell| cell.replace(actor as usize as u64));
-    let outer_glow_relayed = CUBE_GLOW_RELAYED.with(|cell| cell.replace(false));
+    let outer_glow_relayed = CUBE_GLOW_ATTACHING.with(|cell| cell.replace(false));
     // SAFETY: the trampoline continues into the original function, which has this signature.
     let result = unsafe {
         core::mem::transmute::<*mut c_void, AttachEffectById>(original)(
@@ -540,7 +534,7 @@ extern "system" fn attach_effect_by_id_detour(
         )
     };
     ATTACHING_ACTOR.with(|cell| cell.set(was_attaching));
-    let relayed_as_cube_glow = CUBE_GLOW_RELAYED.with(|cell| cell.replace(outer_glow_relayed));
+    let relayed_as_cube_glow = CUBE_GLOW_ATTACHING.with(|cell| cell.replace(outer_glow_relayed));
     if result & 0xFF != 0 && SENDING.load(Ordering::Relaxed) {
         let (actor, colour, scale) = (actor as usize, colour as usize, scale as usize);
         let _ = panic::catch_unwind(|| {
@@ -750,25 +744,21 @@ fn census_and_send_push(request: u64, handle_out: u64, caller_rva: u32) {
     let playing = game.playable_actor().is_ok()
         && read_world_flags(game.memory()).is_ok_and(|flags| !flags.activity().world_paused());
     if playing && wire.validate().is_ok() {
-        queue_world_effect(wire, false, false);
+        queue_world_effect(wire, false);
     }
 }
 
-fn queue_world_effect(wire: WorldEffectPlay, in_hit: bool, cube_glow: bool) {
+fn queue_world_effect(wire: WorldEffectPlay, in_hit: bool) {
     let mut pending = PENDING_WORLD_EFFECTS
         .lock()
         .unwrap_or_else(PoisonError::into_inner);
-    let queued: Vec<bool> = pending
-        .iter()
-        .map(|entry| entry.in_hit || entry.cube_glow)
-        .collect();
+    let queued: Vec<bool> = pending.iter().map(|entry| entry.in_hit).collect();
     let entry = PendingWorldEffect {
         wire,
         frames_waited: 0,
         in_hit,
-        cube_glow,
     };
-    match admit_pending(&queued, in_hit || cube_glow, MAX_PENDING_WORLD_EFFECTS) {
+    match admit_pending(&queued, in_hit, MAX_PENDING_WORLD_EFFECTS) {
         PendingAdmission::Append => pending.push(entry),
         PendingAdmission::ReplaceAt(index) => {
             pending[index] = entry;
@@ -796,16 +786,13 @@ fn send_world_effect(
     name: u64,
     matrix: u64,
     arguments: [u32; WORLD_EFFECT_ARGUMENT_COUNT],
-    cube_glow: bool,
 ) {
     let Some(build) = HOOKED_BUILD.get() else {
         return;
     };
     let memory = InProcessMemory::new(build);
     let in_hit = hit_related_spawn();
-    let Ok(Some((effect, transform))) =
-        read_world_effect(&memory, name, matrix, in_hit || cube_glow)
-    else {
+    let Ok(Some((effect, transform))) = read_world_effect(&memory, name, matrix, in_hit) else {
         return;
     };
     let effect = sent_effect_name(effect);
@@ -847,7 +834,7 @@ fn send_world_effect(
             ));
         }
     }
-    queue_world_effect(wire, in_hit, cube_glow);
+    queue_world_effect(wire, in_hit);
 }
 
 fn send_pending_world_effects(build: &VerifiedBuild) {
@@ -862,7 +849,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
     let memory = InProcessMemory::new(build);
     let mut waiting = Vec::new();
     let mut due = due;
-    due.sort_by_key(|pending| !(pending.in_hit || pending.cube_glow));
+    due.sort_by_key(|pending| !pending.in_hit);
     for mut pending in due {
         let look = read_effect_look(&memory, pending.wire.handle)
             .ok()
@@ -879,7 +866,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
             }
             LookAttempt::Use => {
                 pending.wire.look = look;
-                send_world_effect_now(pending.wire, pending.cube_glow);
+                send_world_effect_now(pending.wire);
             }
             LookAttempt::GiveUp => {
                 let first = LOOKLESS_NAMES
@@ -892,7 +879,7 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
                         pending.wire.effect
                     ));
                 }
-                send_world_effect_now(pending.wire, pending.cube_glow);
+                send_world_effect_now(pending.wire);
             }
         }
     }
@@ -902,11 +889,11 @@ fn send_pending_world_effects(build: &VerifiedBuild) {
         .extend(waiting);
 }
 
-fn send_world_effect_now(wire: WorldEffectPlay, cube_glow: bool) {
+fn send_world_effect_now(wire: WorldEffectPlay) {
     if !SENDING.load(Ordering::Relaxed) {
         return;
     }
-    if !cube_glow && !admit_send() {
+    if !admit_send() {
         log_dropped_effect("the send rate limit was reached");
         return;
     }

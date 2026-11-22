@@ -51,9 +51,21 @@ pub struct EnemyBulletCensus {
     pub past_the_limit: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RememberedShooter {
+    pub enemy: EnemyId,
+    pub shooter: u64,
+}
+
+pub type RememberedShooters = HashMap<u16, RememberedShooter>;
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct EnemyBulletScan {
     pub bullets: Vec<EnemyBullet>,
+    /// The shooter of every sighted bullet by its pool slot, to pass to the next scan.
+    pub shooters: RememberedShooters,
+    /// Bullets sighted because the last scan knew them, though their shooter is gone.
+    pub kept_after_shooter: Vec<(u16, EnemyId)>,
     pub census: EnemyBulletCensus,
     pub uncopied: Vec<UncopiedScriptBullet>,
     pub not_drawn: Vec<NotDrawnNormalBullet>,
@@ -120,6 +132,17 @@ pub fn scan_enemy_bullets<M: GameMemory>(
     memory: &M,
     enemies: &HashMap<u64, EnemyId>,
 ) -> Result<EnemyBulletScan, GameError> {
+    scan_enemy_bullets_remembering(memory, enemies, &RememberedShooters::new())
+}
+
+/// As `scan_enemy_bullets`, and a bullet the last scan sighted stays sighted after its shooter
+/// died or left the shared enemies: the game keeps such a bullet flying and only clears its
+/// owner, so the bullet is followed until the game ends it.
+pub fn scan_enemy_bullets_remembering<M: GameMemory>(
+    memory: &M,
+    enemies: &HashMap<u64, EnemyId>,
+    remembered: &RememberedShooters,
+) -> Result<EnemyBulletScan, GameError> {
     let mut scan = EnemyBulletScan::default();
     if enemies.is_empty() {
         return Ok(scan);
@@ -140,10 +163,9 @@ pub fn scan_enemy_bullets<M: GameMemory>(
         let Some(class) = bullet_class(memory, actor) else {
             continue;
         };
-        let Some(enemy) = ActorHandle::read(memory, actor + NORMAL_BULLET_OWNER_HANDLE_OFFSET)
-            .and_then(|handle| handle.resolve(memory))
-            .and_then(|owner| enemies.get(&owner).copied())
-        else {
+        let owner = ActorHandle::read(memory, actor + NORMAL_BULLET_OWNER_HANDLE_OFFSET)
+            .and_then(|handle| handle.resolve(memory));
+        let Some((enemy, shooter, kept)) = shooter_of(owner, enemies, remembered.get(&slot)) else {
             continue;
         };
         if !actor_is_live(memory, actor).unwrap_or(false)
@@ -186,6 +208,11 @@ pub fn scan_enemy_bullets<M: GameMemory>(
             BulletClass::Normal => shot_scale_growth(memory, actor),
             BulletClass::Script | BulletClass::Trace => 0.0,
         };
+        scan.shooters
+            .insert(slot, RememberedShooter { enemy, shooter });
+        if kept {
+            scan.kept_after_shooter.push((slot, enemy));
+        }
         scan.bullets.push(EnemyBullet {
             enemy,
             bullet,
@@ -195,6 +222,21 @@ pub fn scan_enemy_bullets<M: GameMemory>(
         });
     }
     Ok(scan)
+}
+
+fn shooter_of(
+    owner: Option<u64>,
+    enemies: &HashMap<u64, EnemyId>,
+    remembered: Option<&RememberedShooter>,
+) -> Option<(EnemyId, u64, bool)> {
+    if let Some(owner) = owner
+        && let Some(enemy) = enemies.get(&owner)
+    {
+        return Some((*enemy, owner, false));
+    }
+    // A different living owner means the slot now holds another bullet.
+    let remembered = remembered.filter(|known| owner.is_none_or(|owner| owner == known.shooter))?;
+    Some((remembered.enemy, remembered.shooter, true))
 }
 
 pub fn read_not_drawn_normal_bullet<M: GameMemory>(

@@ -17,7 +17,7 @@ use automata_game::travel::{
 use automata_proto::Message;
 use nt_hook::build_gate::VerifiedBuild;
 use nt_hook::diagnostics::log_line;
-use nt_hook::net::{NetState, net_clock_ms};
+use nt_hook::net::net_clock_ms;
 
 use crate::extra_bodies::body_of_player;
 use crate::game_calls::{GameCalls, Vec4};
@@ -383,7 +383,7 @@ fn link_role() -> JumpRole {
         net.update(|shared| {
             JumpRole::of_session(
                 shared.session_mode(),
-                shared.state == NetState::Connected,
+                shared.counts_as_connected(),
                 shared.local_slot,
             )
         })

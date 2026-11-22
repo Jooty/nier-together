@@ -62,6 +62,34 @@ impl StateTrack {
         Some(TrackSample::between(earlier, later, fraction, elapsed_ms))
     }
 
+    /// Like `sample`, but when the target time is past the newest state the position keeps going
+    /// at the speed between the last two states, for at most `max_extrapolation_ms`.
+    pub fn sample_extrapolated(
+        &self,
+        now_ms: u64,
+        delay_ms: u64,
+        max_extrapolation_ms: u64,
+    ) -> Option<TrackSample> {
+        let mut sample = self.sample(now_ms, delay_ms)?;
+        let target = now_ms.saturating_sub(delay_ms);
+        let (newest_at, newest) = self.samples.back()?;
+        if target <= *newest_at || self.samples.len() < 2 {
+            return Some(sample);
+        }
+        let (previous_at, previous) = &self.samples[self.samples.len() - 2];
+        let span_ms = newest_at.saturating_sub(*previous_at);
+        if span_ms == 0 || previous.phase != newest.phase {
+            return Some(sample);
+        }
+        let ahead_ms = (target - newest_at).min(max_extrapolation_ms) as f32;
+        let span = span_ms as f32;
+        for axis in 0..3 {
+            let step = (newest.position[axis] - previous.position[axis]) / span;
+            sample.position[axis] = newest.position[axis] + step * ahead_ms;
+        }
+        Some(sample)
+    }
+
     pub fn clear(&mut self) {
         self.samples.clear();
     }

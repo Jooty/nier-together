@@ -33,6 +33,7 @@ struct ExpectedLevel {
     phase_at_apply: String,
     applied_ms: u64,
     phase_changed_ms: Option<u64>,
+    field_was_left: bool,
 }
 
 pub(crate) fn install(build: VerifiedBuild) {
@@ -111,6 +112,7 @@ pub(super) fn expect_level_after_jump(build: &VerifiedBuild, point: StoryJumpPoi
         phase_at_apply,
         applied_ms: net_clock_ms(),
         phase_changed_ms: None,
+        field_was_left: false,
     });
 }
 
@@ -147,20 +149,26 @@ fn verify_expected_level(build: &VerifiedBuild) {
     };
     let now = net_clock_ms();
     if now.saturating_sub(expected.applied_ms) > LEVEL_CHECK_GIVE_UP_MS {
-        log_line("story jump: level check gave up, the phase never changed");
+        log_line("story jump: level check gave up, the map never reloaded");
         *guard = None;
         return;
     }
     let game = Replicant::new(InProcessMemory::new(build));
     let phase_now = game.current_phase().unwrap_or_default();
-    if phase_now == expected.phase_at_apply {
+    let field_ready = game.map_manager_is_active().unwrap_or(false);
+    if !field_ready {
+        expected.field_was_left = true;
+        expected.phase_changed_ms = None;
+        return;
+    }
+    if phase_now == expected.phase_at_apply && !expected.field_was_left {
         return;
     }
     let changed_ms = *expected.phase_changed_ms.get_or_insert(now);
-    let field_ready = game.map_manager_is_active().unwrap_or(false);
     if !level_check_is_due(
         &expected.phase_at_apply,
         &phase_now,
+        expected.field_was_left,
         field_ready,
         now.saturating_sub(changed_ms),
     ) {

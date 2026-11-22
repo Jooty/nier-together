@@ -24,7 +24,6 @@ struct PlaceReading {
 /// Turns what the link shows, tick by tick, into the co-op lines a player reads.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct CoOpLines {
-    joined_as: Option<String>,
     told_together: Option<bool>,
     place: Option<PlaceReading>,
     partner_up: Option<bool>,
@@ -34,7 +33,6 @@ pub struct CoOpLines {
 impl CoOpLines {
     pub const fn new() -> Self {
         Self {
-            joined_as: None,
             told_together: None,
             place: None,
             partner_up: None,
@@ -57,9 +55,6 @@ impl CoOpLines {
     pub fn note_partner(&mut self, seen: &SessionSeen<'_>, now_ms: u64) -> Vec<String> {
         let mut lines = Vec::new();
         if !seen.connected {
-            if let Some(name) = self.joined_as.take() {
-                lines.push(format!("{name} left"));
-            }
             self.told_together = None;
             self.place = None;
             self.partner_up = None;
@@ -69,10 +64,6 @@ impl CoOpLines {
             return lines;
         };
         let name = seen.partner_name;
-        if self.joined_as.is_none() {
-            self.joined_as = Some(name.to_owned());
-            lines.push(format!("{name} joined"));
-        }
         let up = partner.health > 0;
         match (self.partner_up.replace(up), up) {
             (Some(true), false) => lines.push(format!("{name} was defeated")),

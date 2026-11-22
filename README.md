@@ -69,8 +69,8 @@ The guest plays the real companion slot, so they would play 9S at the start. For
 ## Getting started
 1. Download the launcher from the GitHub Releases page and run it.
 2. Settings: press Find to locate your game, then Install mod.
-3. One player presses Host a lobby and sends the ticket, the other pastes it and presses Join a lobby. When both are
-   ready, the host presses Start.
+3. One player presses Play and sends the ticket, the other presses Join and pastes it. The host presses Start. Start
+   works alone too, and friends can join later with the ticket.
 4. Insert opens the in-game menu.
 
 When something goes wrong, the Logs tab has Copy log and Export logs, to send with a bug report.

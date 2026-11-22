@@ -6,8 +6,8 @@ use crate::story_steps::guest_steps::GuestSteps;
 use crate::story_steps::guest_watch::GuestWatch;
 use crate::story_steps::host_steps::HostSteps;
 use crate::story_steps::step_lines::{
-    lists_emptied_line, mirrored_done_line, places_differ_line, reset_forgotten_line,
-    told_other_place_line, unknown_class_done_line, unmirrored_done_line,
+    late_done_applied_line, lists_emptied_line, mirrored_done_line, places_differ_line,
+    reset_forgotten_line, told_other_place_line, unknown_class_done_line, unmirrored_done_line,
 };
 use crate::story_steps::{
     ActionLook, MOST_PENDING_HOST_STEPS, MOST_UNKNOWN_CLASSES_NAMED, ObservedDone, StepVerdict,
@@ -16,6 +16,7 @@ use crate::story_steps::{
 };
 use crate::travel::JumpRole;
 
+const LATE_DONE_FROM_THE_PREVIOUS_PLACE_MS: u64 = 2000;
 const UNMIRRORED_DONE_LINES_TOPIC: &str = "story steps: lines for dones that are not mirrored";
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -39,6 +40,9 @@ pub struct StepsMachine {
     role: JumpRole,
     place: StoryPlace,
     partner_place: StoryPlace,
+    live_place: Option<StoryPlace>,
+    partner_previous_place: StoryPlace,
+    partner_moved_at_ms: Option<u64>,
     host: HostSteps,
     guest: GuestSteps,
     watch: GuestWatch,
@@ -55,6 +59,9 @@ impl StepsMachine {
             role: JumpRole::Solo,
             place: StoryPlace::default(),
             partner_place: StoryPlace::default(),
+            live_place: None,
+            partner_previous_place: StoryPlace::default(),
+            partner_moved_at_ms: None,
             host: HostSteps::default(),
             guest: GuestSteps::default(),
             watch: GuestWatch::default(),
@@ -78,6 +85,10 @@ impl StepsMachine {
         self.mode.installs_hooks() && self.role != JumpRole::Solo
     }
 
+    pub fn note_live_place(&mut self, place: StoryPlace) {
+        self.live_place = Some(place).filter(StoryPlace::name_is_valid);
+    }
+
     pub fn on_own_done(&mut self, done: &ObservedDone, now_ms: u64) -> StepVerdict {
         if !self.is_acting() {
             return StepVerdict::Pass;
@@ -86,18 +97,19 @@ impl StepsMachine {
             self.note_unmirrored(done, now_ms);
             return StepVerdict::Pass;
         }
+        let stamp_place = self.live_place.take().unwrap_or(self.place);
         let logs = &mut self.logs_before_the_next_step;
         let repeat_of_a_held_done = self.role == JumpRole::Guest
             && self.mode.holds_and_applies()
             && !done.ours
             && self.guest.is_holding(done.id);
         if !repeat_of_a_held_done {
-            logs.push(mirrored_done_line(self.role, done, &self.place, now_ms));
+            logs.push(mirrored_done_line(self.role, done, &stamp_place, now_ms));
         }
         match self.role {
             JumpRole::Solo => StepVerdict::Pass,
             JumpRole::Host => {
-                self.host.own_done(done.id, done.value, &self.place);
+                self.host.own_done(done.id, done.value, &stamp_place);
                 StepVerdict::Pass
             }
             JumpRole::Guest if !self.mode.holds_and_applies() => {
@@ -166,6 +178,11 @@ impl StepsMachine {
         if role != self.role {
             self.change_role(role, &mut step);
         }
+        self.live_place = None;
+        if readings.partner_place != self.partner_place {
+            self.partner_previous_place = self.partner_place;
+            self.partner_moved_at_ms = Some(readings.now_ms);
+        }
         self.partner_place = readings.partner_place;
         let mut told: Vec<StoryStepDone> = Vec::new();
         if readings.place != self.place {
@@ -200,7 +217,14 @@ impl StepsMachine {
             }
             JumpRole::Guest => {
                 for done in &told {
-                    if done.place != self.place {
+                    if done.place != self.place
+                        && self.is_late_from_the_previous_place(done, now_ms)
+                    {
+                        step.logs.push(late_done_applied_line(done, &self.place));
+                    }
+                    if done.place != self.place
+                        && !self.is_late_from_the_previous_place(done, now_ms)
+                    {
                         step.logs.push(told_other_place_line(done, &self.place));
                         self.keep_for_its_place(done);
                     } else if holds {
@@ -249,6 +273,13 @@ impl StepsMachine {
         self.host.clear_lists();
         self.guest.clear_lists();
         self.watch.clear_lists();
+    }
+
+    fn is_late_from_the_previous_place(&self, done: &StoryStepDone, now_ms: u64) -> bool {
+        self.partner_moved_at_ms.is_some_and(|moved| {
+            now_ms.saturating_sub(moved) <= LATE_DONE_FROM_THE_PREVIOUS_PLACE_MS
+        }) && done.place == self.partner_previous_place
+            && self.place == self.partner_place
     }
 
     fn keep_for_its_place(&mut self, done: &StoryStepDone) {

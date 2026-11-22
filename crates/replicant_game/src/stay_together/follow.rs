@@ -20,6 +20,7 @@ pub struct FollowConditions {
     pub connected: bool,
     pub free_to_act: bool,
     pub owes_scene_end: bool,
+    pub first_save_owed: bool,
     pub local_phase: Option<u16>,
     pub now_ms: u64,
 }
@@ -28,6 +29,7 @@ pub struct FollowConditions {
 pub enum WaitReason {
     PhaseUnreadable,
     OwesSceneEnd,
+    FirstSaveOwed,
     NotFreeToAct,
     RetryCooldown,
 }
@@ -61,6 +63,7 @@ impl WaitReason {
         match self {
             Self::PhaseUnreadable => "your map is not readable yet (loading?)",
             Self::OwesSceneEnd => "waiting for your scene's own end",
+            Self::FirstSaveOwed => "writing your first save before leaving the start",
             Self::NotFreeToAct => "waiting until you are free to act",
             Self::RetryCooldown => "waiting for the map change to take",
         }
@@ -109,6 +112,9 @@ impl FollowState {
             self.pending = None;
             self.first_seen_ms = None;
             return FollowStep::Idle;
+        }
+        if conditions.first_save_owed {
+            return FollowStep::Waiting(WaitReason::FirstSaveOwed);
         }
         let first_seen_ms = *self.first_seen_ms.get_or_insert(conditions.now_ms);
         let grace_over =

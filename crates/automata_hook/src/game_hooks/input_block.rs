@@ -3,6 +3,7 @@ use core::ptr;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
+use crate::game_hooks::raw_mouse_counts::collect_raw_mouse_counts;
 use automata_game::build::variant_of_image_size;
 use automata_game::exe::ExeVariant;
 use automata_game::input_block::{InputHook, input_block_plan, prologue_matches};
@@ -25,6 +26,10 @@ type CursorRecentre = unsafe extern "system" fn(f32, f32);
 
 pub fn set_menu_open(open: bool) {
     MENU_OPEN.store(open, Ordering::Relaxed);
+}
+
+pub(super) fn menu_is_open() -> bool {
+    MENU_OPEN.load(Ordering::Relaxed)
 }
 
 pub fn install_input_block(build: VerifiedBuild) {
@@ -97,7 +102,13 @@ extern "system" fn poll_mouse_detour(first: usize, out: usize, active: usize) ->
         .map_or(active, |value| value as u32 as usize);
     // SAFETY: the trampoline continues into the original with the arguments received, except the
     // third, which the menu may override.
-    unsafe { core::mem::transmute::<*mut c_void, PollMouse>(original)(first, out, active_given) }
+    let result = unsafe {
+        core::mem::transmute::<*mut c_void, PollMouse>(original)(first, out, active_given)
+    };
+    if let Some((build, variant)) = BLOCKED_BUILD.get() {
+        collect_raw_mouse_counts(build, *variant, MENU_OPEN.load(Ordering::Relaxed));
+    }
+    result
 }
 
 #[expect(

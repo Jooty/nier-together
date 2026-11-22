@@ -1,5 +1,6 @@
 use automata_game::character::Character;
 use automata_game::downed::{DownedPhase, DownedSignal};
+use automata_game::enemy_lead::MOST_STARTS_IN_ONE_LEAD_MESSAGE;
 use automata_game::exe::ExeVariant;
 use automata_game::partner::{BodySnapshot, PodAim, RecordedStart, RemoteStateIds};
 use automata_game::partner_flight::{FlightKind, FlightMode, FlightReport, UnitPose};
@@ -7,8 +8,8 @@ use automata_proto::{
     BuildGate, CharacterHello, EnemyHit, EnemyHits, EnemyId, EnemyLead, EnemyPose, EnemyRosterPart,
     EnemySighting, EnemySpawn, GeneratorPhase, GeneratorState, GeneratorStates, Hello, LeadTarget,
     LiveGenerators, LoadSignal, MAX_MESSAGE_BYTES, MAX_PLAYERS, Message, PROTOCOL_VERSION,
-    PathInfo, Ping, PlayerState, Pong, Reject, RejectReason, StoryPlace, TeleportRequest, Welcome,
-    WireError, decode, encode,
+    PathInfo, Ping, PlayerState, Pong, QueuedStart, Reject, RejectReason, StoryPlace,
+    TeleportRequest, Welcome, WireError, decode, encode,
 };
 use nt_wire::{
     GameMessage, GameReadiness, LinkPayload, LobbyCharacter, LobbyMessage, LobbyPayload,
@@ -831,10 +832,23 @@ fn worst_case_pose(entry: u32) -> EnemyPose {
     }
 }
 
+fn worst_case_start(number: u32) -> QueuedStart {
+    QueuedStart {
+        id: EnemyId::Placed {
+            layout: u32::MAX,
+            entry: u32::MAX - number,
+        },
+        number: u32::MAX - number,
+        state: [i32::MIN, i32::MIN, i32::MIN, i32::MIN],
+        ago_ms: u16::MAX,
+    }
+}
+
 #[test]
 fn the_enemy_lead_is_relayed_reliably_after_the_spawn_messages() {
     let lead = Message::EnemyLead(EnemyLead {
         poses: vec![worst_case_pose(0)],
+        starts: Vec::new(),
     });
     assert_eq!(lead.kind_name(), "EnemyLead");
     assert!(lead.is_relayed());
@@ -849,12 +863,28 @@ fn the_enemy_lead_is_relayed_reliably_after_the_spawn_messages() {
 fn a_full_enemy_lead_fits_the_size_limit_and_a_longer_one_is_refused() {
     let full = Message::EnemyLead(EnemyLead {
         poses: (0..8).map(worst_case_pose).collect(),
+        starts: Vec::new(),
     });
     assert!(encode(&full).expect("encodes").len() <= MAX_MESSAGE_BYTES);
+    let full_starts = Message::EnemyLead(EnemyLead {
+        poses: Vec::new(),
+        starts: (0..MOST_STARTS_IN_ONE_LEAD_MESSAGE as u32)
+            .map(worst_case_start)
+            .collect(),
+    });
+    assert!(encode(&full_starts).expect("encodes").len() <= MAX_MESSAGE_BYTES);
     let longer = Message::EnemyLead(EnemyLead {
         poses: (0..9).map(worst_case_pose).collect(),
+        starts: Vec::new(),
     });
     assert!(longer.validate().is_err());
+    let too_many_starts = Message::EnemyLead(EnemyLead {
+        poses: Vec::new(),
+        starts: (0..=MOST_STARTS_IN_ONE_LEAD_MESSAGE as u32)
+            .map(worst_case_start)
+            .collect(),
+    });
+    assert!(too_many_starts.validate().is_err());
 }
 
 #[test]

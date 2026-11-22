@@ -15,6 +15,7 @@ use replicant_game::fight_sync::{
 };
 use replicant_game::marker::read_camera_state;
 use replicant_game::stay_together::FollowRole;
+use replicant_proto::WatchedCameraNative;
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
@@ -206,6 +207,7 @@ fn camera_native_ran(native: ScriptedCameraNative, args: *mut c_void) {
     if !runs_here {
         return;
     }
+    let _ = panic::catch_unwind(|| send_host_camera_call(native, args_address));
     let before = panic::catch_unwind(|| note_call_before(native, args_address))
         .ok()
         .flatten();
@@ -221,6 +223,21 @@ fn camera_native_ran(native: ScriptedCameraNative, args: *mut c_void) {
     }
     if let Some(before) = before {
         let _ = panic::catch_unwind(|| note_call_after(native, &before));
+    }
+}
+
+fn send_host_camera_call(native: ScriptedCameraNative, args_address: u64) {
+    let (Some(build), Some(watched)) = (BUILD.get(), watched_native_of(native)) else {
+        return;
+    };
+    crate::story_watch::host_camera_native_ran(build, watched, args_address);
+}
+
+fn watched_native_of(native: ScriptedCameraNative) -> Option<WatchedCameraNative> {
+    match native {
+        ScriptedCameraNative::SetFixedCamera => Some(WatchedCameraNative::SetFixedCamera),
+        ScriptedCameraNative::ChangeCamera => Some(WatchedCameraNative::ChangeCamera),
+        _ => None,
     }
 }
 

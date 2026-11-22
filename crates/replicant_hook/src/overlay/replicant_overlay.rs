@@ -18,6 +18,7 @@ use crate::overlay::minimap_dot::draw_minimap_dot;
 use crate::overlay::mouse_panel::MouseDiagnostics;
 use crate::overlay::partner_marker::draw_partner_marker;
 use crate::overlay::party_frame::draw_party_frame;
+use crate::overlay::scale_up_prompt::{draw_scale_up_prompt, pointer_wanted};
 use crate::overlay::settings_section::draw_settings_section;
 use crate::overlay::trainer_panel::TrainerPanel;
 use crate::player_settings;
@@ -63,11 +64,12 @@ impl OverlayGame for ReplicantOverlay {
     }
 
     fn prepare_input(&mut self, io: &mut Io, menu_visible: bool) -> bool {
-        let taking_mouse = menu_visible && input::cursor_mode_requested();
+        let wants_pointer = menu_visible || pointer_wanted();
+        let taking_mouse = wants_pointer && input::cursor_mode_requested();
         game_hooks::set_cursor_mode(taking_mouse);
         game_hooks::set_keyboard_taken_by_overlay(menu_visible && io.want_capture_keyboard);
         let clicks = click_sources::sample();
-        if menu_visible {
+        if wants_pointer {
             input::feed_real_mouse(io, taking_mouse, &clicks);
         } else {
             input::hide_pointer(io);
@@ -100,6 +102,7 @@ impl OverlayGame for ReplicantOverlay {
         draw_party_frame(ui);
         draw_choice_tag(ui);
         draw_event_log(ui);
+        draw_scale_up_prompt(ui);
     }
 
     fn draw_settings(&mut self, ui: &Ui) {

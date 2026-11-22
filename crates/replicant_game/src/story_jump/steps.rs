@@ -680,16 +680,16 @@ const BOSS_FIGHT_9_TO_BOSS_FIGHT_10_EXTRA_STEPS: [JumpStep; 20] = [
     JumpStep::LearnMagic { id: 10 },
 ];
 
-const BOSS_FIGHT_10_TO_BOSS_FIGHT_11_EXTRA_STEPS: [JumpStep; 3] = [
+const BOSS_FIGHT_10_TO_BOSS_FIGHT_11_EXTRA_STEPS: [JumpStep; 5] = [
     JumpStep::SetFlag { id: 550 },
     JumpStep::SetFlag { id: 551 },
     JumpStep::SetFlag { id: 552 },
+    JumpStep::SetSnowFlag { id: 1071 },
+    JumpStep::SetFlag { id: 554 },
 ];
 
-const BOSS_FIGHT_11_TO_PART_2_START_EXTRA_STEPS: [JumpStep; 11] = [
-    JumpStep::SetSnowFlag { id: 1071 },
+const BOSS_FIGHT_11_TO_PART_2_START_EXTRA_STEPS: [JumpStep; 12] = [
     JumpStep::SetFlag { id: 553 },
-    JumpStep::SetFlag { id: 554 },
     JumpStep::SetFlag { id: 555 },
     JumpStep::SetFlag { id: 556 },
     JumpStep::ClearFlag { id: 125 },
@@ -698,6 +698,74 @@ const BOSS_FIGHT_11_TO_PART_2_START_EXTRA_STEPS: [JumpStep; 11] = [
     JumpStep::SetGameCounter { id: 74, value: 7 },
     JumpStep::SetFlag { id: 626 },
     JumpStep::SetFlag { id: 627 },
+    JumpStep::SetItem { id: 1020, count: 1 },
+    JumpStep::SetItem { id: 1040, count: 1 },
+    JumpStep::EquipWeapon { id: 1020 },
+];
+
+const PART_2_START_TO_MANOR_COURTYARD_EXTRA_STEPS: [JumpStep; 14] = [
+    JumpStep::SetFlag { id: 1368 },
+    JumpStep::SetFlag { id: 628 },
+    JumpStep::ClearFlag { id: 1437 },
+    JumpStep::ClearFlag { id: 1441 },
+    JumpStep::SetFlag { id: 74 },
+    JumpStep::SetFlag { id: 630 },
+    JumpStep::SetFlag { id: 142 },
+    JumpStep::SetFlag { id: 631 },
+    JumpStep::SetFlag { id: 646 },
+    JumpStep::SetFlag { id: 1332 },
+    JumpStep::SetFlag { id: 115 },
+    JumpStep::SetFlag { id: 647 },
+    JumpStep::SetGameCounter {
+        id: 100,
+        value: 255,
+    },
+    JumpStep::SetGameCounter {
+        id: 101,
+        value: 255,
+    },
+];
+
+const MANOR_COURTYARD_TO_BOSS_FIGHT_12_EXTRA_STEPS: [JumpStep; 15] = [
+    JumpStep::ClearFlag { id: 1332 },
+    JumpStep::SetFlag { id: 105 },
+    JumpStep::SetFlag { id: 1433 },
+    JumpStep::SetFlag { id: 136 },
+    JumpStep::SetFlag { id: 648 },
+    JumpStep::SetSnowFlag { id: 1076 },
+    JumpStep::SetSnowFlag { id: 1075 },
+    JumpStep::SetFlag { id: 649 },
+    JumpStep::SetFlag { id: 109 },
+    JumpStep::SetFlag { id: 650 },
+    JumpStep::SetFlag { id: 666 },
+    JumpStep::SetFlag { id: 651 },
+    JumpStep::ClearFlag { id: 1409 },
+    JumpStep::SetFlag { id: 652 },
+    JumpStep::SetFlag { id: 665 },
+];
+
+const BOSS_FIGHT_12_TO_BOSS_FIGHT_13_EXTRA_STEPS: [JumpStep; 8] = [
+    JumpStep::SetFlag { id: 111 },
+    JumpStep::SetFlag { id: 653 },
+    JumpStep::ClearFlag { id: 136 },
+    JumpStep::SetFlag { id: 126 },
+    JumpStep::SetFlag { id: 654 },
+    JumpStep::SetFlag { id: 677 },
+    JumpStep::SetGameCounter { id: 73, value: 1 },
+    JumpStep::SetGameCounter { id: 74, value: 5 },
+];
+
+const BOSS_FIGHT_13_TO_OUTSIDE_THE_HOUSE_EXTRA_STEPS: [JumpStep; 10] = [
+    JumpStep::SetFlag { id: 678 },
+    JumpStep::ClearFlag { id: 1433 },
+    JumpStep::SetFlag { id: 679 },
+    JumpStep::SetFlag { id: 680 },
+    JumpStep::SetFlag { id: 125 },
+    JumpStep::SetFlag { id: 681 },
+    JumpStep::SetGameCounter { id: 100, value: 3 },
+    JumpStep::SetGameCounter { id: 101, value: 3 },
+    JumpStep::SetFlag { id: 1369 },
+    JumpStep::SetFlag { id: 682 },
 ];
 
 const AFTER_PROLOGUE_MP_STEP: JumpStep = JumpStep::MpFullMode { on: false };
@@ -749,6 +817,14 @@ const FOREST_INSIDE_PHASE: &str = "C_FOREST_FIELD_01";
 const FOREST_INSIDE_POINT: i32 = 1;
 const PART_2_START_PHASE: &str = "B_CENTER_VILLAGE_01";
 const PART_2_START_POINT: i32 = 1;
+const PART_2_MANOR_COURTYARD_PHASE: &str = "B_SOUTH_MANSION_01";
+const PART_2_MANOR_COURTYARD_POINT: i32 = 1;
+const BOSS_FIGHT_12_PHASE: &str = "B_SOUTH_UNDERGROUND_02";
+const BOSS_FIGHT_12_POINT: i32 = 1;
+const BOSS_FIGHT_13_PHASE: &str = "B_CENTER_LIBRARY_01";
+const BOSS_FIGHT_13_POINT: i32 = 1;
+const OUTSIDE_THE_HOUSE_PHASE: &str = "B_CENTER_VILLAGE_01";
+const OUTSIDE_THE_HOUSE_POINT: i32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JumpStep {
@@ -938,6 +1014,34 @@ pub fn loadout_steps(point: StoryJumpPoint) -> Vec<JumpStep> {
             steps.push(AFTER_PROLOGUE_MP_STEP);
             steps
         }
+        StoryJumpPoint::Part2ManorCourtyard => {
+            let mut steps = loadout_steps(StoryJumpPoint::Part2Start);
+            steps.pop();
+            steps.extend_from_slice(&PART_2_START_TO_MANOR_COURTYARD_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
+        StoryJumpPoint::Part2Boss12 => {
+            let mut steps = loadout_steps(StoryJumpPoint::Part2ManorCourtyard);
+            steps.pop();
+            steps.extend_from_slice(&MANOR_COURTYARD_TO_BOSS_FIGHT_12_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
+        StoryJumpPoint::Part2Boss13 => {
+            let mut steps = loadout_steps(StoryJumpPoint::Part2Boss12);
+            steps.pop();
+            steps.extend_from_slice(&BOSS_FIGHT_12_TO_BOSS_FIGHT_13_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
+        StoryJumpPoint::Part2OutsideHouse => {
+            let mut steps = loadout_steps(StoryJumpPoint::Part2Boss13);
+            steps.pop();
+            steps.extend_from_slice(&BOSS_FIGHT_13_TO_OUTSIDE_THE_HOUSE_EXTRA_STEPS);
+            steps.push(AFTER_PROLOGUE_MP_STEP);
+            steps
+        }
     }
 }
 
@@ -977,5 +1081,11 @@ pub fn destination(point: StoryJumpPoint) -> (&'static str, i32) {
         StoryJumpPoint::LibraryBoss10 => (BOSS_FIGHT_10_PHASE, BOSS_FIGHT_10_POINT),
         StoryJumpPoint::LibraryBoss11 => (BOSS_FIGHT_11_PHASE, BOSS_FIGHT_11_POINT),
         StoryJumpPoint::Part2Start => (PART_2_START_PHASE, PART_2_START_POINT),
+        StoryJumpPoint::Part2ManorCourtyard => {
+            (PART_2_MANOR_COURTYARD_PHASE, PART_2_MANOR_COURTYARD_POINT)
+        }
+        StoryJumpPoint::Part2Boss12 => (BOSS_FIGHT_12_PHASE, BOSS_FIGHT_12_POINT),
+        StoryJumpPoint::Part2Boss13 => (BOSS_FIGHT_13_PHASE, BOSS_FIGHT_13_POINT),
+        StoryJumpPoint::Part2OutsideHouse => (OUTSIDE_THE_HOUSE_PHASE, OUTSIDE_THE_HOUSE_POINT),
     }
 }

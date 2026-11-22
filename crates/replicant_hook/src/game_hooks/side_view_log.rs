@@ -2,6 +2,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use replicant_game::offsets::SIDE_VIEW_FLAG_RVA;
 use replicant_game::side_view::{OwnSideViewDoor, SideViewWatch};
+use replicant_game::stay_together::FollowRole;
 use replicant_game::{GameMemory, Replicant};
 
 use crate::build_gate::VerifiedBuild;
@@ -51,7 +52,10 @@ pub(super) fn observe() {
         .unwrap_or_else(PoisonError::into_inner)
         .view_flipped(now_on, area.as_deref(), &by);
     let state = if now_on { "on" } else { "off" };
-    log_line(&format!("view: side view {state} here (by {by})"));
+    log_line(&format!(
+        "view: side view {state} here (by {by}), {}",
+        whose_body_text()
+    ));
 }
 
 pub(super) fn note_callback(name: &str) {
@@ -59,4 +63,12 @@ pub(super) fn note_callback(name: &str) {
         crate::teleport::note_scene_callback(build, name);
     }
     name.clone_into(&mut LAST_CALLBACK.lock().unwrap_or_else(PoisonError::into_inner));
+}
+
+fn whose_body_text() -> &'static str {
+    match crate::net::handle().map(|net| FollowRole::from_slot(net.view().local_slot)) {
+        Some(FollowRole::Host) => "the host's own body",
+        Some(FollowRole::Guest) => "the guest's own body",
+        _ => "this game's own body",
+    }
 }

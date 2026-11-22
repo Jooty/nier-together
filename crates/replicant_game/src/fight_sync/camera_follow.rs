@@ -1,7 +1,12 @@
-use crate::fight_sync::{FIXED_CAMERA_INDEX, SNOW_CAMERA_INDEX};
+use crate::fight_sync::{
+    CHANGE_CAMERA_KIND_FOR_PATH_CAMERA, CHANGE_CAMERA_KIND_FOR_SCRIPT_CAMERA, FIXED_CAMERA_INDEX,
+    PATH_CAMERA_INDEX, SCRIPT_CAMERA_INDEX, SNOW_CAMERA_INDEX,
+};
 
 pub const CAMERA_SWITCH_TO_RVA: u32 = 0x34_3330;
 pub const HOST_CAMERA_APPLIED_AFTER_TICKS: u32 = 1;
+pub const FIRST_RAIL_CAMERA_INDEX: i32 = 3;
+pub const SECOND_RAIL_CAMERA_INDEX: i32 = 4;
 
 /// The fixed camera's eye and the point it looks at, in world units, as `_SetFixedCamera`
 /// 0x6F93E0 takes them.
@@ -54,6 +59,7 @@ pub enum HostCameraSkip {
     AlreadyActive,
     OlderThanANative,
     NoChangeKind,
+    RailCameraIsTheGuestsOwn,
 }
 
 /// The guest's side: keeps the newest host camera and applies it one tick after it came, only
@@ -103,7 +109,7 @@ impl HostCameraFollow {
         pose: Option<FixedCameraPose>,
         in_window: bool,
     ) -> Option<HostCamera> {
-        if !in_window {
+        if !in_window || is_rail_camera(switch.to) {
             return None;
         }
         let seq = self.next_seq;
@@ -173,6 +179,8 @@ impl GuestCameraFollow {
         self.pending = None;
         let skip = if camera.natives_before < self.natives_in_window {
             Some(HostCameraSkip::OlderThanANative)
+        } else if is_rail_camera(camera.camera) {
+            Some(HostCameraSkip::RailCameraIsTheGuestsOwn)
         } else if own_camera == Some(camera.camera) {
             Some(HostCameraSkip::AlreadyActive)
         } else if change_kind_of_camera(camera.camera).is_none() {
@@ -193,11 +201,17 @@ impl GuestCameraFollow {
     }
 }
 
+pub fn is_rail_camera(index: i32) -> bool {
+    index == FIRST_RAIL_CAMERA_INDEX || index == SECOND_RAIL_CAMERA_INDEX
+}
+
 /// The `_ChangeCamera` kind that makes camera `index` active, where one does.
 pub fn change_kind_of_camera(index: i32) -> Option<i32> {
     match index {
         SNOW_CAMERA_INDEX => Some(0),
         FIXED_CAMERA_INDEX => Some(1),
+        SCRIPT_CAMERA_INDEX => Some(CHANGE_CAMERA_KIND_FOR_SCRIPT_CAMERA),
+        PATH_CAMERA_INDEX => Some(CHANGE_CAMERA_KIND_FOR_PATH_CAMERA),
         _ => None,
     }
 }

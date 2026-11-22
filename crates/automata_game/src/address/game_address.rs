@@ -11,6 +11,13 @@ impl GameAddress {
         Self { main, compat }
     }
 
+    pub const fn plus(self, bytes: u32) -> Self {
+        Self {
+            main: self.main + bytes,
+            compat: self.compat + bytes,
+        }
+    }
+
     pub const fn rva(self, variant: ExeVariant) -> u32 {
         match variant {
             ExeVariant::Main => self.main,

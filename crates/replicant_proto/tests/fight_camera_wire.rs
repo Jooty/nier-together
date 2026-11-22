@@ -128,6 +128,7 @@ fn a_body_following_fight_camera_aim_round_trips() {
         eye_height: 85.0,
         look_offset_xz: [4.721, 2.613],
         look_height: 69.0,
+        eye_is_absolute: false,
     };
     let aim = Message::FightCameraAim(FightCameraAim {
         phase: 16,

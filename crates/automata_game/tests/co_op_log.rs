@@ -39,12 +39,13 @@ fn joined() -> CoOpLines {
 }
 
 #[test]
-fn the_partner_joins_once_their_first_state_is_heard() {
+fn the_partners_first_state_makes_no_join_line_as_the_lobby_join_told_it() {
     let mut lines = CoOpLines::new();
     assert!(lines.note(&seen(player(HERE, 100), None), 0).is_empty());
-    assert_eq!(
-        lines.note(&seen(player(HERE, 100), player(HERE, 100)), 10),
-        vec!["Jay joined"]
+    assert!(
+        lines
+            .note(&seen(player(HERE, 100), player(HERE, 100)), 10)
+            .is_empty()
     );
     assert!(
         lines
@@ -54,13 +55,14 @@ fn the_partner_joins_once_their_first_state_is_heard() {
 }
 
 #[test]
-fn the_partner_leaves_when_the_link_drops_and_can_join_again() {
+fn a_dropped_link_makes_no_left_line_and_a_return_no_join_line() {
     let mut lines = joined();
-    assert_eq!(lines.note(&not_linked(), 6_000), vec!["Jay left"]);
+    assert!(lines.note(&not_linked(), 6_000).is_empty());
     assert!(lines.note(&not_linked(), 6_100).is_empty());
-    assert_eq!(
-        lines.note(&seen(player(HERE, 100), player(HERE, 100)), 7_000),
-        vec!["Jay joined"]
+    assert!(
+        lines
+            .note(&seen(player(HERE, 100), player(HERE, 100)), 7_000)
+            .is_empty()
     );
 }
 
@@ -97,7 +99,7 @@ fn a_place_that_differs_only_for_a_moment_is_not_told() {
 fn a_partner_who_joins_from_another_place_is_told_as_being_there() {
     let mut lines = CoOpLines::new();
     let apart = seen(player(HERE, 100), player(ELSEWHERE, 100));
-    assert_eq!(lines.note(&apart, 0), vec!["Jay joined"]);
+    assert!(lines.note(&apart, 0).is_empty());
     assert_eq!(lines.note(&apart, 2_000), vec!["Jay is in another place"]);
 }
 
@@ -116,9 +118,10 @@ fn a_defeat_and_the_return_from_it_are_told_once_each() {
 #[test]
 fn a_partner_first_seen_without_health_was_not_defeated_here() {
     let mut lines = CoOpLines::new();
-    assert_eq!(
-        lines.note(&seen(player(HERE, 100), player(HERE, 0)), 0),
-        vec!["Jay joined"]
+    assert!(
+        lines
+            .note(&seen(player(HERE, 100), player(HERE, 0)), 0)
+            .is_empty()
     );
 }
 
@@ -258,7 +261,7 @@ fn a_downed_hero_held_at_one_health_is_not_called_defeated() {
 }
 
 #[test]
-fn each_other_player_joins_leaves_and_falls_on_their_own_line() {
+fn each_other_player_falls_on_their_own_line() {
     let mut lines = ManyCoOpLines::new();
     let here = player(HERE, 100);
     let both = |ann: Option<PlayerSeen>, bo: Option<PlayerSeen>| {
@@ -275,10 +278,7 @@ fn each_other_player_joins_leaves_and_falls_on_their_own_line() {
             },
         ]
     };
-    assert_eq!(
-        lines.note(true, here, &both(here, here), 0),
-        vec!["Ann joined", "Bo joined"]
-    );
+    assert!(lines.note(true, here, &both(here, here), 0).is_empty());
     assert_eq!(
         lines.note(true, here, &both(here, player(HERE, 0)), 10),
         vec!["Bo was defeated"]
@@ -292,8 +292,5 @@ fn each_other_player_joins_leaves_and_falls_on_their_own_line() {
         name: "Bo",
         state: player(HERE, 0),
     }];
-    assert_eq!(
-        lines.note(true, player(HERE, 0), &only_bo, 30),
-        vec!["Ann left"]
-    );
+    assert!(lines.note(true, player(HERE, 0), &only_bo, 30).is_empty());
 }

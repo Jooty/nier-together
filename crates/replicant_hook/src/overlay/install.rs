@@ -14,6 +14,8 @@ const REPLICANT_OVERLAY: OverlayConfig<ReplicantOverlay> = OverlayConfig {
 };
 
 pub fn install_when_renderer_ready() {
+    nt_hook::crash_log::register_probe(replicant_game::crash_probe::mesh_update_list_lines);
+    nt_hook::crash_log::register_probe(replicant_game::crash_probe::pppi_probe_set_update_lines);
     install_overlay(&REPLICANT_OVERLAY);
 }
 

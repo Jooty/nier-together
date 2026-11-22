@@ -1,7 +1,8 @@
 use nt_hook::crash_report::{
     ACCESS_VIOLATION_CODE, BREAKPOINT_CODE, CrashFacts, ExitCaller, ModuleSpot, StackFrame,
     access_violation_kind, at_exit_line, detach_line, early_line, exit_call_line, is_fatal_code,
-    is_return_address_candidate, last_lines, panic_line, report_text,
+    is_return_address_candidate, last_lines, panic_line, report_text, report_text_with,
+    thread_line,
 };
 
 fn facts(in_our_module: bool, last_chance: bool) -> CrashFacts {
@@ -9,6 +10,8 @@ fn facts(in_our_module: bool, last_chance: bool) -> CrashFacts {
         code: ACCESS_VIOLATION_CODE,
         address: 0x1_8000_1234,
         thread_id: 77,
+        game_thread_id: Some(77),
+        registers: None,
         module: Some(ModuleSpot {
             name: "game_hook.dll".to_owned(),
             base: 0x1_8000_0000,
@@ -148,4 +151,32 @@ fn an_exit_call_line_names_the_api_code_thread_and_caller() {
 #[test]
 fn the_at_exit_line_names_the_thread() {
     assert!(at_exit_line(5).contains("exit handlers are running on thread 5"));
+}
+
+#[test]
+fn the_report_says_whether_the_crashing_thread_is_the_game_thread() {
+    assert_eq!(
+        thread_line(972, Some(972)),
+        "crash: thread 972 is the game thread"
+    );
+    assert_eq!(
+        thread_line(972, Some(40)),
+        "crash: thread 972 is not the game thread (the game thread is 40)"
+    );
+    assert_eq!(
+        thread_line(972, None),
+        "crash: thread 972, the game thread is not known yet"
+    );
+    let mut worker = facts(false, true);
+    worker.game_thread_id = Some(5);
+    assert!(report_text(&worker, &[]).contains("thread 77 is not the game thread"));
+}
+
+#[test]
+fn probe_lines_come_before_the_log_tail() {
+    let extra = vec!["crash: probe says hello".to_owned()];
+    let text = report_text_with(&facts(false, true), &extra, &["tail"]);
+    let probe_at = text.find("crash: probe says hello").expect("probe line");
+    let tail_at = text.find("crash:   tail").expect("tail line");
+    assert!(probe_at < tail_at);
 }

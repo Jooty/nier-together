@@ -15,6 +15,7 @@ use automata_game::enemy_lead::{
 };
 use automata_game::partner::code_starts_with;
 use nt_hook::diagnostics::log_line;
+use nt_hook::log_stamp::unix_millis_now;
 
 use crate::game_calls::GameCalls;
 use crate::game_hooks::partner_walk_guards::guarded_slot_body;
@@ -237,9 +238,10 @@ fn note_hosts_start(enemy: usize, state: [i32; 4]) {
         return;
     };
     if let Some(body) = kept.as_mut().and_then(|kept| kept.get_mut(&enemy)) {
-        body.starts = Some(HookedStarts {
-            count: body.starts.map_or(1, |starts| starts.count.wrapping_add(1)),
-            last: state,
+        let at_ms = unix_millis_now();
+        body.starts = Some(match body.starts {
+            Some(starts) => starts.with_start(state, at_ms),
+            None => HookedStarts::first(state, at_ms),
         });
     }
 }

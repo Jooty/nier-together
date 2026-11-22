@@ -6,6 +6,7 @@ pub enum FirstSaveStep {
     Save,
     GiveUp,
     Done,
+    SlotInUse,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +14,7 @@ pub struct FirstSaveInputs<'a> {
     pub in_play: bool,
     pub phase: &'a str,
     pub save_manager_busy: bool,
+    pub slot_holds_a_save: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -47,6 +49,10 @@ impl FirstSaveGate {
         };
         if self.finished {
             return FirstSaveStep::Done;
+        }
+        if inputs.slot_holds_a_save {
+            self.finished = true;
+            return FirstSaveStep::SlotInUse;
         }
         let ready = inputs.in_play && inputs.phase == FIRST_SAVE_PHASE && !inputs.save_manager_busy;
         if !ready {

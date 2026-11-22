@@ -14,10 +14,12 @@ use nt_hook::line_budget::LineBudget;
 use replicant_game::GameMemory;
 use replicant_game::effects::{
     ActorCueCall, ActorCueMoment, AttachedCueEffect, AttachedCueEffects, CopyForCue, FirstCues,
-    MAX_ACTOR_CUES_PER_SECOND, ReplayedLastingSound, ReplayedLastingSounds, SentLastingSounds,
+    MAX_ACTOR_CUES_PER_SECOND, ReplayedCubeGlow, ReplayedCubeGlows, ReplayedLastingSound,
+    ReplayedLastingSounds, SentCubeGlow, SentCubeGlows, SentLastingSounds,
     actor_cue_goes_to_enemy_sync, actor_cue_is_sent, actor_cue_replay_target, actor_cue_text,
     by_id_sound_cue, read_actor_position, read_effect_transform, stack_holds_ai_step,
 };
+use replicant_game::enemies::CUBE_GROUP;
 use replicant_game::offsets::{
     ACTOR_ATTACH_EFFECT_BY_ID_FUNCTION_RVA, ACTOR_REMOVE_ATTACHED_EFFECT_FUNCTION_RVA,
     BULLET_CREATE_EFFECTS_RVA_RANGE, SOUND_STOP_FUNCTION_RVA,
@@ -32,6 +34,7 @@ use crate::build_gate::VerifiedBuild;
 use crate::bullets::create_effect;
 use crate::diagnostics::log_line;
 use crate::effects::hooks::sending;
+use crate::effects::placed_cue_effects;
 use crate::enemies::{EnemySyncRole, enemy_id_text, is_held, shared_actor_id, shared_actor_of};
 use crate::enemy_bullets::{
     bullet_start_in_flight, command_in_flight, move_shot_sound, play_shot_sound, stop_shot_sound,
@@ -45,6 +48,8 @@ static ORIGINAL_REMOVE_ATTACHED: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mu
 static ORIGINAL_STOP_SOUND: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static SENT_LASTING_SOUNDS: LazyLock<Mutex<SentLastingSounds>> = LazyLock::new(Mutex::default);
 static SENT_ATTACHES: LazyLock<Mutex<AttachedCueEffects>> = LazyLock::new(Mutex::default);
+static SENT_CUBE_GLOWS: LazyLock<Mutex<SentCubeGlows>> = LazyLock::new(Mutex::default);
+static REPLAYED_CUBE_GLOWS: LazyLock<Mutex<ReplayedCubeGlows>> = LazyLock::new(Mutex::default);
 static REPLAYED_ATTACHES: LazyLock<Mutex<AttachedCueEffects>> = LazyLock::new(Mutex::default);
 static REPLAYED_LASTING_SOUNDS: LazyLock<Mutex<ReplayedLastingSounds>> =
     LazyLock::new(Mutex::default);
@@ -55,6 +60,13 @@ static SENT: AtomicU32 = AtomicU32::new(0);
 static REFUSED_BY_RATE_LIMIT: AtomicU32 = AtomicU32::new(0);
 static PLAYED: AtomicU32 = AtomicU32::new(0);
 static NOT_PLAYED: AtomicU32 = AtomicU32::new(0);
+static GLOWS_SENT: AtomicU32 = AtomicU32::new(0);
+static GLOWS_RESENT: AtomicU32 = AtomicU32::new(0);
+static GLOWS_DETACH_SENT: AtomicU32 = AtomicU32::new(0);
+static GLOWS_ATTACHED: AtomicU32 = AtomicU32::new(0);
+static GLOWS_REFRESHED: AtomicU32 = AtomicU32::new(0);
+static GLOWS_DETACHED: AtomicU32 = AtomicU32::new(0);
+static GLOWS_EXPIRED: AtomicU32 = AtomicU32::new(0);
 static LAST_SUMMARY_MS: AtomicU64 = AtomicU64::new(0);
 
 const STACK_SEARCH_FRAMES: usize = 32;
@@ -138,11 +150,7 @@ pub(super) fn note_attach(
     let Some((build, shared)) = hosted_shared(actor) else {
         return;
     };
-    let attach_moment = ActorCueMoment {
-        made_for_a_cube_glow: relayed_as_cube_glow,
-        ..moment(false, false)
-    };
-    if !actor_cue_is_sent(attach_moment) {
+    if !relayed_as_cube_glow && !actor_cue_is_sent(moment(false, false)) {
         return;
     }
     let memory = InProcessMemory::new(build);
@@ -163,6 +171,23 @@ pub(super) fn note_attach(
         flags,
         extra,
     };
+    if relayed_as_cube_glow {
+        let sent = send_cube_glow(shared, id, &attached);
+        SENT_CUBE_GLOWS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .note_attached(SentCubeGlow {
+                actor,
+                enemy: shared,
+                id,
+                attached,
+                last_sent_ms: if sent { net_clock_ms() } else { 0 },
+            });
+        if sent {
+            GLOWS_SENT.fetch_add(1, Ordering::Relaxed);
+        }
+        return;
+    }
     let sent = send(
         ActorCue {
             actor: shared,
@@ -184,8 +209,8 @@ pub(super) fn note_attach(
     }
 }
 
-/// From the create-by-id detour, after the game made effect `id` into `handle`.
-pub(super) fn note_create_by_id(handle: u32, id: u32, caller_rva: u32, nested: bool) {
+/// From the create-by-id detour, after the game made effect `id` into `made_handle`.
+pub(super) fn note_create_by_id(made_handle: u32, id: u32, caller_rva: u32, nested: bool) {
     let actor = TICKING_ACTOR.with(Cell::get);
     if actor == 0 || REPLAYING.with(Cell::get) {
         return;
@@ -199,17 +224,24 @@ pub(super) fn note_create_by_id(handle: u32, id: u32, caller_rva: u32, nested: b
     if !actor_cue_is_sent(moment(nested, made_for_a_bullet)) {
         return;
     }
-    let Ok(Some(transform)) = read_effect_transform(&InProcessMemory::new(build), handle) else {
+    let Ok(Some(transform)) = read_effect_transform(&InProcessMemory::new(build), made_handle)
+    else {
         return;
     };
-    send(
+    let sent = send(
         ActorCue {
             actor: shared,
             id,
-            kind: ActorCueKind::PlaceEffect { transform },
+            kind: ActorCueKind::PlaceEffect {
+                transform,
+                handle: made_handle,
+            },
         },
         ActorCueCall::CreateById,
     );
+    if sent {
+        placed_cue_effects::note_sent(made_handle, shared, id);
+    }
 }
 
 /// From the play-sound-by-id detour, with the sound's position pointer, its two levels and the
@@ -298,8 +330,15 @@ fn note_stop_sound(handle: u64) {
 }
 
 pub(super) fn wind_down(build: &VerifiedBuild) {
+    placed_cue_effects::forget_sent();
+    placed_cue_effects::end_all_replayed(build);
     keep_lasting_sounds(build, false);
     remove_replays_from_unheld_copies(build, false);
+    remove_cube_glows_from_unheld_copies(build, false);
+    SENT_CUBE_GLOWS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_gone(|_, _| false);
 }
 
 pub(super) fn tick(build: &VerifiedBuild, active: bool) {
@@ -318,8 +357,12 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
         }
     }
     keep_lasting_sounds(build, active);
+    placed_cue_effects::end_expired(build);
+    placed_cue_effects::send_ended_effects(build);
     send_removes_of_gone_actors(build);
     remove_replays_from_unheld_copies(build, active);
+    send_cube_glow_upkeep(build);
+    remove_cube_glows_from_unheld_copies(build, active);
     let now_ms = net_clock_ms();
     if now_ms.saturating_sub(LAST_SUMMARY_MS.load(Ordering::Relaxed))
         >= ACTOR_CUE_SUMMARY_INTERVAL_MS
@@ -333,6 +376,148 @@ pub(super) fn tick(build: &VerifiedBuild, active: bool) {
                 counts[0], counts[1], counts[2], counts[3]
             ));
         }
+        log_cube_glow_counts();
+    }
+}
+
+fn log_cube_glow_counts() {
+    let counts = [
+        &GLOWS_SENT,
+        &GLOWS_RESENT,
+        &GLOWS_DETACH_SENT,
+        &GLOWS_ATTACHED,
+        &GLOWS_REFRESHED,
+        &GLOWS_DETACHED,
+        &GLOWS_EXPIRED,
+    ]
+    .map(|counter| counter.swap(0, Ordering::Relaxed));
+    if counts.iter().any(|count| *count > 0) {
+        let sending_now = SENT_CUBE_GLOWS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len();
+        let showing_now = REPLAYED_CUBE_GLOWS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .len();
+        log_line(&format!(
+            "cube glows: last 5 s sent {} (resent {}, detach sent {}, {sending_now} kept), attached {} (refreshed {}, detached {}, expired {}, {showing_now} showing)",
+            counts[0], counts[1], counts[2], counts[3], counts[4], counts[5], counts[6]
+        ));
+    }
+}
+
+fn send_cube_glow(enemy: EnemyId, id: u32, attached: &AttachedEffect) -> bool {
+    send(
+        ActorCue {
+            actor: enemy,
+            id,
+            kind: ActorCueKind::AttachEffect(*attached),
+        },
+        ActorCueCall::AttachById,
+    )
+}
+
+fn send_cube_glow_upkeep(build: &VerifiedBuild) {
+    let (gone, due) = {
+        let mut sent = SENT_CUBE_GLOWS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if sent.is_empty() {
+            return;
+        }
+        let memory = InProcessMemory::new(build);
+        let gone = sent.take_gone(|actor, enemy| {
+            shared_actor_id(actor) == Some((EnemySyncRole::Host, enemy))
+                && actor_is_live(&memory, actor).unwrap_or(false)
+        });
+        (gone, sent.take_due_resends(net_clock_ms()))
+    };
+    if !sending() {
+        return;
+    }
+    for glow in gone {
+        let sent = send(
+            ActorCue {
+                actor: glow.enemy,
+                id: glow.id,
+                kind: ActorCueKind::RemoveEffect {
+                    bone: i32::from(glow.attached.bone),
+                    all_matching: true,
+                },
+            },
+            ActorCueCall::RemoveAttached,
+        );
+        if sent {
+            GLOWS_DETACH_SENT.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    for glow in due {
+        if send_cube_glow(glow.enemy, glow.id, &glow.attached) {
+            GLOWS_RESENT.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+fn play_cube_glow(
+    build: &VerifiedBuild,
+    copy: u64,
+    cue: &ActorCue,
+    attached: &AttachedEffect,
+) -> bool {
+    let now_ms = net_clock_ms();
+    let mut replayed = REPLAYED_CUBE_GLOWS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    if replayed.refresh(copy, cue.id, attached.bone, now_ms) {
+        GLOWS_REFRESHED.fetch_add(1, Ordering::Relaxed);
+        return true;
+    }
+    drop(replayed);
+    if !attach_on_copy(build, copy, cue.id, attached) {
+        return false;
+    }
+    REPLAYED_CUBE_GLOWS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .note_attached(ReplayedCubeGlow {
+            actor: copy,
+            enemy: cue.actor,
+            id: cue.id,
+            bone: attached.bone,
+            refreshed_ms: now_ms,
+        });
+    GLOWS_ATTACHED.fetch_add(1, Ordering::Relaxed);
+    true
+}
+
+fn remove_cube_glows_from_unheld_copies(build: &VerifiedBuild, active: bool) {
+    let (gone, expired) = {
+        let mut replayed = REPLAYED_CUBE_GLOWS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if replayed.is_empty() {
+            return;
+        }
+        let gone =
+            replayed.take_gone(|copy, enemy| active && replay_target(build, enemy) == Some(copy));
+        (gone, replayed.take_expired(net_clock_ms()))
+    };
+    let memory = InProcessMemory::new(build);
+    for (glow, was_expired) in gone
+        .into_iter()
+        .map(|glow| (glow, false))
+        .chain(expired.into_iter().map(|glow| (glow, true)))
+    {
+        if actor_is_live(&memory, glow.actor).unwrap_or(false) {
+            remove_on_copy(build, glow.actor, glow.id, i32::from(glow.bone), true);
+        }
+        let counter = if was_expired {
+            &GLOWS_EXPIRED
+        } else {
+            &GLOWS_DETACHED
+        };
+        counter.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -348,6 +533,22 @@ fn replay_target(build: &VerifiedBuild, id: EnemyId) -> Option<u64> {
 fn play(build: &VerifiedBuild, cue: ActorCue) {
     let copy = replay_target(build, cue.actor);
     let outcome = match (cue.kind, copy) {
+        (ActorCueKind::AttachEffect(attached), Some(copy)) if cue.actor.group == CUBE_GROUP => {
+            play_cube_glow(build, copy, &cue, &attached).then_some("played")
+        }
+        (ActorCueKind::RemoveEffect { bone, all_matching }, Some(copy))
+            if cue.actor.group == CUBE_GROUP =>
+        {
+            remove_on_copy(build, copy, cue.id, bone, all_matching);
+            if REPLAYED_CUBE_GLOWS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take_removed(copy, cue.id, bone)
+            {
+                GLOWS_DETACHED.fetch_add(1, Ordering::Relaxed);
+            }
+            Some("played")
+        }
         (ActorCueKind::AttachEffect(attached), Some(copy)) => {
             let made = attach_on_copy(build, copy, cue.id, &attached);
             if made {
@@ -371,9 +572,15 @@ fn play(build: &VerifiedBuild, cue: ActorCue) {
                 .take_removed(copy, cue.id, bone);
             Some("played")
         }
-        (ActorCueKind::PlaceEffect { transform }, Some(_)) => {
+        (ActorCueKind::PlaceEffect { transform, handle }, Some(_)) => {
             let id = i32::try_from(cue.id).unwrap_or(i32::MAX);
-            create_effect(build, id, &transform).map(|_| "played")
+            let made = create_effect(build, id, &transform);
+            placed_cue_effects::note_replayed(build, &cue, handle, made);
+            made.map(|_| "played")
+        }
+        (ActorCueKind::PlacedEffectEnded { handle }, _) => {
+            placed_cue_effects::end_by_host(build, handle);
+            return;
         }
         (ActorCueKind::Sound { position, levels }, Some(_)) => {
             play_shot_sound(build, cue.id, position, levels).map(|_| "played")
@@ -640,18 +847,25 @@ extern "system" fn remove_attached_detour(
 }
 
 fn note_remove(actor: u64, id: i32, bone: i32, all_matching: bool) {
-    let shared = {
+    let glow_enemy = SENT_CUBE_GLOWS
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take_removed(actor, id.cast_unsigned(), bone);
+    let shared = glow_enemy.or_else(|| {
         let mut sent = SENT_ATTACHES.lock().unwrap_or_else(PoisonError::into_inner);
         if sent.is_empty() {
-            return;
+            return None;
         }
         sent.take_removed(actor, id.cast_unsigned(), bone)
-    };
+    });
     let Some(shared) = shared else {
         return;
     };
     if !sending() {
         return;
+    }
+    if glow_enemy.is_some() {
+        GLOWS_DETACH_SENT.fetch_add(1, Ordering::Relaxed);
     }
     send(
         ActorCue {
@@ -725,13 +939,15 @@ fn read_floats<const COUNT: usize>(memory: &InProcessMemory, address: u64) -> Op
     Some(values)
 }
 
-fn send(cue: ActorCue, call: ActorCueCall) -> bool {
+pub(super) fn send(cue: ActorCue, call: ActorCueCall) -> bool {
     if cue.validate().is_err() {
         return false;
     }
     let admitted = matches!(
         cue.kind,
-        ActorCueKind::RemoveEffect { .. } | ActorCueKind::StopSound { .. }
+        ActorCueKind::RemoveEffect { .. }
+            | ActorCueKind::StopSound { .. }
+            | ActorCueKind::PlacedEffectEnded { .. }
     ) || SEND_WINDOW
         .lock()
         .unwrap_or_else(PoisonError::into_inner)

@@ -15,7 +15,8 @@ use nt_wire::{
 };
 use replicant_game::readiness::LocalGameReadiness;
 use replicant_proto::{
-    CampaignCard, PartnerBody, PlayerSettings, SeatOutcome, SeatPart, SeatReceipt, SessionOptions,
+    CampaignCard, PartnerBody, PlayerSettings, ScaleUpAsk, SeatOutcome, SeatPart, SeatReceipt,
+    SessionOptions,
 };
 
 use crate::bridge::members::Members;
@@ -61,6 +62,12 @@ pub(crate) struct Bridge<M: BridgeMessage> {
     progress: ProgressBoard,
     progress_logged: usize,
     session_asked_at: Option<Instant>,
+    started: Option<LobbyStart>,
+    started_game_linked: bool,
+    late_starts_held: bool,
+    open_scale_up: Option<ScaleUpAsk>,
+    scale_up_answered: bool,
+    unsent_game_notes: Vec<ScaleUpAsk>,
 }
 
 impl<M: BridgeMessage> Bridge<M> {
@@ -95,6 +102,12 @@ impl<M: BridgeMessage> Bridge<M> {
             progress: parts.progress,
             progress_logged: 0,
             session_asked_at: None,
+            started: None,
+            started_game_linked: false,
+            late_starts_held: false,
+            open_scale_up: None,
+            scale_up_answered: false,
+            unsent_game_notes: Vec::new(),
         }
     }
 }
@@ -116,6 +129,7 @@ impl<M: BridgeMessage> GameBridge for Bridge<M> {
         status.state = ConnectionState::Hosting;
         status.ticket = Some(ticket.clone());
         drop(status);
+        self.send_rules_to_own_game();
         self.emit(LauncherEvent::Hosting {
             ticket: ticket.clone(),
         });
@@ -149,15 +163,23 @@ impl<M: BridgeMessage> GameBridge for Bridge<M> {
     }
 
     fn stop(&mut self) {
+        self.withdraw_open_scale_up();
+        self.unsent_game_notes.clear();
+        self.started = None;
+        self.started_game_linked = false;
+        self.late_starts_held = false;
         self.last_reject = None;
         self.session_asked_at = None;
         let slots: Vec<u8> = self.members.all().map(|member| member.slot).collect();
+        let had_session = self.remote.is_some();
         if let Some(mut session) = self.remote.take() {
             session.close();
         }
         self.forget_peer();
-        if !slots.is_empty() {
+        if had_session {
             self.send_to_game(&M::from_link(LinkPayload::Bye));
+        }
+        if !slots.is_empty() {
             let detail = format!(
                 "you closed the link; {}",
                 self.traffic.describe(Instant::now())
@@ -192,6 +214,7 @@ impl<M: BridgeMessage> GameBridge for Bridge<M> {
             session.set_rules(rules);
             let applied = session.rules();
             self.status().rules = applied;
+            self.send_rules_to_own_game();
         }
     }
 
@@ -252,13 +275,66 @@ impl<M: BridgeMessage> GameBridge for Bridge<M> {
         if self.status().guest {
             return;
         }
+        if self.remote.is_none() {
+            return;
+        }
+        let start = LobbyStart { mode };
+        self.started = Some(start);
+        let game_linked = self.status().game_linked;
+        self.started_game_linked = game_linked;
         if self.members.is_empty() {
             return;
         }
         let Some(session) = self.remote.as_mut() else {
             return;
         };
-        let _ = session.send_relayed(&M::from_lobby(LobbyPayload::Start(LobbyStart { mode })));
+        let _ = session.send_relayed(&M::from_lobby(LobbyPayload::Start(start)));
+    }
+
+    fn hold_late_starts(&mut self, hold: bool) {
+        self.late_starts_held = hold && M::CARRIES_CAMPAIGN_SAVES && !self.status().guest;
+    }
+
+    fn release_start(&mut self, slot: u8, mode: Option<u8>) {
+        if self.status().guest || !M::CARRIES_CAMPAIGN_SAVES || !self.members.is_member(slot) {
+            return;
+        }
+        let Some(started) = self.started else {
+            return;
+        };
+        let start = LobbyStart {
+            mode: mode.unwrap_or(started.mode),
+        };
+        if self.open_scale_up.as_ref().map(ScaleUpAsk::slot) == Some(slot) {
+            self.open_scale_up = None;
+        }
+        if let Some(session) = self.remote.as_mut() {
+            let _ = session.send_relayed_to(slot, &M::from_lobby(LobbyPayload::Start(start)));
+        }
+    }
+
+    fn send_scale_up_ask(&mut self, ask: ScaleUpAsk) {
+        if self.status().guest || !M::CARRIES_CAMPAIGN_SAVES {
+            return;
+        }
+        match &ask {
+            ScaleUpAsk::Open { .. } => {
+                self.open_scale_up = Some(ask.clone());
+                self.scale_up_answered = false;
+            }
+            ScaleUpAsk::Withdrawn { slot } => {
+                if self.open_scale_up.as_ref().map(ScaleUpAsk::slot) != Some(*slot) {
+                    return;
+                }
+                self.open_scale_up = None;
+            }
+            ScaleUpAsk::NoSaveYet { .. } if !self.status().game_linked => {
+                self.unsent_game_notes.push(ask);
+                return;
+            }
+            ScaleUpAsk::NoSaveYet { .. } => {}
+        }
+        self.deliver_scale_up_ask(ask);
     }
 
     fn remove_member(&mut self, slot: u8) {
@@ -380,8 +456,18 @@ impl<M: BridgeMessage> Bridge<M> {
                     self.protocol_skew_said = false;
                     self.local_game.game_linked();
                     self.status().game_linked = true;
+                    self.started_game_linked |= self.started.is_some();
                     self.emit(LauncherEvent::GameLinked);
                     self.welcome_game();
+                    self.send_options_if_hosting();
+                    if let Some(ask) = self.open_scale_up.clone()
+                        && !self.scale_up_answered
+                    {
+                        self.send_launcher_payload_to_game(LauncherPayload::ScaleUpAsk(ask));
+                    }
+                    for note in std::mem::take(&mut self.unsent_game_notes) {
+                        self.send_launcher_payload_to_game(LauncherPayload::ScaleUpAsk(note));
+                    }
                     if let Some(settings) = self.settings {
                         self.send_launcher_payload_to_game(LauncherPayload::Settings(settings));
                     }
@@ -389,6 +475,10 @@ impl<M: BridgeMessage> Bridge<M> {
                 TransportEvent::PeerDisconnected(_, reason) => {
                     self.local_game.game_unlinked();
                     self.status().game_linked = false;
+                    if self.started_game_linked {
+                        self.started = None;
+                        self.started_game_linked = false;
+                    }
                     let detail = format!(
                         "link {}; {}",
                         reason.label(),
@@ -437,12 +527,17 @@ impl<M: BridgeMessage> Bridge<M> {
                 self.emit(LauncherEvent::GameSaved { succeeded });
                 return;
             }
+            Ok(LauncherPayload::ScaleUpAnswer(answer)) => {
+                self.on_scale_up_answer(answer.slot, answer.yes);
+                return;
+            }
             Ok(
                 LauncherPayload::LobbyBody(_)
                 | LauncherPayload::QuitGame
                 | LauncherPayload::CampaignCard(_)
                 | LauncherPayload::SeatPart(_)
-                | LauncherPayload::SeatReceipt(_),
+                | LauncherPayload::SeatReceipt(_)
+                | LauncherPayload::ScaleUpAsk(_),
             ) => return,
             Err(message) => message,
         };
@@ -536,6 +631,7 @@ impl<M: BridgeMessage> Bridge<M> {
                 } else if let Some(announcement) = self.members.member_announcement::<M>(slot) {
                     self.send_to_game(&announcement);
                 }
+                self.catch_up_member_on_start(slot);
             }
             SessionEvent::Message { from, message } => {
                 self.traffic
@@ -633,7 +729,12 @@ impl<M: BridgeMessage> Bridge<M> {
             }
             Ok(LauncherPayload::SeatPart(part)) => self.on_seat_part(from, &part),
             Ok(LauncherPayload::SeatReceipt(receipt)) => self.on_seat_receipt(from, receipt),
-            Ok(LauncherPayload::GameSaved { .. }) => {}
+            Ok(LauncherPayload::GameSaved { .. } | LauncherPayload::ScaleUpAnswer(_)) => {}
+            Ok(LauncherPayload::ScaleUpAsk(ask)) => {
+                if self.status().guest && from == 0 {
+                    self.emit(LauncherEvent::HostAsked { ask });
+                }
+            }
             Ok(other) => self.relay_launcher_payload_to_game(from, other),
             Err(message) => self.relay_to_game_as_received(from, &message, original),
         }
@@ -646,6 +747,9 @@ impl<M: BridgeMessage> Bridge<M> {
         }
         self.incoming_seats.remove(&slot);
         self.outgoing_seats.remove(&slot);
+        if self.open_scale_up.as_ref().map(ScaleUpAsk::slot) == Some(slot) {
+            self.withdraw_open_scale_up();
+        }
         let hosting = self
             .remote
             .as_ref()
@@ -710,6 +814,8 @@ impl<M: BridgeMessage> Bridge<M> {
         let Some(first) = self.members.first().cloned() else {
             if let Some(reason) = self.last_reject {
                 self.send_to_game(&M::from_link(LinkPayload::Reject(Reject { reason })));
+            } else {
+                self.send_rules_to_own_game();
             }
             return;
         };
@@ -733,6 +839,67 @@ impl<M: BridgeMessage> Bridge<M> {
             first.slot,
             &M::from_lobby(LobbyPayload::GameReadiness(first_readiness)),
         );
+    }
+
+    fn catch_up_member_on_start(&mut self, slot: u8) {
+        let Some(start) = self.started else {
+            return;
+        };
+        if self.status().guest {
+            return;
+        }
+        let options = M::from_launcher(LauncherPayload::SessionOptions(self.options));
+        let Some(session) = self.remote.as_mut() else {
+            return;
+        };
+        if let Some(options) = options {
+            let _ = session.send_relayed_to(slot, &options);
+        }
+        if self.late_starts_held {
+            return;
+        }
+        let _ = session.send_relayed_to(slot, &M::from_lobby(LobbyPayload::Start(start)));
+    }
+
+    fn on_scale_up_answer(&mut self, slot: u8, yes: bool) {
+        if self.status().guest {
+            return;
+        }
+        if self.open_scale_up.as_ref().map(ScaleUpAsk::slot) != Some(slot) || self.scale_up_answered
+        {
+            return;
+        }
+        self.scale_up_answered = true;
+        self.emit(LauncherEvent::ScaleUpAnswered { slot, yes });
+    }
+
+    fn withdraw_open_scale_up(&mut self) {
+        if let Some(open) = self.open_scale_up.take() {
+            self.deliver_scale_up_ask(ScaleUpAsk::Withdrawn { slot: open.slot() });
+        }
+    }
+
+    fn deliver_scale_up_ask(&mut self, ask: ScaleUpAsk) {
+        let slot = ask.slot();
+        let for_the_guest = !matches!(ask, ScaleUpAsk::NoSaveYet { .. });
+        let Some(message) = M::from_launcher(LauncherPayload::ScaleUpAsk(ask)) else {
+            return;
+        };
+        self.send_to_game(&message);
+        if for_the_guest
+            && self.members.is_member(slot)
+            && let Some(session) = self.remote.as_mut()
+        {
+            let _ = session.send_relayed_to(slot, &message);
+        }
+    }
+
+    fn send_rules_to_own_game(&mut self) {
+        if self.status().guest {
+            return;
+        }
+        let rules = self.remote.as_ref().map_or(self.rules, Session::rules);
+        self.send_to_game(&M::from_link(LinkPayload::Rules(rules)));
     }
 
     fn send_own_lobby(&mut self) {
@@ -961,14 +1128,18 @@ impl<M: BridgeMessage> Bridge<M> {
             .remote
             .as_ref()
             .is_some_and(|session| session.local_slot() == Some(0));
-        if !hosting || self.members.is_empty() {
+        let alone = self.members.is_empty();
+        let tells_guests = hosting && !alone;
+        let tells_own_game_alone =
+            alone && !self.status().guest && M::HOST_ALONE_TAKES_SESSION_OPTIONS;
+        if !tells_guests && !tells_own_game_alone {
             return;
         }
         let Some(message) = M::from_launcher(LauncherPayload::SessionOptions(self.options)) else {
             return;
         };
         self.send_to_game(&message);
-        if let Some(session) = self.remote.as_mut() {
+        if tells_guests && let Some(session) = self.remote.as_mut() {
             let _ = session.send_relayed(&message);
         }
     }

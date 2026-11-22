@@ -2,15 +2,18 @@ use crate::fight_sync::camera_aim_follow::CAMERA_AIM_MOVE_SENT_AGAIN_WORLD_UNITS
 use crate::fight_sync::camera_follow::FixedCameraPose;
 
 pub const CAMERA_MOVE_PAST_THE_BODY_MOVE_IS_A_JUMP_WORLD_UNITS: f32 = 1.0;
+pub const LOOK_POINT_FAR_FROM_THE_BODY_IS_NOT_FOLLOWING_WORLD_UNITS: f32 = 8.0;
 
 /// A fixed-camera pose that follows a body: the eye and look point as offsets from the body on
 /// the floor plane (x, z), and their heights as they are (the camera's height does not follow).
+/// With `eye_is_absolute` the eye stays where it is and `eye_offset_xz` holds its world x and z.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CameraBodyOffset {
     pub eye_offset_xz: [f32; 2],
     pub eye_height: f32,
     pub look_offset_xz: [f32; 2],
     pub look_height: f32,
+    pub eye_is_absolute: bool,
 }
 
 impl CameraBodyOffset {
@@ -20,17 +23,32 @@ impl CameraBodyOffset {
             eye_height: pose.eye[1],
             look_offset_xz: [pose.look_at[0] - body[0], pose.look_at[2] - body[2]],
             look_height: pose.look_at[1],
+            eye_is_absolute: false,
+        }
+    }
+
+    pub fn from_still_eye_and_body(pose: FixedCameraPose, body: [f32; 3]) -> Self {
+        Self {
+            eye_offset_xz: [pose.eye[0], pose.eye[2]],
+            eye_is_absolute: true,
+            ..Self::from_pose_and_body(pose, body)
         }
     }
 
     /// The same camera built around another body.
     pub fn pose_around(&self, body: [f32; 3]) -> FixedCameraPose {
+        let eye_x = if self.eye_is_absolute {
+            self.eye_offset_xz[0]
+        } else {
+            body[0] + self.eye_offset_xz[0]
+        };
+        let eye_z = if self.eye_is_absolute {
+            self.eye_offset_xz[1]
+        } else {
+            body[2] + self.eye_offset_xz[1]
+        };
         FixedCameraPose {
-            eye: [
-                body[0] + self.eye_offset_xz[0],
-                self.eye_height,
-                body[2] + self.eye_offset_xz[1],
-            ],
+            eye: [eye_x, self.eye_height, eye_z],
             look_at: [
                 body[0] + self.look_offset_xz[0],
                 self.look_height,
@@ -77,6 +95,39 @@ pub fn camera_follows_body(
         return false;
     }
     let toward_the_body = camera_move[0] * body_move[0] + camera_move[1] * body_move[1];
+    if toward_the_body > 0.0 {
+        return true;
+    }
+    was_following
+}
+
+/// Whether the fixed camera's move from `from` to `to` (each a pose and the host's body then) is
+/// a look point chasing the body under an eye that stays put: the look moved toward where the
+/// body went and stays near it. A move with no body move keeps `was_following`.
+pub fn look_follows_body_under_a_still_eye(
+    from: (FixedCameraPose, [f32; 3]),
+    to: (FixedCameraPose, [f32; 3]),
+    was_following: bool,
+) -> bool {
+    let ((from_pose, from_body), (to_pose, to_body)) = (from, to);
+    let eye_still = from_pose
+        .eye
+        .iter()
+        .zip(&to_pose.eye)
+        .all(|(a, b)| (a - b).abs() <= CAMERA_AIM_MOVE_SENT_AGAIN_WORLD_UNITS);
+    if !eye_still {
+        return false;
+    }
+    let look_gap = (to_pose.look_at[0] - to_body[0]).hypot(to_pose.look_at[2] - to_body[2]);
+    if look_gap > LOOK_POINT_FAR_FROM_THE_BODY_IS_NOT_FOLLOWING_WORLD_UNITS {
+        return false;
+    }
+    let look_move = [
+        to_pose.look_at[0] - from_pose.look_at[0],
+        to_pose.look_at[2] - from_pose.look_at[2],
+    ];
+    let body_move = [to_body[0] - from_body[0], to_body[2] - from_body[2]];
+    let toward_the_body = look_move[0] * body_move[0] + look_move[1] * body_move[1];
     if toward_the_body > 0.0 {
         return true;
     }

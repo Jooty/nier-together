@@ -12,6 +12,7 @@ pub enum RemovalChange {
 pub struct StoryRemoval {
     settled_out: bool,
     last_call: Option<(bool, u64)>,
+    last_removal_was_the_aerie_exit: bool,
 }
 
 impl StoryRemoval {
@@ -19,11 +20,41 @@ impl StoryRemoval {
         Self {
             settled_out: false,
             last_call: None,
+            last_removal_was_the_aerie_exit: false,
         }
     }
 
     pub fn story_called(&mut self, taken_out: bool, now_ms: u64) {
         self.last_call = Some((taken_out, now_ms));
+        if !taken_out {
+            self.last_removal_was_the_aerie_exit = false;
+        }
+    }
+
+    pub fn restore_aerie_exit_from_game_state(
+        &mut self,
+        aerie_exit_flag_on: bool,
+        companion_inactive: bool,
+    ) -> bool {
+        if self.last_call.is_some()
+            || self.settled_out
+            || !aerie_exit_flag_on
+            || !companion_inactive
+        {
+            return false;
+        }
+        self.settled_out = true;
+        self.last_removal_was_the_aerie_exit = true;
+        true
+    }
+
+    pub fn aerie_exit_removed_her(&mut self, now_ms: u64) {
+        self.last_call = Some((true, now_ms));
+        self.last_removal_was_the_aerie_exit = true;
+    }
+
+    pub const fn taken_at_the_aerie_exit(&self) -> bool {
+        self.settled_out && self.last_removal_was_the_aerie_exit
     }
 
     pub fn step(&mut self, now_ms: u64) -> Option<RemovalChange> {

@@ -1,3 +1,4 @@
+mod answer_keys;
 mod cursor_calls;
 mod door_gate;
 mod door_walk;
@@ -20,9 +21,11 @@ mod script_runner_log;
 mod side_view_log;
 mod stuck_menu_mask;
 mod teleport;
+mod warp_menu_pause;
 mod window_focus;
 mod zone_gate;
 
+pub use answer_keys::read_answer_gesture;
 pub use cursor_calls::{
     blocked_clip_cursor_calls, blocked_set_cursor_pos_calls, clear_cursor_clip,
     real_cursor_position, spoofed_get_cursor_pos_calls,
@@ -32,7 +35,9 @@ pub use invincibility::{
     is_enabled as invincibility_enabled, is_installed as invincibility_installed,
     set_enabled as set_invincible, set_local_health_through_game, take_lethal_hit_seen,
 };
+pub(crate) use menu_free_calls::while_menu_free;
 pub use menu_no_pause::update_menu_no_pause;
+pub(crate) use mouse_block::cursor_mode_active;
 pub use mouse_block::{
     blocked_acquire_calls, game_mouse_acquired, set_cursor_mode, set_game_mouse_blocked,
 };
@@ -50,6 +55,7 @@ pub(crate) use script_runner_log::{
 };
 pub(crate) use side_view_log::own_side_view_door;
 pub use teleport::{request_teleport, teleport_available};
+pub(crate) use warp_menu_pause::tick as tick_warp_menu_pause;
 pub use window_focus::{
     keep_running_enabled, set_keep_running, take_focus_event_counts, window_unfocused,
 };

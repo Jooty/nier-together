@@ -175,6 +175,7 @@ fn samples() -> Vec<Message> {
                 starts: 9,
                 target: LeadTarget::HostPlayer,
             }],
+            starts: Vec::new(),
         }),
         Message::Member(Member {
             slot: 1,
@@ -254,6 +255,20 @@ fn samples() -> Vec<Message> {
             paused: true,
         },
         Message::SessionJump(SessionJumpOrder { start_index: 41 }),
+        Message::Look(PlayerLook {
+            outfit_variant: 2,
+            accessory_code: 11,
+            hair_colour: 5,
+            pod_skin: 1,
+            gun_skin: 255,
+        }),
+        Message::LookRule {
+            any_look_allowed: true,
+        },
+        Message::BossWait {
+            slot: 3,
+            waiting: true,
+        },
     ]
 }
 
@@ -271,7 +286,7 @@ fn golden_lines() -> Vec<(&'static str, &'static str)> {
 
 #[test]
 fn the_protocol_number_is_pinned_here_and_nowhere_else() {
-    assert_eq!(PROTOCOL_VERSION, 1037);
+    assert_eq!(PROTOCOL_VERSION, 1040);
 }
 
 #[test]

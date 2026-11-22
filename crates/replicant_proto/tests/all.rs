@@ -80,6 +80,8 @@ mod prologue_level_wire;
 mod ridden_boar_wire;
 #[path = "rule_room_break_wire.rs"]
 mod rule_room_break_wire;
+#[path = "scale_up_wire.rs"]
+mod scale_up_wire;
 #[path = "scene_follow_wire.rs"]
 mod scene_follow_wire;
 #[path = "script_message_wire.rs"]
@@ -112,6 +114,8 @@ mod track;
 mod tutorial_prompt_wire;
 #[path = "voice_character_wire.rs"]
 mod voice_character_wire;
+#[path = "watched_camera_call_wire.rs"]
+mod watched_camera_call_wire;
 #[path = "wire.rs"]
 mod wire;
 #[path = "world_effect_wire.rs"]

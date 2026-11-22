@@ -1,4 +1,5 @@
 use eframe::egui::{Align, FontId, Layout, Rect, Ui, UiBuilder, pos2, vec2};
+use replicant_proto::{SCALE_UP_NO_LABEL, SCALE_UP_YES_LABEL, scale_up_body, scale_up_title};
 
 use crate::app::pages::dialog_frame::show_dialog;
 use crate::app::palette::{INK, INK_MUTED};
@@ -13,18 +14,6 @@ const TITLE_TO_BODY_PX: f32 = 18.0;
 const COMMAND_SIZE_PX: (f32, f32) = (176.0, 48.0);
 const BUTTON_GAP_PX: f32 = 22.0;
 const DIALOG_LAYER: &str = "scale-up-dialog";
-const SCALE_UP_LABEL: &str = "Scale up";
-const NOT_NOW_LABEL: &str = "Not now";
-
-fn scale_up_title(guest_name: &str) -> String {
-    format!("No save for {guest_name}")
-}
-
-fn scale_up_body(guest_name: &str) -> String {
-    format!(
-        "{guest_name} has no save in this campaign. Give them a copy of your save under their name?"
-    )
-}
 
 pub(super) fn draw_scale_up_dialog(ui: &mut Ui, launcher: &mut Launcher, forms: &mut NetForms) {
     let Some(guest_name) = launcher.scale_up_guest_name() else {
@@ -69,12 +58,12 @@ fn draw_dialog(ui: &mut Ui, dialog: Rect, guest_name: &str) -> Option<bool> {
             .layout(Layout::right_to_left(Align::Center)),
         |ui| {
             ui.spacing_mut().item_spacing = vec2(BUTTON_GAP_PX, 0.0);
-            if command_button(ui, SCALE_UP_LABEL, COMMAND_SIZE_PX, true, true).clicked() {
+            if command_button(ui, SCALE_UP_YES_LABEL, COMMAND_SIZE_PX, true, true).clicked() {
                 return Some(true);
             }
             let not_now = line_button(
                 ui,
-                NOT_NOW_LABEL,
+                SCALE_UP_NO_LABEL,
                 LineTone::Plain,
                 LINE_BUTTON_HEIGHT_PX,
                 None,

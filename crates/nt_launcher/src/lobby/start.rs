@@ -28,3 +28,7 @@ pub fn guest_accepts_start(
 ) -> bool {
     connected && is_guest && !already_started && own.ready
 }
+
+pub fn started_with_nobody_else(is_guest: bool, other_players_in_lobby: usize) -> bool {
+    !is_guest && other_players_in_lobby == 0
+}

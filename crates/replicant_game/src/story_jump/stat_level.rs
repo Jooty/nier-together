@@ -28,7 +28,11 @@ pub fn jump_stat_level(point: StoryJumpPoint) -> i32 {
         StoryJumpPoint::VillageBoss9 => 40,
         StoryJumpPoint::LibraryBoss10
         | StoryJumpPoint::LibraryBoss11
-        | StoryJumpPoint::Part2Start => 42,
+        | StoryJumpPoint::Part2Start
+        | StoryJumpPoint::Part2ManorCourtyard
+        | StoryJumpPoint::Part2Boss12
+        | StoryJumpPoint::Part2Boss13
+        | StoryJumpPoint::Part2OutsideHouse => 42,
     }
 }
 

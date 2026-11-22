@@ -20,7 +20,7 @@ pub use scene_arrival::{
     SceneArrivalWatch,
 };
 pub use view_off::{ViewArg, ViewCall, view_off_calls};
-pub use view_on::{SCENE_VIEW_ONS, SceneViewOn, scene_view_on, view_on_calls};
+pub use view_on::{SCENE_VIEW_ONS, SceneViewOn, scene_view_on, side_view_on_calls, view_on_calls};
 
 pub const INDOOR_ARRIVAL_SETTLE_MS: u64 = 1_000;
 pub const SIDE_VIEW_MODE_ON_NATIVE_RVA: u32 = 0x70_6EE0;

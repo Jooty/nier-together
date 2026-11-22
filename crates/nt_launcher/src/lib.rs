@@ -1,5 +1,6 @@
 pub mod app;
 pub mod config;
+pub mod controllers;
 pub mod game_link;
 pub mod home;
 pub mod install;

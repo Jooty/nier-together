@@ -46,7 +46,7 @@ const ROW_ART_LOADED_SALT: &str = "row-art-loaded";
 const ROW_ART_HOVER_SALT: &str = "row-art-hover";
 const SWITCH_BLOCKED_NOTE: &str = "Finish the current game first.";
 const SET_FOLDER_LABEL: &str = "Set the folder";
-const HOST_LABEL: &str = "Host";
+const PLAY_LABEL: &str = "Play";
 const JOIN_LABEL: &str = "Join";
 const BACK_TO_LOBBY_LABEL: &str = "Lobby";
 const SETTINGS_LABEL: &str = "Settings";
@@ -422,7 +422,7 @@ fn draw_entry_commands(
         !blocked && !session_open(forms) && !forms.hosting_pending() && !forms.joining_pending();
     ui.scope(|ui| {
         ui.spacing_mut().item_spacing.x = COMMAND_GAP_PX;
-        let mut host = command_button(ui, HOST_LABEL, COMMAND_SIZE_PX, true, available);
+        let mut host = command_button(ui, PLAY_LABEL, COMMAND_SIZE_PX, true, available);
         let mut join = command_button(ui, JOIN_LABEL, COMMAND_SIZE_PX, false, available);
         if blocked {
             host = host.on_hover_text(SWITCH_BLOCKED_NOTE);

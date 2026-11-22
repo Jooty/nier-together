@@ -1,4 +1,11 @@
 mod ai_hold;
+mod boss_defeat;
+mod boss_drive;
+mod boss_drive_motion;
+mod boss_life;
+mod boss_nier_hits;
+mod boss_own_life;
+mod boss_phase;
 mod box_moves;
 mod companion_drivers;
 mod companion_off;
@@ -27,6 +34,30 @@ mod stats;
 mod swapped_level;
 
 pub use ai_hold::{HerAiHoldReading, format_held_ticks, her_ai_is_held};
+pub use boss_defeat::boss_fight_watch_side;
+pub use boss_drive::{
+    BOSS_FIGHT_KAINE_MODE, BOSS_FIGHT_PACK, BossDrive, BossDriveEvent, BossDriveFacts,
+    FIGHT_START_JOIN_WINDOW_MS, GuestSeat, HeldBackWhy, boss_drive_event_text,
+};
+pub use boss_drive_motion::{
+    BossDriveMisses, GUEST_MOTION_KEYWORDS_TO_HER_MOTIONS, HerMotionChoice,
+    MOST_DISTINCT_BOSS_DRIVE_MISSES_LOGGED, her_motion_for, scaled_frame,
+};
+pub use boss_life::{
+    BOSS_FIGHT_GROUP, BossLifeFollow, BossLifeStep, guest_life_for_boss_life, is_the_boss_kaine,
+};
+pub use boss_nier_hits::{
+    BOSS_HIT_DEFAULT_PERCENT_OF_NIER_MAX_HP, BOSS_HIT_PERCENT_BY_MOTION_PREFIX, BossNierHits,
+    NATIVE_HIT_WINDOW_MS, PLAYER_SWING_TARGET_KIND_BIT, PVP_DAMAGE_PERCENT,
+    SENT_HIT_REPEAT_WINDOW_MS, SentHitVerdict, percent_for_motion, pvp_scaled_damage,
+};
+pub use boss_own_life::{
+    FIGHT_WON_SHARE_MARGIN_PERCENT, OWN_LIFE_RESTORE_WAITS_FOR_PLAY_MS, OwnLifeKeeper, OwnLifeStep,
+};
+pub use boss_phase::{
+    BossPhase, BossPhaseChange, BossPhaseFacts, BossPhaseWatch, DOWN_AT_OR_BELOW_PERCENT,
+    FIGHT_WON_AT_OR_BELOW_PERCENT, SECOND_FORM_AT_OR_BELOW_PERCENT, boss_phase_text,
+};
 pub use box_moves::{
     BODIES_WITHOUT_BOX_PUSH_OR_PULL_MOTIONS, SwappedBoxMoveNote, swapped_body_box_move_text,
     swapped_body_moves_boxes_without_motions,
@@ -119,7 +150,8 @@ pub const KAINE_PLAYER_FLAG_SET: i32 = 1;
 pub const PARTNER_EXECUTES_FLAG_OFFSET: u64 = 0x13E4;
 pub const KAINE_LEVEL_SAVE_OFFSET: usize = 0xE3C;
 pub const KAINE_EXPERIENCE_SAVE_OFFSET: usize = 0xE40;
-pub const COMPANION_GAUGE_MODE_OFFSET: u64 = 0x1_5E94;
+pub const KAINE_MODE_OFFSET: u64 = 0x1_5E94;
+pub const COMPANION_GAUGE_MODE_OFFSET: u64 = KAINE_MODE_OFFSET;
 pub const HUD_PARTNER_GAUGE_OFFSET: u64 = 0x288;
 pub const PARTNER_GAUGE_ACTOR_HANDLE_OFFSET: u64 = 0x70;
 pub const GUEST_HIT_SCALE_IN_A_STAND_IN_BEAT: f32 = 0.25;

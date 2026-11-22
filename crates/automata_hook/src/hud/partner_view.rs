@@ -13,7 +13,7 @@ use nt_hook::log_stamp::unix_millis_now;
 use crate::budgeted_log::log_owned_within;
 use crate::extra_bodies::body_of_player;
 use crate::hud::TAG_STATE_LINES_LOGGED_PER_MINUTE;
-use crate::hud::co_op_log::note_session;
+use crate::hud::co_op_log::{note_session, post_announced_lines};
 use crate::hud::install::calls;
 use crate::net::{
     self, NetShared, PartnerWatch, ShownPlayersExt, local_in_play, local_playing_event,
@@ -48,6 +48,7 @@ pub(crate) fn tick() {
     let Some(net) = net::handle() else {
         return;
     };
+    post_announced_lines();
     let shared = net.view();
     let players = shared.shown_others();
     note_session(&shared, &players);

@@ -38,7 +38,10 @@ pub use engine_partner_choice::{
     BuddyFlagWrite, BuddyFlags, EngineChoiceLeftAlone, EnginePartnerChoice, EnginePartnerReadings,
     buddy_flag_hash, choose_engine_partner, engine_partner_spawn_code_is_the_noted_one,
 };
-pub use error_bands::{PositionCorrection, PositionCorrector, facing_error, facing_needs_write};
+pub use error_bands::{
+    CorrectionReport, PositionCorrection, PositionCorrector, PositionSample, SampleCorrector,
+    facing_error, facing_needs_write, position_correction_line,
+};
 pub use extra_body_roster::{
     ExtraBodyRoster, ExtraBodyStep, MAX_EXTRA_BODIES, OtherPlayer, RosterReadings, SlotStep,
 };
@@ -86,6 +89,8 @@ pub const BODY_ROTATION_EULER_OFFSET: u32 = 0x90;
 pub const BODY_FACING_OFFSET: u32 = 0x94;
 pub const BODY_FLAGS_OFFSET: u32 = 0x598;
 pub const BODY_MODEL_ID_OFFSET: u32 = 0x5B8;
+pub const BODY_ACCESSORY_CODE_OFFSET: u32 = 0x170BC;
+pub const BODY_OUTFIT_VARIANT_OFFSET: u32 = 0x170C4;
 pub const BODY_SUSPEND_FLAGS_OFFSET: u32 = 0x5C0;
 pub const BODY_ENTITY_POINTER_OFFSET: u32 = 0x610;
 pub const BODY_STATE_OFFSET: u32 = 0x670;
@@ -214,6 +219,15 @@ pub const POSITION_ERROR_LEFT_ALONE: f32 = 0.1;
 pub const POSITION_ERROR_TELEPORTED: f32 = 1.0;
 pub const POSITION_NUDGE_FRACTION: f32 = 0.2;
 pub const TELEPORT_MIN_INTERVAL_MS: u64 = 500;
+pub const MOVING_POSITION_ERROR_LEFT_ALONE: f32 = 0.6;
+pub const PREDICTION_AGE_CAP_MS: u64 = 120;
+pub const SAMPLE_INTERVAL_FLOOR_MS: u64 = 33;
+pub const SAMPLE_INTERVAL_CEILING_MS: u64 = 100;
+pub const VELOCITY_GAP_LIMIT_MS: u64 = 250;
+pub const VELOCITY_BLEND_FRACTION: f32 = 0.5;
+pub const MOVING_VELOCITY_ABOVE_UNITS_PER_SECOND: f32 = 0.5;
+pub const FIRST_CORRECTION_TICK_MS: u64 = 16;
+pub const CORRECTION_REPORT_INTERVAL_MS: u64 = 1_000;
 pub const FACING_ERROR_WRITTEN_RADIANS: f32 = 1.0;
 pub const DIFFERING_MESSAGES_BEFORE_STATE_START: u32 = 6;
 pub const NEVER_STARTED_STATES: [u16; 7] = [0x1B, 0x35, 0x36, 0x3B, 0x41, 0x68, 0x6A];

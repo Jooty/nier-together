@@ -4,8 +4,9 @@ use automata_game::partner::{
     BODY_BREAK_FIELD_COUNT, BODY_BREAK_FIELDS_OFFSET, BODY_FACING_OFFSET,
     BODY_PLAYER_CONTROLLED_OFFSET, BODY_POSITION_OFFSET, BODY_ROTATION_EULER_OFFSET,
     BODY_STATE_OFFSET, BODY_SUSPEND_FLAGS_OFFSET, BODY_UPDATE_GATE_OFFSET,
-    POSITION_ERROR_TELEPORTED, PartnerDrive, PositionCorrection, PositionCorrector, RemoteState,
-    SUSPENDED_FLAG_BIT, StateDecision, StateRule, facing_needs_write,
+    POSITION_ERROR_TELEPORTED, PartnerDrive, PositionCorrection, PositionSample, RemoteState,
+    SUSPENDED_FLAG_BIT, SampleCorrector, StateDecision, StateRule, facing_needs_write,
+    position_correction_line,
 };
 use automata_game::partner_flight::rider_moved_without_teleport_line;
 use automata_proto::PlayerState;
@@ -34,7 +35,7 @@ struct BodyDriveLogged {
 pub(crate) struct BodyDrive {
     owner: String,
     state_rule: StateRule,
-    corrector: PositionCorrector,
+    corrector: SampleCorrector,
     last_remote_sequence: Option<u32>,
     logged: BodyDriveLogged,
     body_rides: bool,
@@ -45,7 +46,7 @@ impl BodyDrive {
         Self {
             owner: owner.into(),
             state_rule: StateRule::new(drive),
-            corrector: PositionCorrector::default(),
+            corrector: SampleCorrector::default(),
             last_remote_sequence: None,
             logged: BodyDriveLogged::default(),
             body_rides: false,
@@ -55,7 +56,7 @@ impl BodyDrive {
     /// Starts over on a newly held body; what was logged once stays logged.
     pub(crate) fn restart(&mut self, drive: PartnerDrive) {
         self.state_rule = StateRule::new(drive);
-        self.corrector = PositionCorrector::default();
+        self.corrector = SampleCorrector::default();
         self.last_remote_sequence = None;
         self.body_rides = false;
     }
@@ -135,10 +136,17 @@ impl BodyDrive {
             return;
         };
         let local_position = [local[0], local[1], local[2]];
-        match self
-            .corrector
-            .correct(now_ms, local_position, remote.position)
-        {
+        let sample = PositionSample {
+            sequence: remote.sequence,
+            position: remote.position,
+            input_speed: remote.speed,
+        };
+        let correction = self.corrector.correct(now_ms, local_position, sample);
+        if let Some(report) = self.corrector.take_report(now_ms) {
+            log_line(&position_correction_line(&self.owner, &report));
+        }
+        let target = self.corrector.target().unwrap_or(remote.position);
+        match correction {
             PositionCorrection::Leave => {}
             PositionCorrection::Nudge(position) => {
                 let written = calls
@@ -154,10 +162,7 @@ impl BodyDrive {
             }
             PositionCorrection::Teleport if self.body_rides => {
                 let written = calls
-                    .write_f32s_at(
-                        calls.body_field(body, BODY_POSITION_OFFSET),
-                        &remote.position,
-                    )
+                    .write_f32s_at(calls.body_field(body, BODY_POSITION_OFFSET), &target)
                     .is_ok();
                 if written && !self.logged.riding_body_moved_without_teleport {
                     self.logged.riding_body_moved_without_teleport = true;
@@ -168,10 +173,7 @@ impl BodyDrive {
                 // The game's teleport would put the body in its default pose: a downed body is
                 // moved by a plain write, so it stays lying.
                 let written = calls
-                    .write_f32s_at(
-                        calls.body_field(body, BODY_POSITION_OFFSET),
-                        &remote.position,
-                    )
+                    .write_f32s_at(calls.body_field(body, BODY_POSITION_OFFSET), &target)
                     .is_ok();
                 if written && !self.logged.downed_body_moved_without_teleport {
                     self.logged.downed_body_moved_without_teleport = true;
@@ -181,7 +183,7 @@ impl BodyDrive {
                 }
             }
             PositionCorrection::Teleport => {
-                self.teleport(calls, body, local[3], remote);
+                self.teleport(calls, body, local[3], target, remote);
                 return;
             }
         }
@@ -203,18 +205,20 @@ impl BodyDrive {
         }
     }
 
-    fn teleport(&mut self, calls: &GameCalls, body: usize, position_w: f32, remote: &PlayerState) {
+    fn teleport(
+        &mut self,
+        calls: &GameCalls,
+        body: usize,
+        position_w: f32,
+        target: [f32; 3],
+        remote: &PlayerState,
+    ) {
         let Ok(rotation) =
             calls.read_f32s_at::<4>(calls.body_field(body, BODY_ROTATION_EULER_OFFSET))
         else {
             return;
         };
-        let position = Vec4([
-            remote.position[0],
-            remote.position[1],
-            remote.position[2],
-            position_w,
-        ]);
+        let position = Vec4([target[0], target[1], target[2], position_w]);
         // Zero x and z keep the game on its branch that stores the vector as the body's rotation.
         let rotation = Vec4([0.0, remote.body_facing, 0.0, rotation[3]]);
         if !teleport_without_the_player_flag(calls, body, &position, &rotation) {

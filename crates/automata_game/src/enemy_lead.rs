@@ -1,3 +1,4 @@
+mod boss_start_log;
 mod lead_follow;
 mod lead_messages;
 mod place_log;
@@ -5,11 +6,12 @@ mod place_rule;
 mod start_tally;
 mod target_rule;
 
-pub use lead_follow::LeadFollower;
-pub use lead_messages::{EnemyLead, EnemyPose, LeadTarget, lead_parts};
+pub use boss_start_log::{BossStartLog, played_start_line, sent_start_line};
+pub use lead_follow::{LeadFollower, StartToPlay};
+pub use lead_messages::{EnemyLead, EnemyPose, LeadTarget, QueuedStart, lead_parts};
 pub use place_log::{PlaceLog, place_line};
 pub use place_rule::{PlaceStep, facing_to_write, place_step};
-pub use start_tally::{HookedStarts, StartTally};
+pub use start_tally::{HookedStart, HookedStarts, StartTally};
 pub use target_rule::{
     PlayerPlaces, guest_target_handle, lead_target_of, target_wanted_on_the_host,
 };
@@ -44,3 +46,8 @@ pub const TARGET_SWITCHES_WHEN_NEARER_BY: f32 = 3.0;
 pub const HIGHEST_POSE_COORDINATE_ABS: f32 = 1_000_000.0;
 pub const HIGHEST_POSE_FACING_ABS_RADIANS: f32 = 16.0;
 pub const HOST_STARTS_LEFT_TO_THE_DEFEAT_PATH: [i32; 3] = [0x8E, 0xAC, 0xAF];
+pub const MOST_STARTS_QUEUED_PER_ENEMY: usize = 4;
+pub const MOST_STARTS_IN_ONE_LEAD_MESSAGE: usize = 8;
+pub const MOST_STARTS_WAITING_TO_BE_PLAYED_PER_ENEMY: usize = 8;
+pub const BOSS_CLASS_HEALTH_FROM: i32 = 5_000;
+pub const BOSS_START_LINES_LOGGED_PER_MINUTE: u32 = 60;
