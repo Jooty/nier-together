@@ -10,7 +10,12 @@ use crate::net::{self, NetSharedExt, NetState};
 
 static HOLD_STARTED: OnceLock<Instant> = OnceLock::new();
 static LINKED_LAUNCH: AtomicBool = AtomicBool::new(false);
+static STARTED_ALONE: AtomicBool = AtomicBool::new(false);
 static HOLD_ANNOUNCED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_started_alone(started_alone: bool) {
+    STARTED_ALONE.store(started_alone, Ordering::Release);
+}
 
 pub(super) fn start_hold_clock(linked_launch: bool) {
     LINKED_LAUNCH.store(linked_launch, Ordering::Release);
@@ -21,7 +26,9 @@ pub(super) fn hold_for_partner() -> bool {
     let started = *HOLD_STARTED.get_or_init(Instant::now);
     let waited_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let Some(net) = net::handle() else {
-        let waiting = LINKED_LAUNCH.load(Ordering::Acquire) && waited_ms < TITLE_HOLD_TIMEOUT_MS;
+        let waiting = LINKED_LAUNCH.load(Ordering::Acquire)
+            && !STARTED_ALONE.load(Ordering::Acquire)
+            && waited_ms < TITLE_HOLD_TIMEOUT_MS;
         if waiting && !HOLD_ANNOUNCED.swap(true, Ordering::Relaxed) {
             log_line("boot: title held until the link to the launcher is up");
         }
@@ -32,6 +39,7 @@ pub(super) fn hold_for_partner() -> bool {
         waited_ms,
         launcher_linked: view.state != NetState::WaitingForLauncher,
         partner_readiness: view.partner_watch().readiness(),
+        started_alone: STARTED_ALONE.load(Ordering::Acquire),
     });
     match decision {
         TitleHold::Hold => {

@@ -31,7 +31,7 @@ pub fn veto_zone_change(path: &str, source: ZoneChangeSource) -> bool {
         source,
         role: FollowRole::from_slot(view.local_slot),
         connected: view.state == NetState::Connected,
-        partner_game_open: !view.partner_watch().is_game_closed(),
+        partner_game_open: view.partner_game_binds_the_rules(),
         local: view.local.as_ref().map(|local| Placement {
             phase: local.phase,
             position: local.position,
@@ -58,7 +58,9 @@ pub fn veto_zone_change(path: &str, source: ZoneChangeSource) -> bool {
         .unwrap_or_else(PoisonError::into_inner)
         .record(path, &text, now_ms());
     if record.should_log {
-        announce_veto(net, &verdict);
+        if verdict.is_announced(crate::story_watch::this_game_is_watching()) {
+            announce_veto(net, &verdict);
+        }
         log_line(&format!(
             "zone rules: vetoed a zone change via {path} ({}); radius {} units (no game constant found, panel setting)",
             verdict_label(&verdict),

@@ -4,6 +4,7 @@ use nt_net::Channel;
 use replicant_game::PHASE_TABLE;
 use replicant_game::carts::partner_wants_to_ride_text;
 use replicant_game::readiness::{HEARTBEAT_INTERVAL_MS, PartnerWatch, ReadinessChangeLog};
+use replicant_game::scale_up_prompt::AskEffect;
 use replicant_proto::{GameReadiness, Message, PartnerNotice, PlayerState};
 
 use crate::event_log::post_event;
@@ -12,6 +13,7 @@ use crate::net::link_state::ReplicantLinkState;
 use crate::net::local_snapshot::LocalSnapshot;
 use crate::net::shared::RemotePlayer;
 
+const HOST_SLOT: u8 = 0;
 const READINESS_SENT: &str = "sent";
 const READINESS_SEND_REFUSED: &str = "refused by the link, retrying";
 const READINESS_NOT_SENT_YET: &str = "nothing sent yet";
@@ -64,6 +66,12 @@ impl NetGame for ReplicantNet {
                 shared.rtt = Some(std::time::Duration::from_micros(u64::from(info.rtt_micros)));
                 shared.direct_path = Some(info.direct);
             }
+            Message::ScaleUpAsk(ask) => {
+                let effect = link.shared().scale_up.on_ask(ask);
+                if let AskEffect::Line(line) = effect {
+                    post_event(&line);
+                }
+            }
             Message::QuitGame => {
                 log_line("net: the launcher asked this game to quit");
                 link.shared().quit_requested = true;
@@ -82,8 +90,19 @@ impl NetGame for ReplicantNet {
         }
     }
 
-    fn on_player_joined(&mut self, _extras: &mut ReplicantLinkState, player: &mut PlayerOf<Self>) {
-        player.watch.partner_connected(net_clock_ms());
+    fn on_player_joined(&mut self, extras: &mut ReplicantLinkState, player: &mut PlayerOf<Self>) {
+        let host_is_playing = extras.effective_local_readiness().is_in_play();
+        if player.slot != HOST_SLOT && host_is_playing {
+            log_line(&format!(
+                "net: {} joined while this game plays, taking them in at a safe moment",
+                player.name
+            ));
+            player
+                .watch
+                .partner_connected_while_host_plays(net_clock_ms());
+        } else {
+            player.watch.partner_connected(net_clock_ms());
+        }
     }
 
     fn on_player_left(&mut self, extras: &mut ReplicantLinkState, _slot: u8) {
@@ -92,6 +111,7 @@ impl NetGame for ReplicantNet {
 
     fn on_peer_cleared(&mut self, extras: &mut ReplicantLinkState) {
         extras.options = replicant_proto::SessionOptions::default();
+        extras.scale_up.clear();
     }
 
     fn on_launcher_linked(&mut self) {
@@ -106,6 +126,7 @@ impl NetGame for ReplicantNet {
         send: &mut dyn FnMut(&Message, Channel) -> bool,
     ) {
         assume_silent_partner_in_play(link);
+        take_in_joiners_at_a_safe_moment(link);
         self.send_readiness(link, send);
     }
 
@@ -200,6 +221,9 @@ fn on_partner_state(link: &LinkAccess<'_, ReplicantNet>, from: u8, state: Player
         return;
     };
     let promoted = player.watch.partner_sent_state();
+    if player.watch.is_waiting_for_safe_moment() {
+        return;
+    }
     let latest = RemotePlayer {
         name: player.name.clone(),
         slot: from,
@@ -253,6 +277,26 @@ fn assume_silent_partner_in_play(link: &LinkAccess<'_, ReplicantNet>) {
         .collect();
     for name in assumed {
         log_readiness("readiness: partner never reported, assuming in play");
+        post_event(&format!("{name}'s game is in play"));
+    }
+}
+
+fn take_in_joiners_at_a_safe_moment(link: &LinkAccess<'_, ReplicantNet>) {
+    let mut shared = link.shared();
+    let safe = shared.safe_to_take_a_joiner();
+    let taken_in: Vec<String> = shared
+        .players
+        .values_mut()
+        .filter_map(|player| {
+            player
+                .watch
+                .take_in_if_safe(safe)
+                .then(|| player.name.clone())
+        })
+        .collect();
+    drop(shared);
+    for name in taken_in {
+        log_readiness("readiness: a joiner is taken in, this game is at a safe moment");
         post_event(&format!("{name}'s game is in play"));
     }
 }

@@ -7,6 +7,7 @@ pub use track::{
     MAX_MOTION_EXTRAPOLATION_MS, MAX_TRACK_SAMPLES, MOTION_FRAMES_PER_MS, StateTrack,
     TRACK_HISTORY_MS, TRACK_RESTART_GAP_MS, TRACK_RESTART_TICK_JUMP, TrackSample,
 };
+pub use wire::BossHitOnNier;
 pub use wire::ChoiceHover;
 pub use wire::SideViewState;
 pub use wire::TalkWindowSize;
@@ -132,4 +133,9 @@ pub use wire::{
     StoryCallArg, StoryRefusalReason, StoryRefused,
 };
 pub use wire::{MAX_VOICE_CHARACTER_BYTES, VoiceCharacter};
+pub use wire::{
+    SCALE_UP_NO_LABEL, SCALE_UP_YES_LABEL, ScaleUpAnswer, ScaleUpAsk, scale_up_body,
+    scale_up_no_save_yet_line, scale_up_title,
+};
 pub use wire::{STORY_JUMP_ROWS, StoryJump, StoryJumpPoint, StoryJumpRow};
+pub use wire::{WATCHED_CAMERA_CALL_NUMBERS, WatchedCameraCall, WatchedCameraNative};

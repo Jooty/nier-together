@@ -17,7 +17,7 @@ use crate::cutscene_skip::callback_gate::run_queued_ends_through;
 use crate::cutscene_skip::event_cut::{
     describe_local_cut, host_cut, local_cut, queue_cut_load, take_unplayed_start_ended,
 };
-use crate::cutscene_skip::state::partner_in_cutscene;
+use crate::cutscene_skip::state::{note_guest_follow_sent, partner_in_cutscene};
 use crate::diagnostics::log_line;
 use crate::game_hooks::slot_holder_name;
 use crate::memory::InProcessMemory;
@@ -113,6 +113,7 @@ fn host_tick(build: &VerifiedBuild, net: &NetThread, view: &NetShared, in_scene:
             |cut| format!("{} (audio {})", cut.event, cut.audio)
         )
     ));
+    note_guest_follow_sent();
     net.send_relayed(Message::SceneFollow(SceneFollow {
         phase,
         callbacks: names,
@@ -230,7 +231,10 @@ fn guest_tick(
     crate::fade_sync::note_scene_follow_state(follow_pending || host_in_scene, local_in_scene);
     crate::fade_sync::step_scene_covers(
         host_in_scene,
-        matches!(step, FollowStep::GaveUp { .. }),
+        matches!(
+            step,
+            FollowStep::GaveUp { .. } | FollowStep::HostSceneEnded { .. }
+        ),
         local_in_scene,
     );
     match step {
@@ -287,6 +291,9 @@ fn guest_tick(
             &callbacks,
             now,
         ),
+        FollowStep::HostSceneEnded { waited_ms } => log_line(&format!(
+            "scene follow: dropped, the host's scene ended {waited_ms} ms after it began before your game entered it"
+        )),
         FollowStep::GaveUp { waited_ms } => {
             log_line(&format!(
                 "scene follow: gave up after {waited_ms} ms, your game never entered the host's scene (your game has {} loaded)",

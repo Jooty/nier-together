@@ -16,6 +16,7 @@ const HOST_SAVE_LABEL: &str = "Host's save";
 const OWN_SAVE_LABEL: &str = "Your save";
 const OWN_BODY_LABEL: &str = "Your character";
 const NO_SEAT_YET: &str = "None yet";
+const WAITING_FOR_HOST_DECISION: &str = "Waiting for the host to decide";
 const SEAT_KEPT_NOTE: &str =
     "The host keeps this save. It is sent to you at the start and back after every save.";
 
@@ -67,10 +68,15 @@ pub(super) fn draw_campaign_card(ui: &mut Ui, launcher: &Launcher) {
             );
         }
         None => {
+            let shown = if launcher.guest_waits_for_the_hosts_decision() {
+                WAITING_FOR_HOST_DECISION
+            } else {
+                NO_SEAT_YET
+            };
             value_line(
                 ui,
                 OWN_SAVE_LABEL,
-                NO_SEAT_YET,
+                shown,
                 ValueLettering::Body,
                 (INK, INK_MUTED),
             );

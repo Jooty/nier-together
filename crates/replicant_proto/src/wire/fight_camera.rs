@@ -27,13 +27,15 @@ pub struct FightCamera {
 }
 
 /// A fixed camera that follows a body: eye and look offsets from the body on the floor plane
-/// (x, z) and their heights as they are.
+/// (x, z) and their heights as they are. With `eye_is_absolute` the eye stays where it is and
+/// `eye_offset_xz` holds its world x and z.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FightCameraBodyOffset {
     pub eye_offset_xz: [f32; 2],
     pub eye_height: f32,
     pub look_offset_xz: [f32; 2],
     pub look_height: f32,
+    pub eye_is_absolute: bool,
 }
 
 /// The host's fixed camera moved while it stayed active: a pose only, never a switch. A higher

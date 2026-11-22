@@ -46,6 +46,7 @@ pub const REPLICANT: GameProfile = GameProfile {
     link_file_name: "niertogether.toml",
     characters: &REPLICANT_CHARACTERS,
     characters_shareable: true,
+    any_look_switch: false,
     character_art: &REPLICANT_CHARACTER_ART,
     modes: &REPLICANT_MODES,
     free_roam_maps: &[],

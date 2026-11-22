@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use nt_launcher_core::{
-    DEFAULT_ENEMY_DAMAGE_PERCENT, DEFAULT_ENEMY_HEALTH_PERCENT, GameProfile, LauncherScale,
-    MAX_ENEMY_DAMAGE_PERCENT, MAX_ENEMY_HEALTH_PERCENT, PlayerSettings, SessionOptions, game_of,
+    DEFAULT_ENEMY_DAMAGE_PERCENT, DEFAULT_ENEMY_HEALTH_PERCENT, GameProfile, KeyboardMouseFixes,
+    LauncherScale, MAX_ENEMY_DAMAGE_PERCENT, MAX_ENEMY_HEALTH_PERCENT, PlayerSettings,
+    SessionOptions, game_of,
 };
 
 use crate::config::{APP_DIR_NAME, CONFIG_FILE_NAME, process_config_home};
@@ -39,6 +40,8 @@ pub struct LauncherConfig {
         skip_serializing_if = "is_default_enemy_damage_percent"
     )]
     pub enemy_damage_percent: u16,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub any_look_allowed: bool,
     #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
     pub check_for_updates: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -57,6 +60,8 @@ pub struct LauncherConfig {
     pub motion: bool,
     #[serde(default, skip_serializing_if = "is_default_scale")]
     pub scale: LauncherScale,
+    #[serde(default, skip_serializing_if = "is_default_keyboard_mouse")]
+    pub keyboard_mouse: KeyboardMouseFixes,
 }
 
 impl Default for LauncherConfig {
@@ -72,6 +77,7 @@ impl Default for LauncherConfig {
             show_party_frame: true,
             enemy_health_percent: DEFAULT_ENEMY_HEALTH_PERCENT,
             enemy_damage_percent: DEFAULT_ENEMY_DAMAGE_PERCENT,
+            any_look_allowed: false,
             check_for_updates: true,
             update_url: None,
             send_logs: true,
@@ -81,6 +87,7 @@ impl Default for LauncherConfig {
             character_ids: BTreeMap::new(),
             motion: true,
             scale: LauncherScale::default(),
+            keyboard_mouse: KeyboardMouseFixes::default(),
         }
     }
 }
@@ -109,6 +116,7 @@ impl LauncherConfig {
             show_ping: self.show_ping,
             enemy_health_percent: self.enemy_health_percent,
             enemy_damage_percent: self.enemy_damage_percent,
+            any_look_allowed: self.any_look_allowed,
         }
         .clamped()
     }
@@ -125,6 +133,7 @@ impl LauncherConfig {
         self.show_ping = options.show_ping;
         self.enemy_health_percent = options.enemy_health_percent.min(MAX_ENEMY_HEALTH_PERCENT);
         self.enemy_damage_percent = options.enemy_damage_percent.min(MAX_ENEMY_DAMAGE_PERCENT);
+        self.any_look_allowed = options.any_look_allowed;
     }
 
     pub fn set_character_id(&mut self, game_id: &str, id: &str) -> bool {
@@ -213,4 +222,8 @@ fn is_default_enemy_damage_percent(value: &u16) -> bool {
 
 fn is_default_scale(value: &LauncherScale) -> bool {
     *value == LauncherScale::default()
+}
+
+fn is_default_keyboard_mouse(value: &KeyboardMouseFixes) -> bool {
+    *value == KeyboardMouseFixes::default()
 }

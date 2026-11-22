@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -6,12 +7,14 @@ use automata_game::exe::ExeVariant;
 use automata_game::load_gate::{
     LocalLoadSignal, PARTNER_LOAD_SIGNAL_STALE_MS, PartnerLoad, PlaceRelation, StoryPlace,
 };
+use automata_game::outfit_look::PlayerLook;
 use automata_game::partner::BodySnapshot;
+use automata_game::travel::JumpRole;
 use automata_hook::net::{
     AutomataNet, HeardLoadSignal, NetShared, NetSharedExt, PartnerWatch, ReadinessPacer,
-    co_op_status_of, is_snapshot_without_body, link_not_started_status, local_load_signal,
-    partner_load_of, player_load_of, readiness_of, set_local_load_signal, set_local_story_place,
-    snapshot_without_body,
+    SessionModeExt, co_op_status_of, is_snapshot_without_body, link_not_started_status,
+    load_role_of, local_load_signal, partner_load_of, partner_place_of, player_load_of,
+    readiness_of, set_local_load_signal, set_local_story_place, snapshot_without_body,
 };
 use automata_proto::{
     CharacterHello, GameReadiness, LoadSignal, Member, Message, PROTOCOL_VERSION, PathInfo,
@@ -23,6 +26,7 @@ use nt_net::{LoopbackNetwork, Transport};
 const WAIT_LIMIT: Duration = Duration::from_secs(20);
 const MIRA_SLOT: u8 = 0;
 const ODO_SLOT: u8 = 1;
+static TESTS_THAT_SET_THE_LOCAL_STORY_PLACE: Mutex<()> = Mutex::new(());
 
 fn wait_until(mut condition: impl FnMut() -> bool) -> bool {
     let deadline = Instant::now() + WAIT_LIMIT;
@@ -402,7 +406,10 @@ fn a_leaving_player_resets_only_its_own_extras() {
         speed: 2.0,
         ..BodySnapshot::default()
     };
-    let lead = EnemyLead { poses: Vec::new() };
+    let lead = EnemyLead {
+        poses: Vec::new(),
+        starts: Vec::new(),
+    };
     let mut extras = AutomataLinkState::default();
     extras.remote_inputs.receive(2, &heard);
     extras.remote_inputs.receive(3, &heard);
@@ -454,6 +461,9 @@ fn relayed_messages_keep_going_to_a_silent_player() {
 
 #[test]
 fn the_story_place_rides_every_state_and_is_compared_with_this_games_own() {
+    let _one_at_a_time = TESTS_THAT_SET_THE_LOCAL_STORY_PLACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let here = StoryPlace::new(0x100, "00_30_A_Place");
     let there = StoryPlace::new(0x200, "10_00_B_Place");
     set_local_story_place(here);
@@ -478,4 +488,162 @@ fn the_story_place_rides_every_state_and_is_compared_with_this_games_own() {
     set_local_story_place(StoryPlace::default());
     partner_of(&mut linked).watch.place = there;
     assert_eq!(partner_load_of(&linked, 0).place, PlaceRelation::Unknown);
+}
+
+const FREE_ROAM_SEATS: u8 = 4;
+const THIRD_SLOT: u8 = 2;
+
+fn free_roam_shared(local_slot: u8) -> NetShared {
+    let mut linked = shared(NetState::Connected);
+    linked.rules = nt_wire::SessionRules {
+        mode: automata_game::mode::FREE_ROAM_MODE,
+        max_players: FREE_ROAM_SEATS,
+        map: 0,
+    };
+    linked.local_slot = Some(local_slot);
+    linked
+}
+
+fn hears_a_load_word(shared: &mut NetShared, slot: u8, waiting: bool, heard_at_ms: u64) {
+    shared
+        .players
+        .get_mut(&slot)
+        .expect("the player joined")
+        .watch = PartnerWatch {
+        load: Some(HeardLoadSignal {
+            signal: LoadSignal {
+                without_body: true,
+                waiting,
+                release_in_ms: None,
+            },
+            heard_at_ms,
+        }),
+        place: StoryPlace::new(0x100, "30_AB_Ruined_City_ForcedLanding"),
+        heard: true,
+        ..PartnerWatch::default()
+    };
+}
+
+#[test]
+fn in_free_roam_the_load_gate_hears_the_other_players_body_less_state() {
+    let _one_at_a_time = TESTS_THAT_SET_THE_LOCAL_STORY_PLACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut linked = free_roam_shared(0);
+    set_local_story_place(StoryPlace::new(0x100, "30_AB_Ruined_City_ForcedLanding"));
+    assert!(linked.campaign_partner().is_none());
+    assert!(partner_load_of(&linked, 9_000).never_heard);
+    hears_a_load_word(&mut linked, ODO_SLOT, false, 9_000);
+    let heard = partner_load_of(&linked, 9_029);
+    assert!(!heard.never_heard);
+    assert!(!heard.waiting);
+    assert!(!heard.in_play);
+    assert_eq!(heard.place, PlaceRelation::Same);
+    assert_eq!(heard.heard_at_ms, 9_000);
+    assert_eq!(
+        partner_place_of(&linked).describe(),
+        StoryPlace::new(0x100, "30_AB_Ruined_City_ForcedLanding").describe()
+    );
+    set_local_story_place(StoryPlace::default());
+}
+
+#[test]
+fn in_free_roam_the_load_gate_has_a_host_and_a_guest_not_a_solo_player() {
+    assert_eq!(load_role_of(&free_roam_shared(0)), JumpRole::Host);
+    assert_eq!(load_role_of(&free_roam_shared(ODO_SLOT)), JumpRole::Guest);
+    let mut alone = free_roam_shared(0);
+    alone.players.clear();
+    assert_eq!(load_role_of(&alone), JumpRole::Solo);
+    let mut down = free_roam_shared(0);
+    down.state = NetState::LauncherLinked;
+    assert_eq!(load_role_of(&down), JumpRole::Solo);
+    assert_eq!(load_role_of(&shared(NetState::Connected)), JumpRole::Guest);
+}
+
+#[test]
+fn in_free_roam_the_load_gate_follows_the_lowest_other_slot() {
+    let mut linked = free_roam_shared(0);
+    linked
+        .players
+        .insert(THIRD_SLOT, Player::joined(THIRD_SLOT, "Odo".to_owned()));
+    hears_a_load_word(&mut linked, THIRD_SLOT, true, 5_000);
+    assert!(partner_load_of(&linked, 5_100).never_heard);
+    hears_a_load_word(&mut linked, ODO_SLOT, true, 5_000);
+    assert!(partner_load_of(&linked, 5_100).waiting);
+}
+
+#[test]
+fn the_free_roam_load_of_the_run_with_the_hang_is_released_together() {
+    use automata_game::load_gate::{GateInputs, LoadGate, Release};
+
+    let _one_at_a_time = TESTS_THAT_SET_THE_LOCAL_STORY_PLACE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    set_local_story_place(StoryPlace::new(0x100, "30_AB_Ruined_City_ForcedLanding"));
+    let mut host_view = free_roam_shared(0);
+    let (mut gate, _) = LoadGate::new(true, false, true, true);
+    gate.load_done(1_000);
+    let mut released_at = None;
+    for now_ms in (1_000..=60_000_u64).step_by(1_000) {
+        let heard_at_ms = now_ms.saturating_sub(29);
+        hears_a_load_word(&mut host_view, ODO_SLOT, now_ms >= 8_000, heard_at_ms);
+        let step = gate.step(&GateInputs {
+            now_ms,
+            role: load_role_of(&host_view),
+            loading_screen_ready: now_ms >= 8_000,
+            partner: partner_load_of(&host_view, now_ms),
+        });
+        if step.release {
+            released_at = Some(now_ms);
+            break;
+        }
+    }
+    let released_at = released_at.expect("the gate lets the load go");
+    assert!(released_at < 15_000, "released at {released_at} ms");
+    assert!(matches!(gate.release(), Some(Release::Together { .. })));
+    set_local_story_place(StoryPlace::default());
+}
+
+#[test]
+fn a_look_reaches_the_other_side_and_is_kept_with_that_player() {
+    let (a, b) = connected_pair();
+    let look = PlayerLook {
+        outfit_variant: 2,
+        accessory_code: 11,
+        hair_colour: 5,
+        pod_skin: 1,
+        gun_skin: 255,
+    };
+    a.send_relayed(Message::Look(look));
+    assert!(wait_until(|| b.view().partner_watch().look == Some(look)));
+    assert_eq!(a.view().partner_watch().look, None);
+    a.send_to_launcher(Message::MemberLeft { slot: MIRA_SLOT });
+    assert!(wait_until(|| b.view().partner().is_none()));
+    assert_eq!(b.view().partner_watch().look, None);
+}
+
+#[test]
+fn the_hosts_rule_decides_the_campaign_looks_and_never_free_roam() {
+    let (host, guest) = connected_pair();
+    assert!(!guest.view().looks_allowed());
+    host.send_to_launcher(Message::LookRule {
+        any_look_allowed: true,
+    });
+    assert!(wait_until(|| guest.view().looks_allowed()));
+    host.send_to_launcher(Message::LookRule {
+        any_look_allowed: false,
+    });
+    assert!(wait_until(|| !guest.view().looks_allowed()));
+    assert!(free_roam_shared(0).looks_allowed());
+}
+
+#[test]
+fn a_rule_that_does_not_come_from_the_host_is_ignored() {
+    let (host, guest) = connected_pair();
+    guest.send_to_launcher(Message::LookRule {
+        any_look_allowed: true,
+    });
+    guest.send_relayed(Message::Look(PlayerLook::UNPICKED));
+    assert!(wait_until(|| host.view().partner_watch().look.is_some()));
+    assert!(!host.view().looks_allowed());
 }

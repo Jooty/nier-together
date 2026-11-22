@@ -54,6 +54,8 @@ pub(super) fn co_op_notes() -> Vec<MenuNote> {
     if view.partner_joining() {
         notes.push(MenuNote::plain(if view.partner_watch().is_game_closed() {
             replicant_game::readiness::PARTNER_GAME_CLOSED_LABEL
+        } else if view.partner_watch().is_waiting_for_safe_moment() {
+            replicant_game::readiness::PARTNER_WAITING_FOR_A_SAFE_MOMENT_LABEL
         } else {
             replicant_game::readiness::joining_label(view.partner_watch().readiness())
         }));

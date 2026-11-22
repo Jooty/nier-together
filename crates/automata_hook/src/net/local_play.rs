@@ -5,6 +5,8 @@ use automata_proto::GameReadiness;
 use crate::net::READINESS_HEARTBEAT_MS;
 
 static LOCAL_IN_PLAY: AtomicBool = AtomicBool::new(false);
+static LOCAL_FREE: AtomicBool = AtomicBool::new(false);
+static GAME_HAS_PLAYED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct ReadinessPacer {
@@ -35,6 +37,22 @@ impl ReadinessPacer {
 
 pub fn set_local_in_play(in_play: bool) {
     LOCAL_IN_PLAY.store(in_play, Ordering::Release);
+}
+
+pub fn note_the_game_has_played() {
+    GAME_HAS_PLAYED.store(true, Ordering::Release);
+}
+
+pub fn game_has_played() -> bool {
+    GAME_HAS_PLAYED.load(Ordering::Acquire)
+}
+
+pub fn set_local_free(free: bool) {
+    LOCAL_FREE.store(free, Ordering::Release);
+}
+
+pub fn local_free() -> bool {
+    LOCAL_FREE.load(Ordering::Acquire)
 }
 
 pub fn local_in_play() -> bool {

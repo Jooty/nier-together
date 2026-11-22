@@ -40,6 +40,7 @@ pub struct SettingsEnv {
     pub story: Option<String>,
     pub autopilot: Option<String>,
     pub start_together: Option<String>,
+    pub started_alone: Option<String>,
     pub one_loading_screen: Option<String>,
     pub every_load_together: Option<String>,
     pub shared_enemies: Option<String>,
@@ -73,6 +74,7 @@ pub struct GameSettings {
     pub story: StoryRule,
     pub autopilot: Autopilot,
     pub start_together: bool,
+    pub started_alone: bool,
     pub one_loading_screen: bool,
     pub every_load_together: bool,
     pub enemy_share: EnemyShare,
@@ -174,6 +176,10 @@ pub fn choose_game_settings(env: SettingsEnv, config_text: Option<&str>) -> Game
             .or_else(|| text_key(&table, "start_together")),
         &mut notes,
     );
+    let started_alone = env
+        .started_alone
+        .or_else(|| text_key(&table, "started_alone"))
+        .is_some_and(|text| text == "on");
     let one_loading_screen = on_unless_turned_off(
         "one_loading_screen",
         env.one_loading_screen
@@ -292,6 +298,9 @@ pub fn choose_game_settings(env: SettingsEnv, config_text: Option<&str>) -> Game
     if !start_together {
         log_line.push_str(", start_together off");
     }
+    if started_alone {
+        log_line.push_str(", started_alone");
+    }
     if !one_loading_screen {
         log_line.push_str(", one_loading_screen off");
     }
@@ -359,6 +368,7 @@ pub fn choose_game_settings(env: SettingsEnv, config_text: Option<&str>) -> Game
         story,
         autopilot,
         start_together,
+        started_alone,
         one_loading_screen,
         every_load_together,
         enemy_share,
@@ -398,6 +408,7 @@ pub fn settings_from_launcher() -> GameSettings {
         story: read_env(STORY_ENV),
         autopilot: read_env(AUTOPILOT_ENV),
         start_together: read_env(START_TOGETHER_ENV),
+        started_alone: None,
         one_loading_screen: read_env(ONE_LOADING_SCREEN_ENV),
         every_load_together: read_env(EVERY_LOAD_TOGETHER_ENV),
         shared_enemies: read_env(SHARED_ENEMIES_ENV),

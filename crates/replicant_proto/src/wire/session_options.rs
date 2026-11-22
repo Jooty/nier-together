@@ -13,6 +13,9 @@ pub struct SessionOptions {
     pub show_ping: bool,
     pub enemy_health_percent: u16,
     pub enemy_damage_percent: u16,
+    /// Not on this game's wire: only NieR:Automata carries it, in its own look rule message.
+    #[serde(skip)]
+    pub any_look_allowed: bool,
 }
 
 impl Default for SessionOptions {
@@ -24,6 +27,7 @@ impl Default for SessionOptions {
             show_ping: false,
             enemy_health_percent: DEFAULT_ENEMY_HEALTH_PERCENT,
             enemy_damage_percent: DEFAULT_ENEMY_DAMAGE_PERCENT,
+            any_look_allowed: false,
         }
     }
 }

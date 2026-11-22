@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Mutex, PoisonError};
 use std::time::Instant;
 
@@ -12,6 +13,7 @@ use crate::diagnostics::log_line;
 use crate::enemies::enemy_id_text;
 
 static BOSS_FIGHT: Mutex<BossFight> = Mutex::new(BossFight::new());
+static BOSS_FIGHTS_STARTED: AtomicU32 = AtomicU32::new(0);
 static BOSS_HP_CLOCK: Mutex<LineBudget> = Mutex::new(LineBudget::new());
 static BOSS_HP_EPOCH: LazyLock<Instant> = LazyLock::new(Instant::now);
 
@@ -22,6 +24,10 @@ pub fn is_boss_fight_on() -> bool {
         .unwrap_or_else(PoisonError::into_inner)
         .boss()
         .is_some()
+}
+
+pub fn boss_fights_started() -> u32 {
+    BOSS_FIGHTS_STARTED.load(Ordering::Relaxed)
 }
 
 pub fn raise(phase: u16) {
@@ -47,11 +53,14 @@ pub fn observe(phase: u16, seen: &[(EnemyId, EnemySighting)]) {
         (change, fight.boss())
     };
     match change {
-        Some(BossFightChange::On(boss)) => log_line(&format!(
-            "boss fight: on, boss is {} (max hp {})",
-            enemy_id_text(boss.id),
-            boss.max_hp
-        )),
+        Some(BossFightChange::On(boss)) => {
+            BOSS_FIGHTS_STARTED.fetch_add(1, Ordering::Relaxed);
+            log_line(&format!(
+                "boss fight: on, boss is {} (max hp {})",
+                enemy_id_text(boss.id),
+                boss.max_hp
+            ));
+        }
         Some(BossFightChange::Off) => log_line("boss fight: off (phase changed)"),
         None => {}
     }

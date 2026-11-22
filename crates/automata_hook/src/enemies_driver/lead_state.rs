@@ -1,5 +1,5 @@
 use automata_game::enemies::EnemyId;
-use automata_game::enemy_lead::{LeadFollower, PlaceLog, StartTally};
+use automata_game::enemy_lead::{BossStartLog, LeadFollower, PlaceLog, StartTally};
 
 /// One shared enemy as the last count found it on this copy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +20,7 @@ pub(super) struct LeadState {
     pub follower: LeadFollower,
     pub enemies: Vec<LedEnemy>,
     pub place_log: PlaceLog,
+    pub boss_starts: BossStartLog,
     pub first_pose_heard: bool,
     pub first_start_played: bool,
     pub first_place_written: bool,

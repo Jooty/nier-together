@@ -16,6 +16,7 @@ use crate::iroh_adapter::local_answer::{answer_local_lookups, bind_local_answer}
 use crate::iroh_adapter::local_lookup::LocalNetworkLookup;
 use crate::iroh_adapter::own_address::{relay_label, report_own_address};
 use crate::iroh_adapter::path_report::report_paths;
+use crate::iroh_adapter::relay_map::relay_map_with_typhon;
 use crate::iroh_adapter::{
     ALPN, BYE_CODE, CLOSE_WAIT_SECONDS, IrohConfig, KEY_PUBLISHED_WAIT, RELAY_CHOICE_WAIT_SECONDS,
     WORKER_THREADS,
@@ -231,7 +232,7 @@ impl Drop for IrohTransport {
 
 async fn bind_endpoint(config: IrohConfig) -> Result<Endpoint, NetError> {
     let builder = if config.use_relays_and_lookup {
-        Endpoint::builder(presets::N0)
+        Endpoint::builder(presets::N0).relay_mode(RelayMode::Custom(relay_map_with_typhon()))
     } else {
         Endpoint::builder(presets::Minimal).relay_mode(RelayMode::Disabled)
     };

@@ -1,6 +1,7 @@
 use crate::lobby::body_label;
 use crate::net::{LauncherEvent, MemberChange};
 use nt_launcher_core::version_difference_text;
+use replicant_proto::ScaleUpAsk;
 
 /// The launcher log's line for an event; a line that comes from a game names the game, since the log is
 /// the launcher's and not one game's.
@@ -62,6 +63,21 @@ pub fn describe_event(event: &LauncherEvent) -> String {
         LauncherEvent::CampaignCardReceived { card } => {
             format!("campaign: the host sent the card for {}", card.host.name)
         }
+        LauncherEvent::ScaleUpAnswered { yes, .. } => format!(
+            "your game answered the question about the guest's save: {}",
+            if *yes { "give them a copy" } else { "not now" }
+        ),
+        LauncherEvent::HostAsked { ask } => match ask {
+            ScaleUpAsk::Open { .. } => {
+                "the host is deciding whether to give you a copy of their save".to_owned()
+            }
+            ScaleUpAsk::Withdrawn { .. } => {
+                "the host's question about your save was withdrawn".to_owned()
+            }
+            ScaleUpAsk::NoSaveYet { .. } => {
+                "the host has no finished save to copy for you".to_owned()
+            }
+        },
         LauncherEvent::SeatReceived { transfer, seat, .. } => {
             format!(
                 "save transfer {transfer}: received whole ({} bytes)",
@@ -115,5 +131,6 @@ fn comes_from_the_game(event: &LauncherEvent) -> bool {
             | LauncherEvent::OwnGameReadiness { .. }
             | LauncherEvent::GameChangedSettings { .. }
             | LauncherEvent::GameSaved { .. }
+            | LauncherEvent::ScaleUpAnswered { .. }
     )
 }

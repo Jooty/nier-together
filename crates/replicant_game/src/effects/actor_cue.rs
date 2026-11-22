@@ -31,6 +31,7 @@ pub enum ActorCueCall {
     StopSound,
     StoneHandler,
     StoneBreak,
+    PlacedEffectEnded,
 }
 
 /// What the host knew when the game made an effect or a sound.
@@ -72,6 +73,7 @@ impl ActorCueCall {
             ActorCueKind::StopSound { .. } => Self::StopSound,
             ActorCueKind::TurnedToStone(_) => Self::StoneHandler,
             ActorCueKind::StoneBroken => Self::StoneBreak,
+            ActorCueKind::PlacedEffectEnded { .. } => Self::PlacedEffectEnded,
         }
     }
 }
@@ -187,8 +189,8 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
             "effect {} removed from {actor} (bone {bone}, all {all_matching})",
             cue.id
         ),
-        ActorCueKind::PlaceEffect { transform } => format!(
-            "effect {} made by {actor} at [{:.1}, {:.1}, {:.1}]",
+        ActorCueKind::PlaceEffect { transform, handle } => format!(
+            "effect {} made by {actor} at [{:.1}, {:.1}, {:.1}] (host handle {handle:#x})",
             cue.id, transform[3], transform[7], transform[11]
         ),
         ActorCueKind::Sound { position, .. } => format!(
@@ -203,6 +205,10 @@ pub fn actor_cue_text(actor: &str, cue: &ActorCue) -> String {
         ),
         ActorCueKind::StopSound { handle } => format!(
             "lasting sound {} of {actor} stopped (host handle {handle:#x})",
+            cue.id
+        ),
+        ActorCueKind::PlacedEffectEnded { handle } => format!(
+            "placed effect {} of {actor} ended (host handle {handle:#x})",
             cue.id
         ),
         ActorCueKind::StoneBroken => format!("{actor}'s statue broke"),

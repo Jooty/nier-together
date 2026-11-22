@@ -22,6 +22,7 @@ const NOT_FOUND_HOST_LOOKUP_PORT: u16 = 47_557;
 const NOT_FOUND_GUEST_LOOKUP_PORT: u16 = 47_558;
 const REFUSED_LOOKUP_PORT: u16 = 47_559;
 const KEY_JOIN_LOOKUP_PORT: u16 = 47_560;
+const TYPHON_TICKET_LOOKUP_PORT: u16 = 47_561;
 
 fn local_transport(local_lookup_port: u16) -> IrohTransport {
     IrohTransport::new(IrohConfig {
@@ -310,4 +311,39 @@ fn a_key_nobody_answers_for_is_not_found_and_says_why() {
     let mut guest_events = Vec::new();
     guest.poll(&mut guest_events);
     assert!(!connected(&guest_events));
+}
+
+#[test]
+fn the_relay_map_holds_the_typhon_relay_beside_the_default_relays() {
+    let default_relays = iroh::RelayMode::Default.relay_map();
+    let map = nt_net::relay_map_with_typhon();
+    let typhon: iroh::RelayUrl = nt_net::TYPHON_RELAY_URL
+        .parse()
+        .expect("the constant parses");
+    assert!(map.contains(&typhon));
+    assert!(
+        default_relays
+            .urls::<Vec<_>>()
+            .iter()
+            .all(|url| map.contains(url))
+    );
+    assert_eq!(map.len(), default_relays.len() + 1);
+}
+
+#[test]
+fn the_typhon_relay_is_named_in_the_log_line() {
+    let typhon: iroh::RelayUrl = nt_net::TYPHON_RELAY_URL
+        .parse()
+        .expect("the constant parses");
+    assert_eq!(nt_net::relay_label(&typhon), "nt-relay");
+}
+
+#[test]
+fn an_older_ticket_with_the_typhon_relay_as_home_relay_reads() {
+    let host = local_transport(TYPHON_TICKET_LOOKUP_PORT);
+    let typhon: iroh::RelayUrl = nt_net::TYPHON_RELAY_URL
+        .parse()
+        .expect("the constant parses");
+    let addr = EndpointAddr::new(key_of(&host)).with_relay_url(typhon);
+    assert!(nt_net::invite_reads(older_form_ticket(&addr).as_str()));
 }

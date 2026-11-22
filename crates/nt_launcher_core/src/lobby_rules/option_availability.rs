@@ -8,6 +8,7 @@ pub enum LobbyOption {
     PartyFrame,
     EnemyHealth,
     EnemyDamage,
+    AnyLook,
 }
 
 /// Distance and ping are shown inside the name tag, so they mean nothing while names are off.
@@ -17,6 +18,7 @@ pub fn option_available(options: &SessionOptions, option: LobbyOption) -> bool {
         LobbyOption::NamesOverPlayers
         | LobbyOption::PartyFrame
         | LobbyOption::EnemyHealth
-        | LobbyOption::EnemyDamage => true,
+        | LobbyOption::EnemyDamage
+        | LobbyOption::AnyLook => true,
     }
 }

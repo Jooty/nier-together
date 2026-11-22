@@ -341,6 +341,8 @@ fn every_jump_point_has_the_stat_level_of_its_row() {
         (410, 42),
         (420, 42),
         (430, 42),
+        (440, 42),
+        (450, 42),
     ] {
         let point = StoryJumpPoint::from_id(id).expect("the id is a point");
         assert_eq!(jump_stat_level(point), level, "R-{id:03}");
@@ -397,10 +399,44 @@ fn the_watcher_reports_only_changes() {
 #[test]
 fn the_level_check_waits_for_the_new_phase_to_settle() {
     let settled = LEVEL_CHECK_SETTLE_MS;
-    assert!(!level_check_is_due("A", "A", true, settled));
-    assert!(!level_check_is_due("A", "B", false, settled));
-    assert!(!level_check_is_due("A", "B", true, settled - 1));
-    assert!(level_check_is_due("A", "B", true, settled));
+    assert!(!level_check_is_due("A", "A", false, true, settled));
+    assert!(!level_check_is_due("A", "B", false, false, settled));
+    assert!(!level_check_is_due("A", "B", false, true, settled - 1));
+    assert!(level_check_is_due("A", "B", false, true, settled));
+}
+
+#[test]
+fn a_jump_into_the_phase_the_player_is_in_is_checked_once_the_map_has_reloaded() {
+    let settled = LEVEL_CHECK_SETTLE_MS;
+    assert!(!level_check_is_due("A", "A", false, true, settled));
+    assert!(!level_check_is_due("A", "A", true, false, settled));
+    assert!(!level_check_is_due("A", "A", true, true, settled - 1));
+    assert!(level_check_is_due("A", "A", true, true, settled));
+}
+
+#[test]
+fn the_part_2_start_jump_gives_and_equips_the_two_handed_sword_the_story_gives() {
+    let steps = loadout_steps(StoryJumpPoint::Part2Start);
+    let two_handed_given = steps
+        .iter()
+        .position(|step| *step == JumpStep::SetItem { id: 1020, count: 1 })
+        .expect("two-handed sword given");
+    let spear_given = steps
+        .iter()
+        .position(|step| *step == JumpStep::SetItem { id: 1040, count: 1 });
+    let one_handed_equipped = steps
+        .iter()
+        .position(|step| *step == JumpStep::EquipWeapon { id: 1109 })
+        .expect("one-handed sword equipped");
+    let two_handed_equipped = steps
+        .iter()
+        .position(|step| *step == JumpStep::EquipWeapon { id: 1020 })
+        .expect("two-handed sword equipped");
+    assert!(spear_given.is_some());
+    assert!(two_handed_given < two_handed_equipped);
+    assert!(one_handed_equipped < two_handed_equipped);
+    let later = loadout_steps(StoryJumpPoint::Part2ManorCourtyard);
+    assert!(later.contains(&JumpStep::EquipWeapon { id: 1020 }));
 }
 
 #[test]
@@ -1203,17 +1239,27 @@ fn the_boss_fight_10_jump_enters_the_library_at_point_one_and_places_nobody() {
 }
 
 #[test]
-fn the_boss_fight_11_jump_has_the_first_library_fight_won_and_the_intro_chain_left_to_the_stage_start()
- {
+fn the_boss_fight_11_jump_has_the_boss_900_fight_behind_it_and_the_second_library_fight_armed() {
     let steps = loadout_steps(StoryJumpPoint::LibraryBoss11);
-    let (flags, _, _) = final_story_state(steps.clone());
-    for id in [541, 549, 550, 551, 552] {
+    let (flags, _, snow) = final_story_state(steps.clone());
+    for id in [541, 549, 550, 551, 552, 554] {
         assert_eq!(flags.get(&id), Some(&true), "{id}");
     }
-    for id in [553, 554, 555, 556] {
+    for id in [553, 555, 556] {
         assert_ne!(flags.get(&id), Some(&true), "{id}");
     }
+    assert!(snow.contains(&1071));
     assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+}
+
+#[test]
+fn the_boss_fight_11_jump_starts_where_the_boss_900_jump_does_not() {
+    let (before, _, before_snow) = final_story_state(loadout_steps(StoryJumpPoint::LibraryBoss10));
+    let (after, _, after_snow) = final_story_state(loadout_steps(StoryJumpPoint::LibraryBoss11));
+    assert_ne!(before.get(&554), Some(&true));
+    assert_eq!(after.get(&554), Some(&true));
+    assert!(!before_snow.contains(&1071));
+    assert!(after_snow.contains(&1071));
 }
 
 #[test]
@@ -1274,6 +1320,169 @@ fn the_part_2_start_jump_lands_inside_the_part_2_watch_stretch() {
 }
 
 #[test]
+fn the_part_2_manor_courtyard_jump_has_every_story_change_the_l42_host_sent_from_the_part_2_start_to_the_arrival()
+ {
+    let (flags, counters, snow) =
+        final_story_state(loadout_steps(StoryJumpPoint::Part2ManorCourtyard));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    for id in [627, 1368, 628, 74, 630, 142, 631, 646, 1332, 115, 647] {
+        assert!(flag_on(id), "{id}");
+    }
+    assert_eq!(flags.get(&1437), Some(&false));
+    assert_eq!(flags.get(&1441), Some(&false));
+    assert_eq!(counters.get(&100), Some(&255));
+    assert_eq!(counters.get(&101), Some(&255));
+    assert!(snow.contains(&1071));
+}
+
+#[test]
+fn the_part_2_manor_courtyard_jump_leaves_out_what_the_manor_writes_after_the_arrival() {
+    let (flags, _, snow) = final_story_state(loadout_steps(StoryJumpPoint::Part2ManorCourtyard));
+    for id in [105, 1433, 136, 648, 649, 650, 651, 666, 1412] {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert!(!snow.contains(&1076));
+}
+
+#[test]
+fn the_part_2_manor_courtyard_jump_ends_with_the_mp_step_and_changes_nothing_of_the_part_2_start_jump_before_it()
+ {
+    let before = loadout_steps(StoryJumpPoint::Part2Start);
+    let steps = loadout_steps(StoryJumpPoint::Part2ManorCourtyard);
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+    assert_eq!(steps[..before.len() - 1], before[..before.len() - 1]);
+}
+
+#[test]
+fn the_part_2_manor_courtyard_jump_enters_the_manor_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::Part2ManorCourtyard);
+    assert_eq!(name, "B_SOUTH_MANSION_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::Part2ManorCourtyard, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::Part2ManorCourtyard, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_12_jump_has_every_story_change_the_l49_host_sent_up_to_the_fight_arrival() {
+    let (flags, counters, snow) = final_story_state(loadout_steps(StoryJumpPoint::Part2Boss12));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    for id in [647, 105, 1433, 136, 648, 649, 109, 650, 666, 651, 652, 665] {
+        assert!(flag_on(id), "{id}");
+    }
+    assert_eq!(flags.get(&1332), Some(&false));
+    assert!(snow.contains(&1076));
+    assert!(snow.contains(&1075));
+    assert!(!snow.contains(&1074));
+    assert_eq!(counters.get(&100), Some(&255));
+}
+
+#[test]
+fn the_boss_fight_12_jump_has_no_retry_checkpoint_flag_on_and_not_the_fight_started_flag() {
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2Boss12));
+    for id in 1401..=1420 {
+        assert_ne!(flags.get(&id), Some(&true), "{id}");
+    }
+    assert_ne!(flags.get(&653), Some(&true));
+}
+
+#[test]
+fn the_boss_fight_12_jump_ends_with_the_mp_step_and_changes_nothing_of_the_courtyard_jump_before_it()
+ {
+    let before = loadout_steps(StoryJumpPoint::Part2ManorCourtyard);
+    let steps = loadout_steps(StoryJumpPoint::Part2Boss12);
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+    assert_eq!(steps[..before.len() - 1], before[..before.len() - 1]);
+}
+
+#[test]
+fn the_boss_fight_12_jump_enters_the_second_underground_floor_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::Part2Boss12);
+    assert_eq!(name, "B_SOUTH_UNDERGROUND_02");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::Part2Boss12, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::Part2Boss12, false).is_none());
+}
+
+#[test]
+fn the_boss_fight_13_jump_has_every_story_change_the_l49_host_sent_from_boss_fight_12_to_the_library()
+ {
+    let (flags, counters, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2Boss13));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    for id in [111, 653, 126, 654, 677, 652, 665] {
+        assert!(flag_on(id), "{id}");
+    }
+    assert_eq!(flags.get(&136), Some(&false));
+    assert_ne!(flags.get(&678), Some(&true));
+    assert_ne!(flags.get(&679), Some(&true));
+    assert_eq!(counters.get(&73), Some(&1));
+    assert_eq!(counters.get(&74), Some(&5));
+}
+
+#[test]
+fn the_boss_fight_13_jump_enters_the_part_2_library_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::Part2Boss13);
+    assert_eq!(name, "B_CENTER_LIBRARY_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::Part2Boss13, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::Part2Boss13, false).is_none());
+}
+
+#[test]
+fn the_outside_the_house_jump_has_every_story_change_the_l49_host_sent_up_to_leaving_the_house() {
+    let (flags, counters, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2OutsideHouse));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    for id in [678, 679, 680, 125, 681, 1369, 682, 654, 677] {
+        assert!(flag_on(id), "{id}");
+    }
+    assert_eq!(flags.get(&1433), Some(&false));
+    assert_ne!(flags.get(&683), Some(&true));
+    assert_eq!(counters.get(&100), Some(&3));
+    assert_eq!(counters.get(&101), Some(&3));
+}
+
+#[test]
+fn the_outside_the_house_jump_ends_with_the_mp_step_and_changes_nothing_of_boss_fight_13_before_it()
+{
+    let before = loadout_steps(StoryJumpPoint::Part2Boss13);
+    let steps = loadout_steps(StoryJumpPoint::Part2OutsideHouse);
+    assert_eq!(steps.last(), Some(&JumpStep::MpFullMode { on: false }));
+    assert_eq!(steps[..before.len() - 1], before[..before.len() - 1]);
+}
+
+#[test]
+fn the_outside_the_house_jump_enters_the_part_2_village_at_point_one_and_places_nobody() {
+    let (name, point) = destination(StoryJumpPoint::Part2OutsideHouse);
+    assert_eq!(name, "B_CENTER_VILLAGE_01");
+    assert_eq!(point, 1);
+    assert!(PhaseEntry::find(name).is_some());
+    assert!(arrival_spot(StoryJumpPoint::Part2OutsideHouse, true).is_none());
+    assert!(arrival_spot(StoryJumpPoint::Part2OutsideHouse, false).is_none());
+}
+
+#[test]
+fn the_part_2_jumps_before_the_house_land_inside_the_part_2_watch_stretch_and_outside_it_the_guest_plays()
+ {
+    for (point, phase) in [
+        (StoryJumpPoint::Part2ManorCourtyard, "B_SOUTH_MANSION_01"),
+        (StoryJumpPoint::Part2Boss12, "B_SOUTH_UNDERGROUND_02"),
+        (StoryJumpPoint::Part2Boss13, "B_CENTER_LIBRARY_01"),
+    ] {
+        let (flags, _, _) = final_story_state(loadout_steps(point));
+        let flag_on = |id: u16| flags.get(&id) == Some(&true);
+        assert!(
+            stretch_the_story_is_inside(phase, flag_on).is_some(),
+            "{phase}"
+        );
+    }
+    let (flags, _, _) = final_story_state(loadout_steps(StoryJumpPoint::Part2OutsideHouse));
+    let flag_on = |id: u16| flags.get(&id) == Some(&true);
+    assert!(stretch_the_story_is_inside("B_CENTER_VILLAGE_01", flag_on).is_none());
+}
+
+#[test]
 fn the_library_jumps_land_inside_no_host_led_stretch() {
     for point in [StoryJumpPoint::LibraryBoss10, StoryJumpPoint::LibraryBoss11] {
         let (flags, _, _) = final_story_state(loadout_steps(point));
@@ -1299,7 +1508,7 @@ fn the_restore_point_is_made_after_the_placement_read_back_and_the_level_check()
     let (from, to) = ("A_TOKYO_FIELD_01", "A_CENTER_VILLAGE_01");
     let placed_at = LEVEL_CHECK_SETTLE_MS;
     assert!(arrival_is_due(from, to, true, true, placed_at));
-    assert!(level_check_is_due(from, to, true, placed_at));
+    assert!(level_check_is_due(from, to, false, true, placed_at));
     assert!(!restore_point_is_due(from, to, true, true, placed_at));
     let read_back_at = placed_at + PLACEMENT_READ_BACK_AFTER_MS;
     assert!(RESTORE_POINT_WAITS_AFTER_PHASE_CHANGE_MS >= read_back_at);

@@ -277,3 +277,54 @@ fn a_cut_load_alone_does_not_start_the_scene_before_the_grace() {
         FollowStep::Wait
     );
 }
+
+#[test]
+fn a_pending_follow_is_dropped_when_the_host_scene_ends_before_the_guest_enters() {
+    let mut watch = watch_with_pending(15_597);
+    watch.set_host_in_scene(true);
+    assert_eq!(watch.step(false, false, false, 15_630), FollowStep::Wait);
+    watch.set_host_in_scene(false);
+    assert_eq!(
+        watch.step(false, false, false, 17_598),
+        FollowStep::HostSceneEnded { waited_ms: 2_001 }
+    );
+    assert!(!watch.has_pending());
+    assert_eq!(watch.step(false, false, false, 18_598), FollowStep::Idle);
+}
+
+#[test]
+fn l51_replay_never_injects_after_the_host_left_the_scene() {
+    let mut watch = watch_with_pending(15_597);
+    let mut injected = false;
+    for now in (15_600..19_000).step_by(50) {
+        watch.set_host_in_scene((15_630..17_598).contains(&now));
+        injected |= matches!(
+            watch.step(false, false, false, now),
+            FollowStep::Inject { .. }
+        );
+    }
+    assert!(!injected);
+}
+
+#[test]
+fn a_host_that_never_showed_in_a_scene_does_not_drop_the_follow() {
+    let mut watch = watch_with_pending(1_000);
+    watch.set_host_in_scene(false);
+    assert_eq!(watch.step(false, false, false, 1_500), FollowStep::Wait);
+    assert!(matches!(
+        watch.step(false, false, false, 1_000 + SCENE_FOLLOW_GRACE_MS),
+        FollowStep::Inject { .. }
+    ));
+}
+
+#[test]
+fn an_injected_follow_is_not_dropped_by_the_host_leaving() {
+    let mut watch = watch_with_pending(1_000);
+    watch.set_host_in_scene(true);
+    assert!(matches!(
+        watch.step(false, false, false, 1_000 + SCENE_FOLLOW_GRACE_MS),
+        FollowStep::Inject { .. }
+    ));
+    watch.set_host_in_scene(false);
+    assert_eq!(watch.step(false, false, false, 4_100), FollowStep::Wait);
+}

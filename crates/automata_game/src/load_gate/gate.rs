@@ -115,11 +115,14 @@ impl LoadGate {
 
     pub fn new(
         start_together: bool,
+        started_alone: bool,
         in_a_session: bool,
         hold_installed: bool,
     ) -> (Self, Vec<String>) {
         let off = if !start_together {
             Some("the setting start_together is off")
+        } else if started_alone {
+            Some("the start had nobody else in the lobby")
         } else if !in_a_session {
             Some("there is no session")
         } else if !hold_installed {

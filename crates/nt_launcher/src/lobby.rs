@@ -2,11 +2,13 @@ mod body_choice;
 mod campaign_start;
 mod character_pick;
 mod follow;
+mod guest_start;
 mod guest_wait;
 mod host_options;
 mod name;
 mod plan;
 mod players;
+mod seat_question;
 mod slots;
 mod start;
 
@@ -21,11 +23,13 @@ pub use follow::{
     FollowNotice, GAME_QUIT_GRACE_SECONDS, HostClosedInputs, LastLaunch, QuitFallback, QuitStep,
     host_game_closed, own_close_notice, relaunch_choice,
 };
+pub use guest_start::{GUEST_WAIT_FOR_SEAT_SECONDS, GuestStartStep, GuestStartWait};
 pub use guest_wait::{GUEST_WAIT_FOR_HOST_GAME_SECONDS, GuestWaitStep, GuestWaiting};
 pub use host_options::host_options_editable;
 pub use name::{MAX_NAME_BYTES, NameError, validate_name};
 pub use nt_launcher_core::{PlayerStatus, ReadyInputs, lobby_ready, player_status};
 pub use plan::{LaunchMode, resolve_mode};
 pub use players::{PLAYER_TABLE_HEADERS, PlayerRole, PlayerRow, RowInputs, player_rows};
+pub use seat_question::{QuestionStep, SeatQuestion};
 pub use slots::new_game_slot;
-pub use start::{guest_accepts_start, start_enabled};
+pub use start::{guest_accepts_start, start_enabled, started_with_nobody_else};

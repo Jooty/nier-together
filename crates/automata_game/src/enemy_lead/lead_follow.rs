@@ -1,9 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::enemies::EnemyId;
 use crate::enemy_lead::{
     ENEMY_IS_HELD_ONCE_IT_HAS_LIVED_HERE_MS, EnemyLead, EnemyPose,
     HOLD_LIFTS_AFTER_THE_HOSTS_SILENCE_MS, HOST_STARTS_LEFT_TO_THE_DEFEAT_PATH, MOST_ENEMIES_LED,
+    MOST_STARTS_WAITING_TO_BE_PLAYED_PER_ENEMY, QueuedStart,
 };
 
 /// The guest's side of the host's enemy stream: the last pose heard per enemy, which of its
@@ -12,6 +13,22 @@ use crate::enemy_lead::{
 pub struct LeadFollower {
     heard: HashMap<EnemyId, HeardPose>,
     bodies: HashMap<EnemyId, LocalBody>,
+    queues: HashMap<EnemyId, StartQueue>,
+}
+
+/// A state start of the host to play on this copy; `number` is none when it is the latest pose's
+/// state played because no queued start covered it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StartToPlay {
+    pub number: Option<u32>,
+    pub state: [i32; 4],
+    pub ago_ms: u16,
+}
+
+#[derive(Debug, Clone, Default)]
+struct StartQueue {
+    newest_heard: Option<u32>,
+    waiting: VecDeque<QueuedStart>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +57,20 @@ impl LeadFollower {
                     heard_at_ms: now_ms,
                 },
             );
+        }
+        for start in &lead.starts {
+            let queue = self.queues.entry(start.id).or_default();
+            let is_new = queue
+                .newest_heard
+                .is_none_or(|newest| start.number.wrapping_sub(newest) as i32 > 0);
+            if !is_new {
+                continue;
+            }
+            queue.newest_heard = Some(start.number);
+            queue.waiting.push_back(*start);
+            while queue.waiting.len() > MOST_STARTS_WAITING_TO_BE_PLAYED_PER_ENEMY {
+                queue.waiting.pop_front();
+            }
         }
     }
 
@@ -83,25 +114,48 @@ impl LeadFollower {
             })
     }
 
-    /// The host's state to start on this copy's body, once per state start the host counted. A
-    /// defeat state is left to the defeat the host tells, which starts it here by itself.
-    pub fn start_to_play(&mut self, id: EnemyId, now_ms: u64) -> Option<[i32; 4]> {
+    /// The next host state start to play, in the host's order, one per call; with none queued,
+    /// the latest pose's state once per start counted. A defeat state is left to the defeat the
+    /// host tells, which starts it here by itself.
+    pub fn start_to_play(&mut self, id: EnemyId, now_ms: u64) -> Option<StartToPlay> {
         if !self.holds(id, now_ms) {
+            if let Some(queue) = self.queues.get_mut(&id) {
+                queue.waiting.clear();
+            }
             return None;
         }
         let pose = self.fresh_pose(id, now_ms)?;
         let body = self.bodies.get_mut(&id)?;
+        while let Some(start) = self
+            .queues
+            .get_mut(&id)
+            .and_then(|queue| queue.waiting.pop_front())
+        {
+            body.starts_played = Some(start.number);
+            if !HOST_STARTS_LEFT_TO_THE_DEFEAT_PATH.contains(&start.state[0]) {
+                return Some(StartToPlay {
+                    number: Some(start.number),
+                    state: start.state,
+                    ago_ms: start.ago_ms,
+                });
+            }
+        }
         if body.starts_played == Some(pose.starts) {
             return None;
         }
         body.starts_played = Some(pose.starts);
-        (!HOST_STARTS_LEFT_TO_THE_DEFEAT_PATH.contains(&pose.state[0])).then_some(pose.state)
+        (!HOST_STARTS_LEFT_TO_THE_DEFEAT_PATH.contains(&pose.state[0])).then_some(StartToPlay {
+            number: None,
+            state: pose.state,
+            ago_ms: 0,
+        })
     }
 
     /// Drops the bodies of enemies this copy no longer holds, and poses of enemies it holds no
     /// body for that the host has not told for as long as the hold lasts.
     pub fn keep_only(&mut self, ids: &[EnemyId], now_ms: u64) {
         self.bodies.retain(|id, _| ids.contains(id));
+        self.queues.retain(|id, _| ids.contains(id));
         self.heard.retain(|id, heard| {
             ids.contains(id)
                 || now_ms.saturating_sub(heard.heard_at_ms) < HOLD_LIFTS_AFTER_THE_HOSTS_SILENCE_MS
@@ -111,5 +165,6 @@ impl LeadFollower {
     pub fn forget(&mut self) {
         self.heard.clear();
         self.bodies.clear();
+        self.queues.clear();
     }
 }

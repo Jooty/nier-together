@@ -4,7 +4,7 @@ use nt_hook::diagnostics::{LogSettings, configure};
 use nt_hook::entry::handle_dll_event;
 use nt_hook::hook_env::read_env;
 use windows_sys::Win32::Foundation::{HINSTANCE, TRUE};
-use windows_sys::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
+use windows_sys::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
 use windows_sys::core::BOOL;
 
 use crate::BUILD_COMMIT;
@@ -12,6 +12,7 @@ use crate::game_hooks::install_second_copy_guard;
 use crate::log_settings::{
     LOG_ENV, absolute_log_path, log_from_config_beside_game, resolve_log_path,
 };
+use crate::look_driver::restore_on_detach;
 use crate::overlay::install_when_renderer_ready;
 
 #[expect(
@@ -26,6 +27,9 @@ pub extern "system" fn DllMain(_module: HINSTANCE, reason: u32, reserved: *mut c
     });
     if reason == DLL_PROCESS_ATTACH {
         install_second_copy_guard();
+    }
+    if reason == DLL_PROCESS_DETACH {
+        restore_on_detach();
     }
     handle_dll_event(reason, reserved, install_when_renderer_ready);
     TRUE

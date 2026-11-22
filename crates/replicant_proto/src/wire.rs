@@ -3,6 +3,7 @@ mod attack_gauge;
 mod block_held;
 mod block_moved;
 mod bomb_sync;
+mod boss_hit_on_nier;
 mod bullet_flight;
 mod callback_fired;
 mod campaign_card;
@@ -48,6 +49,7 @@ mod power_model;
 mod prologue_level;
 mod ridden_boar;
 mod rule_room_break;
+mod scale_up;
 mod scene_follow;
 mod script_message;
 mod script_roll;
@@ -66,6 +68,7 @@ mod talk_choice;
 mod talk_window_size;
 mod teleport_here;
 mod tutorial_prompt;
+mod watched_camera_call;
 mod weapon_state;
 mod world_object;
 
@@ -81,6 +84,7 @@ pub use attack_gauge::{
 pub use block_held::BlockHeld;
 pub use block_moved::BlockMoved;
 pub use bomb_sync::{BombBlast, WallBroken};
+pub use boss_hit_on_nier::BossHitOnNier;
 pub use bullet_flight::{
     BULLET_EFFECT_SLOTS, BULLET_STYLE_FLOATS, BULLET_TRANSFORM_FLOATS, BulletFlight, BulletLook,
     MAX_BULLET_AXIS_ABS, MAX_BULLET_EFFECT_ID, MAX_BULLET_INSTANCE, MAX_BULLET_SPEED_ABS,
@@ -169,6 +173,10 @@ pub use prologue_level::{
 };
 pub use ridden_boar::{MAX_RIDDEN_BOAR_OFFSET_ABS, RiddenBoar};
 pub use rule_room_break::RuleRoomBreak;
+pub use scale_up::{
+    SCALE_UP_NO_LABEL, SCALE_UP_YES_LABEL, ScaleUpAnswer, ScaleUpAsk, scale_up_body,
+    scale_up_no_save_yet_line, scale_up_title,
+};
 pub use scene_follow::{
     MAX_SCENE_CUT_NAME_BYTES, MAX_SCENE_FOLLOW_CALLBACKS, SceneCut, SceneFollow,
 };
@@ -203,10 +211,13 @@ pub use talk_choice::{ChoiceHover, TalkChoice, TalkChoiceKind};
 pub use talk_window_size::TalkWindowSize;
 pub use teleport_here::TeleportHere;
 pub use tutorial_prompt::{FIRST_TUTORIAL_ID, LAST_TUTORIAL_ID, TutorialPrompt};
+pub use watched_camera_call::{
+    WATCHED_CAMERA_CALL_NUMBERS, WatchedCameraCall, WatchedCameraNative,
+};
 pub use weapon_state::WeaponState;
 pub use world_object::{WorldObjectBroken, WorldObjectKey, WorldObjectMoved};
 
-pub const PROTOCOL_VERSION: u16 = 81;
+pub const PROTOCOL_VERSION: u16 = 88;
 pub const NO_SIDE_VIEW_DOOR: u16 = 0;
 pub const MAX_BLOCK_ID: u16 = 1023;
 pub const ENEMY_SPEC_BYTES: usize = 160;
@@ -230,7 +241,7 @@ pub const ENEMY_GROUP_COUNT: u16 = 0x400;
 pub const COMPANION_ENEMY_GROUP: u16 = ENEMY_GROUP_COUNT + 1;
 pub const COMPANION_SLOT_COUNT: u16 = 3;
 pub const MAX_ENEMIES_PER_SNAPSHOT: usize = 5;
-pub const MAX_ENEMY_SNAPSHOT_PARTS: u8 = 16;
+pub const MAX_ENEMY_SNAPSHOT_PARTS: u8 = 32;
 pub const MAX_ENEMY_IDS_PER_LIST_PART: usize = 64;
 pub const MAX_ENEMY_ID_LIST_PARTS: u8 = 8;
 pub const NPC_UNGROUPED: u16 = u16::MAX;

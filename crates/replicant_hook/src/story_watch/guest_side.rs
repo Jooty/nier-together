@@ -2,15 +2,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use replicant_game::Replicant;
+use replicant_game::offsets::{PARTNER_ACTIVE_FLAG_OFFSET, PARTNER_KAINE_ACTOR_RVA};
 use replicant_game::rule_rooms::BreakerBodyHold;
 use replicant_game::stay_together::FollowRole;
 use replicant_game::story_watch::{
-    GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange, WATCH_LINE_EVERY_MS, WatchEnd,
-    WatchFacts, WatchStep, camera_line, ended_line, started_line, stretch_started_line,
-    watch_hold_line, watch_let_go_line, watching_host_text,
+    AERIE_EXIT_GAME_FLAG, GUEST_WORD_RESENT_EVERY_MS, GuestWatch, RemovalChange,
+    WATCH_LINE_EVERY_MS, WatchEnd, WatchFacts, WatchStep, camera_line, ended_line, started_line,
+    stretch_started_line, watch_hold_line, watch_let_go_line, watching_host_text,
 };
-use replicant_proto::{GuestWatches, Message};
+use replicant_game::{GameMemory, Replicant};
+use replicant_proto::{GuestWatches, Message, StoryArray};
 
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
@@ -18,10 +19,13 @@ use crate::event_log::{clear_persistent_event, set_persistent_event};
 use crate::memory::InProcessMemory;
 use crate::net::{self, NetState, net_clock_ms};
 use crate::slot_zero::{read_slot_zero, write_slot_zero};
+use crate::story_progress::with_host_story;
 use crate::story_watch::body::{Placed, WatchedBody};
 use crate::story_watch::forget_removal;
 use crate::story_watch::host_side::{forget_guest, tick_host};
-use crate::story_watch::removal_natives::{step_removal, story_has_taken_her};
+use crate::story_watch::removal_natives::{
+    restore_aerie_exit_removal, step_removal, story_has_taken_her, taken_at_the_aerie_exit,
+};
 use crate::story_watch::setting::guest_watches_setting;
 
 const HOST_POSITION_FRESH_FOR: Duration = Duration::from_millis(1_500);
@@ -120,6 +124,9 @@ fn tick_guest(
     in_session: bool,
     host_name: Option<&str>,
 ) {
+    if in_session {
+        restore_removal_after_a_load(build);
+    }
     let game = Replicant::new(InProcessMemory::new(build));
     let phase = game.current_phase().ok();
     let mut guest = GUEST.lock().unwrap_or_else(PoisonError::into_inner);
@@ -131,6 +138,7 @@ fn tick_guest(
         setting_on: guest_watches_setting(),
         guest_in_session: in_session,
         story_has_taken_her: story_has_taken_her(),
+        taken_at_the_aerie_exit: taken_at_the_aerie_exit(),
         host_leads_a_stretch: crate::host_led_stretch::guest_watches_a_stretch(),
         pack: &pack,
     };
@@ -149,6 +157,11 @@ fn tick_guest(
     }
     THIS_GAME_IS_WATCHING.store(guest.watch.watching(), Ordering::Relaxed);
     hold_the_body_still(build, guest.watch.watching());
+    super::watched_camera::apply_the_hosts_camera_calls(
+        build,
+        net,
+        replicant_game::stay_together::local_phase_index(&game),
+    );
     if guest.watch.watching() {
         keep_watching(build, &mut guest, phase.as_deref(), host);
     }
@@ -209,6 +222,7 @@ fn end_without_session(build: &VerifiedBuild) {
         setting_on: guest_watches_setting(),
         guest_in_session: false,
         story_has_taken_her: false,
+        taken_at_the_aerie_exit: false,
         host_leads_a_stretch: false,
         pack: "",
     };
@@ -251,4 +265,21 @@ fn tell_the_host(net: &net::NetThread, guest: &mut GuestState) {
     }
     net.send_relayed(Message::GuestWatches(GuestWatches { watching }));
     guest.last_word = Some((watching, now));
+}
+
+fn restore_removal_after_a_load(build: &VerifiedBuild) {
+    let aerie_exit_flag_on =
+        with_host_story(|arrays| arrays.flag(StoryArray::GameFlags, AERIE_EXIT_GAME_FLAG))
+            .unwrap_or(false);
+    let memory = InProcessMemory::new(build);
+    let companion_inactive = memory
+        .read_u8(
+            memory.module_base() + u64::from(PARTNER_KAINE_ACTOR_RVA) + PARTNER_ACTIVE_FLAG_OFFSET,
+        )
+        .is_ok_and(|byte| byte == 0);
+    if restore_aerie_exit_removal(aerie_exit_flag_on, companion_inactive) {
+        log_line(&format!(
+            "watching: no story call seen yet, but the host's flag g{AERIE_EXIT_GAME_FLAG} is on and the companion is inactive here: the Aerie-exit removal stands"
+        ));
+    }
 }

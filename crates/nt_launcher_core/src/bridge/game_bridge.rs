@@ -4,7 +4,9 @@ use std::time::Instant;
 
 use nt_net::{LocalLinkTransport, ProgressBoard};
 use nt_wire::SessionRules;
-use replicant_proto::{CampaignCard, LobbyReady, PartnerBody, PlayerSettings, SessionOptions};
+use replicant_proto::{
+    CampaignCard, LobbyReady, PartnerBody, PlayerSettings, ScaleUpAsk, SessionOptions,
+};
 
 use crate::{
     LauncherConfig, LauncherEvent, LinkStatus, NetError, SessionEndCause, TransportFactory,
@@ -40,6 +42,9 @@ pub trait GameBridge: Send {
     fn send_seat(&mut self, slot: u8, seat: Vec<u8>, transfer: u32);
     fn quit_game(&mut self);
     fn start_lobby(&mut self, mode: u8);
+    fn hold_late_starts(&mut self, hold: bool);
+    fn release_start(&mut self, slot: u8, mode: Option<u8>);
+    fn send_scale_up_ask(&mut self, ask: ScaleUpAsk);
     fn remove_member(&mut self, slot: u8);
     fn set_name(&mut self, name: &str);
     fn pump(&mut self, now: Instant);

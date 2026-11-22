@@ -12,6 +12,7 @@ fn ready_inputs() -> FirstSaveInputs<'static> {
         in_play: true,
         phase: FIRST_SAVE_PHASE,
         save_manager_busy: false,
+        slot_holds_a_save: false,
     }
 }
 
@@ -20,6 +21,7 @@ fn hold_inputs(partner_readiness: GameReadiness) -> TitleHoldInputs {
         waited_ms: 1_000,
         launcher_linked: true,
         partner_readiness,
+        started_alone: false,
     }
 }
 
@@ -198,4 +200,36 @@ fn a_save_write_that_never_ends_times_out() {
         save_write_progress(true, true, SAVE_WRITE_TIMEOUT_MS),
         SaveWriteProgress::TimedOut
     );
+}
+
+#[test]
+fn a_start_with_nobody_else_never_holds_the_title() {
+    for partner_readiness in [GameReadiness::NotLinked, GameReadiness::Loading] {
+        let inputs = TitleHoldInputs {
+            launcher_linked: false,
+            started_alone: true,
+            ..hold_inputs(partner_readiness)
+        };
+        assert_eq!(title_hold(inputs), TitleHold::Release);
+    }
+}
+
+#[test]
+fn a_start_with_a_partner_in_the_lobby_keeps_every_old_hold() {
+    let inputs = hold_inputs(GameReadiness::NotLinked);
+    assert!(!inputs.started_alone);
+    assert_eq!(title_hold(inputs), TitleHold::Hold);
+}
+
+#[test]
+fn a_slot_that_already_holds_a_save_is_never_written_over() {
+    let mut gate = FirstSaveGate::new();
+    gate.arm(0);
+    let used = FirstSaveInputs {
+        slot_holds_a_save: true,
+        ..ready_inputs()
+    };
+    assert_eq!(gate.step(used, 10_000), FirstSaveStep::SlotInUse);
+    assert!(!gate.is_armed());
+    assert_eq!(gate.step(ready_inputs(), 20_000), FirstSaveStep::Done);
 }

@@ -49,6 +49,14 @@ impl ZoneVerdict {
             )),
         }
     }
+
+    pub fn is_announced(&self, this_game_is_watching: bool) -> bool {
+        match self {
+            Self::Allow => false,
+            Self::OnlyHostMayChange => !this_game_is_watching,
+            Self::WaitingFor(_) => true,
+        }
+    }
 }
 
 pub fn judge_zone_change(ask: &ZoneChangeAsk<'_>) -> ZoneVerdict {

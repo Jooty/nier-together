@@ -1,11 +1,13 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use replicant_game::Replicant;
+use replicant_game::offsets::ACTOR_DRAWN_FLAG_OFFSET;
 use replicant_game::puppet::{
     BodyInfo, LayerMotion, PuppetPose, RetirePlan, SpawnResult, body_info, distance_between,
     read_actor_draw_report, retire_plan,
 };
+use replicant_game::{GameMemory, Replicant};
 use replicant_proto::{PartnerActivity, PartnerBody, RiddenBoar, WeaponState};
 
 use crate::build_gate::VerifiedBuild;
@@ -23,6 +25,7 @@ use crate::puppet::weapon::PuppetWeapon;
 
 static REGISTRY: Mutex<Registry> = Mutex::new(Registry::new());
 const DRAW_REPORT_INTERVAL: Duration = Duration::from_secs(5);
+static PUPPET_HIDDEN_BY_US: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct Entry {
@@ -77,6 +80,35 @@ pub fn spawn_ghost(
     }
     game.playable_actor()?;
     register(build, &game, &mut registry, start, body_info(body), pack).map(SpawnResult::Created)
+}
+
+pub(crate) fn set_first_puppet_hidden(build: &VerifiedBuild, hidden: bool) {
+    let was_hidden = PUPPET_HIDDEN_BY_US.load(Ordering::Relaxed);
+    if !hidden && !was_hidden {
+        return;
+    }
+    let registry = REGISTRY.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(entry) = registry.entries.first() else {
+        return;
+    };
+    let mut memory = InProcessMemory::new(build);
+    if memory
+        .write_u8(
+            entry.puppet.actor() + ACTOR_DRAWN_FLAG_OFFSET,
+            u8::from(!hidden),
+        )
+        .is_err()
+    {
+        return;
+    }
+    PUPPET_HIDDEN_BY_US.store(hidden, Ordering::Relaxed);
+    if hidden != was_hidden {
+        log_line(if hidden {
+            "boss drive: the guest's puppet is hidden for the fight (drawn byte 0)"
+        } else {
+            "boss drive: the guest's puppet is shown again"
+        });
+    }
 }
 
 pub fn first_actor_address() -> Option<u64> {

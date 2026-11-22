@@ -18,6 +18,7 @@ mod party_frame;
 mod party_frame_tuning_panel;
 mod replicant_menu;
 mod replicant_overlay;
+mod scale_up_prompt;
 mod settings_section;
 mod spell_size_panel;
 mod status_lines;

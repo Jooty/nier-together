@@ -863,3 +863,77 @@ fn a_refused_retry_is_logged_as_a_running_count_not_every_frame() {
     ));
     assert!(has_line(&later, "refused again, 301 times so far"));
 }
+
+#[test]
+fn a_host_done_is_stamped_with_the_place_the_host_is_in_when_it_is_done() {
+    let mut host = machine_as(StoryStepsMode::On, JumpRole::Host);
+    host.note_live_place(place("B"));
+    host.on_own_done(&story_done(STEP_ID), 10);
+    let mut moved = readings(JumpRole::Host, 20);
+    moved.place = place("B");
+    moved.partner_place = place("B");
+    let step = host.step(&moved);
+    assert_eq!(tells(&step).len(), 1);
+    assert_eq!(tells(&step)[0].place, place("B"));
+    assert!(has_line(&step, "at 0x100 B"));
+}
+
+#[test]
+fn a_host_done_without_a_live_place_is_stamped_with_the_machines_place() {
+    let mut host = machine_as(StoryStepsMode::On, JumpRole::Host);
+    host.on_own_done(&story_done(STEP_ID), 10);
+    let step = host.step(&readings(JumpRole::Host, 20));
+    assert_eq!(tells(&step)[0].place, place("A"));
+}
+
+fn guest_that_followed_the_host_to_b(moved_at_ms: u64) -> StepsMachine {
+    let mut guest = machine_as(StoryStepsMode::On, JumpRole::Guest);
+    let mut moved = readings(JumpRole::Guest, moved_at_ms);
+    moved.place = place("B");
+    moved.partner_place = place("B");
+    guest.step(&moved);
+    guest
+}
+
+#[test]
+fn a_done_stamped_with_the_place_the_host_just_left_is_applied() {
+    let mut guest = guest_that_followed_the_host_to_b(100);
+    assert_eq!(
+        guest.on_own_done(&story_done(STEP_ID), 110),
+        StepVerdict::Refuse
+    );
+    let mut late = readings(JumpRole::Guest, 140);
+    late.place = place("B");
+    late.partner_place = place("B");
+    late.told = vec![host_done(1, STEP_ID)];
+    late.looks = vec![look(STEP_ID, StepActionState::Running)];
+    let step = guest.step(&late);
+    assert!(!has_line(&step, "kept until this game is there"));
+    assert!(has_line(&step, "the place the host just left"));
+    assert_eq!(step.set_done[0].why, SetDoneWhy::HostsDone);
+}
+
+#[test]
+fn a_done_for_the_place_the_host_left_long_ago_is_kept() {
+    let mut guest = guest_that_followed_the_host_to_b(100);
+    let mut late = readings(JumpRole::Guest, 100 + 2001);
+    late.place = place("B");
+    late.partner_place = place("B");
+    late.told = vec![host_done(1, STEP_ID)];
+    let step = guest.step(&late);
+    assert!(has_line(&step, "kept until this game is there"));
+}
+
+#[test]
+fn a_done_for_a_place_that_is_not_the_one_the_host_left_is_kept() {
+    let mut guest = guest_that_followed_the_host_to_b(100);
+    let mut late = readings(JumpRole::Guest, 140);
+    late.place = place("B");
+    late.partner_place = place("B");
+    late.told = vec![StoryStepDone {
+        place: place("C"),
+        ..host_done(1, STEP_ID)
+    }];
+    let step = guest.step(&late);
+    assert!(has_line(&step, "kept until this game is there"));
+}

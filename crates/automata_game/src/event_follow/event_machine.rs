@@ -5,8 +5,8 @@ use crate::event_follow::{
     MOST_SCRIPT_PLAY_REQUESTS_REMEMBERED, PARTNER_REPORT_STALE_FOR_A_SKIP_VOTE_MS, PartnerReport,
     PauseView, PlayVerdict, PlayedHere, PlayingHere, ProgressNotes, RunsForThePartner,
     SCRIPT_PLAY_REQUEST_COUNTS_FOR_ITS_START_MS, SeenEvents, SkipPrompt, SkipVerdict, SkipVote,
-    StartOrigin, VoteView, ended_here_line, replay_skipped_line, scene_ended_line,
-    scene_started_line, started_here_line,
+    StartOrigin, VoteView, ended_here_line, free_roam_scene_line, replay_skipped_line,
+    scene_ended_line, scene_started_line, started_here_line,
 };
 use crate::load_gate::StoryPlace;
 use crate::travel::JumpRole;
@@ -34,6 +34,7 @@ pub struct EventMachine {
     event_pause: EventPause,
     progress: ProgressNotes,
     scenes_started: u32,
+    free_roam_area_starts_held: Option<bool>,
 }
 
 impl EventMachine {
@@ -63,6 +64,11 @@ impl EventMachine {
     /// While this copy watches the host, the host's told event is started here with no grace.
     pub fn set_this_copy_watches(&mut self, watches: bool) {
         self.this_copy_watches = watches;
+    }
+
+    /// None outside free roam; in free roam, whether the area starts of event actions are held.
+    pub fn set_free_roam_area_starts_held(&mut self, free_roam_area_starts_held: Option<bool>) {
+        self.free_roam_area_starts_held = free_roam_area_starts_held;
     }
 
     /// The story script asked for an event to play (the call is not ours).
@@ -109,6 +115,10 @@ impl EventMachine {
         });
         step.logs.push(started_here_line(id, origin));
         step.logs.push(scene_started_line(self.scenes_started, id));
+        if let Some(area_starts_held) = self.free_roam_area_starts_held {
+            step.logs
+                .push(free_roam_scene_line(id, origin, area_starts_held));
+        }
         if origin.is_mirrored() {
             self.vote.event_started(id);
         }

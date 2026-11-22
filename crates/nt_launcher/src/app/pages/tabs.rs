@@ -8,6 +8,7 @@ use crate::app::pages::continue_game::draw_continue;
 use crate::app::pages::delete_saves_menu::draw_delete_saves_menu;
 use crate::app::pages::ended_lobby::draw_ended_lobby;
 use crate::app::pages::home::draw_home;
+use crate::app::pages::keyboard_mouse_dialog::draw_keyboard_mouse_dialog;
 use crate::app::pages::lobby::session_open;
 use crate::app::pages::logs::draw_logs;
 use crate::app::pages::map_dialog::draw_map_dialog;
@@ -155,6 +156,19 @@ pub fn draw(ui: &mut Ui, tab: &mut Tab, launcher: &mut Launcher, forms: &mut Net
         && launcher.scale_up_offered()
     {
         draw_scale_up_dialog(ui, launcher, forms);
+    }
+    if launcher.screen == Screen::Game {
+        if on_a_lobby_tab(*tab)
+            && !ended
+            && forms.console.is_none()
+            && !forms.map_dialog_open
+            && !launcher.scale_up_offered()
+            && launcher.keyboard_mouse_offer_due()
+        {
+            draw_keyboard_mouse_dialog(ui, launcher);
+        }
+    } else {
+        launcher.forget_controller_check();
     }
     if launcher.screen == Screen::Home {
         draw_delete_saves_menu(ui, launcher, forms);

@@ -12,6 +12,10 @@ mod game_link;
 mod home;
 #[path = "install.rs"]
 mod install;
+#[path = "keyboard_mouse_offer.rs"]
+mod keyboard_mouse_offer;
+#[path = "late_join.rs"]
+mod late_join;
 #[path = "lobby.rs"]
 mod lobby;
 #[path = "log_upload.rs"]
@@ -24,6 +28,8 @@ mod look;
 mod proton;
 #[path = "saves.rs"]
 mod saves;
+#[path = "scale_up_late.rs"]
+mod scale_up_late;
 #[path = "scratch/mod.rs"]
 mod scratch;
 #[path = "seat_files.rs"]

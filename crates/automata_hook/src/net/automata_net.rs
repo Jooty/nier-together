@@ -3,22 +3,29 @@ use std::time::{Duration, Instant};
 use automata_game::character::Character;
 use automata_game::enemy_lead::MOST_ENEMY_LEADS_WAITING;
 use automata_game::exe::{ExeVariant, exe_difference_line};
+use automata_game::late_join::joiner_waits_line;
 use automata_game::load_gate::StoryPlace;
+use automata_game::outfit_look::HOST_SLOT;
 use automata_game::partner::{BodySnapshot, partner_character_note};
-use automata_proto::{CharacterHello, LoadSignal, Message, PlayerState};
+use automata_game::partner_hud::shown_name;
+use automata_proto::{CharacterHello, LoadSignal, Message, PlayerLook, PlayerState};
 use nt_hook::diagnostics::log_line;
 use nt_hook::net::{LinkAccess, NetGame, NetState, PlayerOf, RemotePlayer, net_clock_ms};
 use nt_net::Channel;
 
+use crate::net::announced_lines::{push_announced_line, take_announced_lines_where};
 use crate::net::attendance::local_unattended;
 use crate::net::flight_report::local_flight_report;
-use crate::net::link_state::AutomataLinkState;
+use crate::net::link_state::{AutomataLinkState, NetShared};
 use crate::net::load_signal::{HeardLoadSignal, is_snapshot_without_body, local_load_signal};
-use crate::net::local_play::{ReadinessPacer, local_in_play, readiness_of};
+use crate::net::local_play::{ReadinessPacer, game_has_played, local_in_play, readiness_of};
 use crate::net::partner_watch::PartnerWatch;
 use crate::net::playing_event::local_playing_event;
+use crate::net::session_mode_view::SessionModeExt;
 use crate::net::story_place::local_story_place;
 use crate::net::watching::local_watching;
+
+const ANNOUNCEMENT_ENDINGS_AFTER_A_NAME: [&str; 2] = [" joined", " left"];
 
 #[derive(Debug)]
 pub struct AutomataNet {
@@ -27,6 +34,7 @@ pub struct AutomataNet {
     first_state_logged: bool,
     first_state_without_body_logged: bool,
     readiness: ReadinessPacer,
+    joins_count_as_late: fn() -> bool,
 }
 
 impl AutomataNet {
@@ -37,7 +45,13 @@ impl AutomataNet {
             first_state_logged: false,
             first_state_without_body_logged: false,
             readiness: ReadinessPacer::default(),
+            joins_count_as_late: game_has_played,
         }
+    }
+
+    pub fn with_late_joins_decided_by(mut self, joins_count_as_late: fn() -> bool) -> Self {
+        self.joins_count_as_late = joins_count_as_late;
+        self
     }
 
     fn on_partner_state(&mut self, link: &LinkAccess<'_, Self>, from: u8, state: PlayerState) {
@@ -45,6 +59,10 @@ impl AutomataNet {
             signal: state.load,
             heard_at_ms: net_clock_ms(),
         };
+        self.note_the_first_state_heard(link, from, state.load.without_body);
+        if self.keep_a_held_player_unseen(link, from, state.load.without_body) {
+            return;
+        }
         if state.load.without_body {
             self.on_partner_state_without_body(link, from, heard, state.place);
             return;
@@ -101,6 +119,61 @@ impl AutomataNet {
         }
     }
 
+    fn note_the_first_state_heard(
+        &self,
+        link: &LinkAccess<'_, Self>,
+        from: u8,
+        without_body: bool,
+    ) {
+        if let Some(player) = link.shared().players.get_mut(&from) {
+            player
+                .watch
+                .first_state_heard_in_play
+                .get_or_insert(!without_body);
+        }
+    }
+
+    fn is_held(&self, link: &LinkAccess<'_, Self>, from: u8) -> bool {
+        link.shared()
+            .players
+            .get(&from)
+            .is_some_and(|player| player.watch.held_back)
+    }
+
+    fn keep_a_held_player_unseen(
+        &self,
+        link: &LinkAccess<'_, Self>,
+        from: u8,
+        without_body: bool,
+    ) -> bool {
+        let mut shared = link.shared();
+        let Some(player) = shared.players.get_mut(&from) else {
+            return false;
+        };
+        if !player.watch.held_back {
+            return false;
+        }
+        player.watch.arrival_waiting |= !without_body;
+        true
+    }
+
+    fn on_boss_wait(&self, link: &LinkAccess<'_, Self>, slot: u8, waiting: bool) {
+        let mut shared = link.shared();
+        if shared.local_slot != Some(slot) {
+            return;
+        }
+        let host_name = shared
+            .player(HOST_SLOT)
+            .map_or_else(|| "the host".to_owned(), |host| host.name.clone());
+        let line = joiner_waits_line(&host_name);
+        if !waiting {
+            shared.extras.boss_wait_line_queued = false;
+            take_announced_lines_where(|queued| queued == line);
+        } else if !std::mem::replace(&mut shared.extras.boss_wait_line_queued, true) {
+            push_announced_line(line);
+        }
+    }
+
     fn on_partner_character(&self, link: &LinkAccess<'_, Self>, from: u8, hello: CharacterHello) {
         {
             let mut shared = link.shared();
@@ -111,7 +184,7 @@ impl AutomataNet {
                 return;
             };
             player.watch.character = Some(hello.character);
-            player.watch.heard = true;
+            player.watch.heard = !player.watch.held_back;
         }
         log_line(&format!(
             "net: the other player plays {}",
@@ -123,6 +196,17 @@ impl AutomataNet {
         if let Some(line) = exe_difference_line(self.local_exe, hello.exe) {
             log_line(&line);
         }
+    }
+
+    fn on_partner_look(&self, link: &LinkAccess<'_, Self>, from: u8, look: PlayerLook) {
+        let mut shared = link.shared();
+        let Some(player) = shared.players.get_mut(&from) else {
+            log_line(&format!(
+                "net: a look from slot {from}, which holds no player, was dropped"
+            ));
+            return;
+        };
+        player.watch.look = Some(look);
     }
 
     fn tell_launcher_readiness(
@@ -180,6 +264,15 @@ impl NetGame for AutomataNet {
         match message {
             Message::State(state) => self.on_partner_state(link, from, state),
             Message::Character(hello) => self.on_partner_character(link, from, hello),
+            Message::Look(look) => self.on_partner_look(link, from, look),
+            Message::LookRule { any_look_allowed } if from == HOST_SLOT => {
+                let mut shared = link.shared();
+                shared.extras.any_look_allowed = any_look_allowed;
+                log_line(&shared.rules_taken_line());
+            }
+            Message::BossWait { slot, waiting } if from == HOST_SLOT => {
+                self.on_boss_wait(link, slot, waiting);
+            }
             Message::PathInfo(info) => {
                 let mut shared = link.shared();
                 shared.rtt = Some(Duration::from_micros(u64::from(info.rtt_micros)));
@@ -208,10 +301,21 @@ impl NetGame for AutomataNet {
             | Message::StoryStepAsk(_)
             | Message::StoryStepAnswer(_)
             | Message::EventPause { .. }
-            | Message::SessionJump(_) => link.push_relayed(from, message),
+            | Message::SessionJump(_) => {
+                if !self.is_held(link, from) {
+                    link.push_relayed(from, message);
+                }
+            }
             // Kept apart from the inbox, so a flood of them never pushes a spawn message out.
             Message::EnemyLead(lead) => {
                 let mut shared = link.shared();
+                if shared
+                    .players
+                    .get(&from)
+                    .is_some_and(|player| player.watch.held_back)
+                {
+                    return;
+                }
                 let leads = &mut shared.extras.enemy_leads;
                 if leads.len() >= MOST_ENEMY_LEADS_WAITING {
                     leads.pop_front();
@@ -224,6 +328,8 @@ impl NetGame for AutomataNet {
 
     fn on_player_joined(&mut self, extras: &mut AutomataLinkState, player: &mut PlayerOf<Self>) {
         extras.player_joined(player.slot);
+        player.watch.joined_late = (self.joins_count_as_late)();
+        player.watch.held_back = player.watch.joined_late && player.slot != HOST_SLOT;
         self.first_state_logged = false;
         self.first_state_without_body_logged = false;
         log_line(&format!("net: connected to {}", player.name));
@@ -234,7 +340,15 @@ impl NetGame for AutomataNet {
     }
 
     fn on_peer_cleared(&mut self, extras: &mut AutomataLinkState) {
-        *extras = AutomataLinkState::default();
+        *extras = AutomataLinkState {
+            any_look_allowed: extras.any_look_allowed,
+            ..AutomataLinkState::default()
+        };
+    }
+
+    fn on_rules_taken(&mut self, shared: &mut NetShared) {
+        shared.extras.session_open = true;
+        log_line(&shared.rules_taken_line());
     }
 
     fn on_launcher_linked(&mut self) {
@@ -252,5 +366,15 @@ impl NetGame for AutomataNet {
 
     fn announce(&self, text: &str) {
         log_line(&format!("net: {text}"));
+        push_announced_line(shown_announcement(text));
     }
+}
+
+fn shown_announcement(text: &str) -> String {
+    for ending in ANNOUNCEMENT_ENDINGS_AFTER_A_NAME {
+        if let Some(name) = text.strip_suffix(ending) {
+            return format!("{}{ending}", shown_name(name));
+        }
+    }
+    text.to_owned()
 }

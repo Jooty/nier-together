@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use core::ptr;
 use std::collections::{HashMap, HashSet};
 use std::panic;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 use std::sync::{LazyLock, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -25,6 +25,7 @@ use crate::memory::InProcessMemory;
 
 static HOOKED_BUILD: OnceLock<VerifiedBuild> = OnceLock::new();
 static ORIGINAL_TICK: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static DRIVEN_BOSS: AtomicU64 = AtomicU64::new(0);
 static HELD_ENEMIES: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
 static GHOST_ENEMIES: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
 static STOPPED_DEAD_COPIES: LazyLock<Mutex<HashSet<u64>>> = LazyLock::new(Mutex::default);
@@ -69,6 +70,10 @@ pub(super) fn install(build: VerifiedBuild) {
 
 pub(super) fn set_held(actors: HashSet<u64>) {
     *HELD_ENEMIES.lock().unwrap_or_else(PoisonError::into_inner) = actors;
+}
+
+pub(crate) fn set_driven_boss(actor: Option<u64>) {
+    DRIVEN_BOSS.store(actor.unwrap_or(0), Ordering::Relaxed);
 }
 
 pub(super) fn hold_also(actors: impl IntoIterator<Item = u64>) {
@@ -158,7 +163,8 @@ pub(crate) fn is_held(actor: u64) -> bool {
     let listed = HELD_ENEMIES
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .contains(&actor);
+        .contains(&actor)
+        || (actor != 0 && DRIVEN_BOSS.load(Ordering::Relaxed) == actor);
     // A villager the enemy scan also lists must still run the talk or script this game started.
     listed
         && !HOOKED_BUILD

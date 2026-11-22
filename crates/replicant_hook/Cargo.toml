@@ -29,6 +29,7 @@ ruzstd = { workspace = true }
 windows-sys = { workspace = true }
 
 [dev-dependencies]
+nt_launcher_core = { workspace = true }
 nt_wire = { workspace = true }
 
 [features]

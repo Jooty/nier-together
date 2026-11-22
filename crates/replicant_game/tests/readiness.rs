@@ -1,6 +1,7 @@
 use replicant_game::readiness::{
-    JOINING_IGNORED_AFTER_MS, LocalGameReadiness, PartnerWatch, PlayChecks, PlayReads,
-    ReadinessChangeLog, SILENT_PARTNER_FALLBACK_MS, classify, joining_label, waiting_on,
+    JOINER_WAIT_LOG_INTERVAL_MS, JOINING_IGNORED_AFTER_MS, JoinerWaitLog, LocalGameReadiness,
+    PartnerWatch, PlayChecks, PlayReads, ReadinessChangeLog, SILENT_PARTNER_FALLBACK_MS,
+    SafetyBlock, SafetyReads, classify, joining_label, waiting_on,
 };
 use replicant_proto::GameReadiness;
 
@@ -336,4 +337,168 @@ fn the_wait_names_each_missing_check_or_a_stale_report() {
         "no report from the game for 2500 ms"
     );
     assert_eq!(waiting_on(ALL_READY, None), "the game's first report");
+}
+
+#[test]
+fn a_partner_who_joins_while_the_host_plays_is_out_of_play_until_a_safe_moment() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(0);
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(!partner.is_in_play());
+    assert!(partner.is_joining());
+    assert!(!partner.take_in_if_safe(false));
+    assert!(!partner.is_in_play());
+    assert!(partner.take_in_if_safe(true));
+    assert!(partner.is_in_play());
+    assert!(!partner.take_in_if_safe(true));
+}
+
+#[test]
+fn a_late_joiner_whose_game_is_still_loading_is_not_taken_in_at_a_safe_moment() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(0);
+    partner.partner_reported(GameReadiness::Loading);
+    assert!(!partner.take_in_if_safe(true));
+    assert!(partner.is_waiting_for_safe_moment());
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(partner.take_in_if_safe(true));
+}
+
+#[test]
+fn a_late_joiners_first_state_does_not_put_it_in_play_for_a_busy_host() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(0);
+    assert!(!partner.partner_sent_state());
+    assert!(!partner.is_in_play());
+    assert!(partner.take_in_if_safe(true));
+    assert!(partner.is_in_play());
+}
+
+#[test]
+fn a_silent_late_joiner_assumed_in_play_still_waits_for_a_safe_moment() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(1_000);
+    assert!(!partner.assume_in_play_if_silent(1_000 + SILENT_PARTNER_FALLBACK_MS));
+    assert!(!partner.is_in_play());
+    assert!(partner.take_in_if_safe(true));
+}
+
+#[test]
+fn a_partner_who_joins_before_the_host_plays_is_never_made_to_wait() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected(0);
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(partner.is_in_play());
+    assert!(!partner.joined_while_host_played());
+    assert!(!partner.take_in_if_safe(false));
+    assert!(partner.is_in_play());
+}
+
+#[test]
+fn a_late_joiner_that_is_not_in_play_does_not_hold_up_the_hosts_rules() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(0);
+    assert!(!partner.counts_for_the_host_rules());
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(!partner.counts_for_the_host_rules());
+    partner.take_in_if_safe(true);
+    assert!(partner.counts_for_the_host_rules());
+}
+
+#[test]
+fn a_partner_who_joined_before_play_still_counts_while_joining_for_the_hosts_rules() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected(0);
+    assert!(partner.counts_for_the_host_rules());
+    partner.partner_reported(GameReadiness::InPlay);
+    partner.partner_reported(GameReadiness::NotLinked);
+    assert!(!partner.counts_for_the_host_rules());
+}
+
+#[test]
+fn a_late_joiner_who_leaves_and_comes_back_before_play_waits_again() {
+    let mut partner = PartnerWatch::new();
+    partner.partner_connected_while_host_plays(0);
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(partner.take_in_if_safe(true));
+    partner.partner_gone();
+    partner.partner_connected_while_host_plays(10_000);
+    partner.partner_reported(GameReadiness::InPlay);
+    assert!(!partner.is_in_play());
+}
+
+fn quiet_reads() -> SafetyReads {
+    SafetyReads {
+        free_to_act: Some(true),
+        in_event_scene: Some(false),
+        control_slots_free: true,
+        boss_gauge_open: false,
+        fight_window_open: false,
+    }
+}
+
+#[test]
+fn a_host_with_nothing_going_on_is_at_a_safe_moment() {
+    assert_eq!(quiet_reads().first_block(), None);
+}
+
+#[test]
+fn a_boss_fight_blocks_even_when_everything_else_reads_free() {
+    let reads = SafetyReads {
+        boss_gauge_open: true,
+        ..quiet_reads()
+    };
+    assert_eq!(reads.first_block(), Some(SafetyBlock::BossFight));
+}
+
+#[test]
+fn an_open_fight_window_blocks_even_when_everything_else_reads_free() {
+    let reads = SafetyReads {
+        fight_window_open: true,
+        ..quiet_reads()
+    };
+    assert_eq!(reads.first_block(), Some(SafetyBlock::ScriptedFight));
+}
+
+#[test]
+fn an_unreadable_reading_blocks_rather_than_passes() {
+    let scene = SafetyReads {
+        in_event_scene: None,
+        ..quiet_reads()
+    };
+    assert_eq!(scene.first_block(), Some(SafetyBlock::EventScene));
+    let free = SafetyReads {
+        free_to_act: None,
+        ..quiet_reads()
+    };
+    assert_eq!(free.first_block(), Some(SafetyBlock::NotFreeToAct));
+}
+
+#[test]
+fn the_wait_is_logged_when_the_blocker_changes_and_every_ten_seconds() {
+    let mut log = JoinerWaitLog::new();
+    assert!(
+        log.observe(Some(SafetyBlock::EventScene), 0)
+            .is_some_and(|line| line.contains("event scene"))
+    );
+    assert_eq!(log.observe(Some(SafetyBlock::EventScene), 9_999), None);
+    assert!(
+        log.observe(Some(SafetyBlock::EventScene), JOINER_WAIT_LOG_INTERVAL_MS)
+            .is_some()
+    );
+    assert!(
+        log.observe(
+            Some(SafetyBlock::BossFight),
+            JOINER_WAIT_LOG_INTERVAL_MS + 1
+        )
+        .is_some_and(|line| line.contains("boss fight"))
+    );
+    assert_eq!(log.observe(None, JOINER_WAIT_LOG_INTERVAL_MS + 2), None);
+    assert!(
+        log.observe(
+            Some(SafetyBlock::BossFight),
+            JOINER_WAIT_LOG_INTERVAL_MS + 3
+        )
+        .is_some()
+    );
 }

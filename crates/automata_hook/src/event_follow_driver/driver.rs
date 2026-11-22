@@ -16,11 +16,13 @@ use crate::event_follow_driver::attendance_reading::local_attendance;
 use crate::event_follow_driver::shared_machine::{start_machine, with_machine};
 use crate::event_follow_driver::skip_prompt_shown::set_skip_prompt;
 use crate::game_calls::GameCalls;
-use crate::game_hooks::{install_event_mirror, run_event_call_as_ours, story_gate_is_armed};
+use crate::game_hooks::{
+    area_scene_hold_is_hooked, install_event_mirror, run_event_call_as_ours, story_gate_is_armed,
+};
 use crate::guest_watches_driver::watch_role_now;
 use crate::net::{
-    handle, local_in_play, local_story_place, partner_playing_event_of, partner_report_of,
-    set_local_playing_event, set_local_unattended,
+    current_session_mode, handle, local_in_play, local_story_place, partner_playing_event_of,
+    partner_report_of, set_local_playing_event, set_local_unattended,
 };
 use crate::start_driver::link_reading;
 use crate::start_setting::GameSettings;
@@ -132,8 +134,11 @@ impl EventContext {
             progress,
         };
         let watches = watch_role_now() == WatchRole::Watches;
+        let free_roam_area_starts_held =
+            (!current_session_mode().story_rules_apply()).then(area_scene_hold_is_hooked);
         let Some(step) = with_machine(|machine| {
             machine.set_this_copy_watches(watches);
+            machine.set_free_roam_area_starts_held(free_roam_area_starts_held);
             machine.step(&readings)
         }) else {
             return;

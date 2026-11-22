@@ -4,7 +4,7 @@ use nt_launcher::lobby::{
     PLAYER_TABLE_HEADERS, PlayerRole, PlayerStatus, QuitFallback, QuitStep, ReadyInputs, RowInputs,
     guest_accepts_start, host_game_closed, host_options_editable, lobby_ready, new_game_slot,
     own_close_notice, player_rows, player_status, relaunch_choice, resolve_mode, start_enabled,
-    validate_name,
+    started_with_nobody_else, validate_name,
 };
 use nt_launcher::lobby::{
     character_id_at, character_index_of, character_picked_in_lobby, default_character_id,
@@ -99,7 +99,8 @@ fn only_the_host_can_start_and_only_when_both_are_ready() {
     assert!(start_enabled(true, false, false, yes, Some(yes)));
     assert!(!start_enabled(true, false, false, yes, Some(no)));
     assert!(!start_enabled(true, false, false, no, Some(yes)));
-    assert!(!start_enabled(true, false, false, yes, None));
+    assert!(start_enabled(true, false, false, yes, None));
+    assert!(!start_enabled(true, false, false, no, None));
     assert!(!start_enabled(true, true, false, yes, Some(yes)));
     assert!(!start_enabled(false, false, false, yes, Some(yes)));
 }
@@ -643,6 +644,7 @@ const PICK_GAME: GameProfile = GameProfile {
     game_id: "made-up",
     characters: &PICK_CHARACTERS,
     characters_shareable: false,
+    any_look_switch: false,
     modes: &[nt_launcher_core::CO_OP_CAMPAIGN],
     free_roam_maps: &[],
     ..REPLICANT
@@ -659,4 +661,11 @@ fn any_game_with_characters_gives_the_campaign_roles_in_its_own_order() {
         own_character_id(&PICK_GAME, campaign, true, Some("blue")),
         "green"
     );
+}
+
+#[test]
+fn a_host_start_with_an_empty_lobby_is_a_start_with_nobody_else() {
+    assert!(started_with_nobody_else(false, 0));
+    assert!(!started_with_nobody_else(false, 1));
+    assert!(!started_with_nobody_else(true, 0));
 }

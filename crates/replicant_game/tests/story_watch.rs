@@ -1,6 +1,6 @@
 use replicant_game::event_log::EventLog;
 use replicant_game::story_watch::{
-    GUEST_WORD_STALE_AFTER_MS, GuestWatch, GuestWord, PlaceStep, RemovalChange,
+    AERIE_PACK_PREFIX, GUEST_WORD_STALE_AFTER_MS, GuestWatch, GuestWord, PlaceStep, RemovalChange,
     STORY_REMOVAL_SETTLES_MS, StoryRemoval, WATCH_BODY_LEFT_ALONE_BELOW,
     WATCH_BODY_TELEPORT_EVERY_MS, WATCH_BODY_TELEPORTED_ABOVE, WatchEnd, WatchFacts, WatchStep,
     ended_line, guest_is_watching_text, place_step, started_line, watching_host_text,
@@ -11,6 +11,7 @@ fn facts(story_has_taken_her: bool) -> WatchFacts<'static> {
         setting_on: true,
         guest_in_session: true,
         story_has_taken_her,
+        taken_at_the_aerie_exit: false,
         host_leads_a_stretch: false,
         pack: "A_DESERT_TEMPLE_01",
     }
@@ -179,4 +180,87 @@ fn the_watch_texts_fit_the_persistent_line() {
     assert!(log.set_persistent(&watching_host_text("Jay")));
     assert!(log.set_persistent(&guest_is_watching_text("Sam")));
     assert_eq!(log.persistent(), Some("Sam is watching"));
+}
+
+#[test]
+fn after_the_aerie_exit_removal_the_guest_watches_only_inside_the_aerie() {
+    let mut watch = GuestWatch::new();
+    let in_the_aerie = WatchFacts {
+        taken_at_the_aerie_exit: true,
+        pack: "A_CLIFF_VILLAGE_01",
+        ..facts(true)
+    };
+    let outside = WatchFacts {
+        pack: "A_DESERT_TEMPLE_01",
+        ..in_the_aerie
+    };
+    assert!(in_the_aerie.pack.starts_with(AERIE_PACK_PREFIX));
+    assert_eq!(watch.step(&outside), WatchStep::Idle);
+    assert_eq!(watch.step(&in_the_aerie), WatchStep::Started);
+    assert_eq!(
+        watch.step(&outside),
+        WatchStep::Ended(WatchEnd::LeftTheAerieAfterTheExitRemoval)
+    );
+    assert_eq!(watch.step(&in_the_aerie), WatchStep::Started);
+}
+
+#[test]
+fn another_removal_keeps_the_guest_watching_outside_the_aerie() {
+    let mut watch = GuestWatch::new();
+    assert_eq!(watch.step(&facts(true)), WatchStep::Started);
+    assert_eq!(watch.step(&facts(true)), WatchStep::Continues);
+}
+
+#[test]
+fn the_aerie_exit_flag_lasts_until_the_story_calls_again() {
+    let mut removal = StoryRemoval::new();
+    removal.aerie_exit_removed_her(0);
+    assert!(!removal.taken_at_the_aerie_exit());
+    removal.step(STORY_REMOVAL_SETTLES_MS);
+    assert!(removal.taken_at_the_aerie_exit());
+    removal.story_called(false, 10_000);
+    removal.step(10_000 + STORY_REMOVAL_SETTLES_MS);
+    assert!(!removal.taken_at_the_aerie_exit());
+    removal.story_called(true, 20_000);
+    removal.step(20_000 + STORY_REMOVAL_SETTLES_MS);
+    assert!(removal.settled_out());
+    assert!(!removal.taken_at_the_aerie_exit());
+}
+
+#[test]
+fn a_later_removal_keeps_the_aerie_exit_mark_and_only_an_activate_clears_it() {
+    let mut removal = StoryRemoval::new();
+    removal.aerie_exit_removed_her(0);
+    removal.step(STORY_REMOVAL_SETTLES_MS);
+    removal.story_called(true, 10_000);
+    removal.step(10_000 + STORY_REMOVAL_SETTLES_MS);
+    assert!(removal.taken_at_the_aerie_exit());
+    removal.story_called(false, 20_000);
+    removal.step(20_000 + STORY_REMOVAL_SETTLES_MS);
+    assert!(!removal.taken_at_the_aerie_exit());
+}
+
+#[test]
+fn after_a_load_the_flag_and_an_inactive_companion_bring_the_aerie_exit_mark_back() {
+    let mut removal = StoryRemoval::new();
+    assert!(!removal.restore_aerie_exit_from_game_state(false, true));
+    assert!(!removal.restore_aerie_exit_from_game_state(true, false));
+    assert!(!removal.taken_at_the_aerie_exit());
+    assert!(removal.restore_aerie_exit_from_game_state(true, true));
+    assert!(removal.settled_out());
+    assert!(removal.taken_at_the_aerie_exit());
+    assert!(!removal.restore_aerie_exit_from_game_state(true, true));
+}
+
+#[test]
+fn a_story_call_seen_before_the_load_check_wins_over_the_game_state() {
+    let mut removal = StoryRemoval::new();
+    removal.story_called(false, 0);
+    assert!(!removal.restore_aerie_exit_from_game_state(true, true));
+    let mut removal = StoryRemoval::new();
+    removal.restore_aerie_exit_from_game_state(true, true);
+    removal.story_called(false, 5_000);
+    removal.step(5_000 + STORY_REMOVAL_SETTLES_MS);
+    assert!(!removal.settled_out());
+    assert!(!removal.taken_at_the_aerie_exit());
 }

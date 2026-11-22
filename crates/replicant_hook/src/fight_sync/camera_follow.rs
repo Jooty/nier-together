@@ -28,6 +28,7 @@ use crate::net::net_clock_ms;
 use crate::story_jump::{NativeArg, call_native_with};
 
 const MAX_SWITCHES_KEPT_BETWEEN_TICKS: usize = 64;
+const ACTOR_ONLY_CAMERA_INDEX: i32 = 9;
 
 static SWITCH_TO_ORIGINAL: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static INSIDE_A_CAMERA_NATIVE: AtomicBool = AtomicBool::new(false);
@@ -258,7 +259,13 @@ fn log_skip(camera: HostCamera, skip: HostCameraSkip) {
     let why = match skip {
         HostCameraSkip::AlreadyActive => "your game already has it",
         HostCameraSkip::OlderThanANative => "a newer change-camera native ran here since",
+        HostCameraSkip::NoChangeKind if camera.camera == ACTOR_ONLY_CAMERA_INDEX => {
+            "camera 9 has no native, only actor code switches to it: skipped"
+        }
         HostCameraSkip::NoChangeKind => "no change-camera kind makes it active",
+        HostCameraSkip::RailCameraIsTheGuestsOwn => {
+            "a rail camera comes from your own side-view trap, not from the host"
+        }
     };
     log_line(&format!(
         "camera follow: the host's camera {} (switch {}) not taken: {why}",
@@ -328,7 +335,12 @@ fn pose_text(pose: Option<FixedCameraPose>) -> String {
 
 fn offset_text(offset: CameraBodyOffset) -> String {
     format!(
-        "follows the body, offset eye x {:.3} z {:.3} height {:.3} look x {:.3} z {:.3} height {:.3}",
+        "follows the body{}, offset eye x {:.3} z {:.3} height {:.3} look x {:.3} z {:.3} height {:.3}",
+        if offset.eye_is_absolute {
+            " under a still eye"
+        } else {
+            ""
+        },
         offset.eye_offset_xz[0],
         offset.eye_offset_xz[1],
         offset.eye_height,
@@ -366,6 +378,7 @@ fn aim_to_wire(phase: u16, aim: HostCameraAim) -> FightCameraAim {
             eye_height: offset.eye_height,
             look_offset_xz: offset.look_offset_xz,
             look_height: offset.look_height,
+            eye_is_absolute: offset.eye_is_absolute,
         }),
     }
 }
@@ -382,6 +395,7 @@ fn aim_from_wire(wire: FightCameraAim) -> HostCameraAim {
             eye_height: offset.eye_height,
             look_offset_xz: offset.look_offset_xz,
             look_height: offset.look_height,
+            eye_is_absolute: offset.eye_is_absolute,
         }),
     }
 }

@@ -34,7 +34,7 @@ fn axis(positive: u16, negative: u16) -> i8 {
     i8::from(key_down(positive)) - i8::from(key_down(negative))
 }
 
-fn key_down(virtual_key: u16) -> bool {
+pub(super) fn key_down(virtual_key: u16) -> bool {
     #[expect(unsafe_code, reason = "reads one key's physical state")]
     // SAFETY: GetAsyncKeyState has no preconditions.
     let state = unsafe { GetAsyncKeyState(i32::from(virtual_key)) };

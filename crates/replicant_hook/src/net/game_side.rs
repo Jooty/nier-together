@@ -14,7 +14,8 @@ use replicant_proto::{NO_MOTION_NAME_HASH, PartnerActivity, RiddenBoar, motion_n
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::memory::InProcessMemory;
-use crate::net::{AutoConfig, LocalSnapshot, SEND_INTERVAL, handle, start_link};
+use crate::net::joiner_safety::host_is_between_things;
+use crate::net::{AutoConfig, LocalSnapshot, NetSharedExt, SEND_INTERVAL, handle, start_link};
 
 static LAST_PUBLISHED_AT: Mutex<Option<Instant>> = Mutex::new(None);
 static LAST_SENT_ACTIVITY: Mutex<Option<PartnerActivity>> = Mutex::new(None);
@@ -37,7 +38,10 @@ pub fn report_readiness(build: &VerifiedBuild) {
     *last = Some(now);
     let game = Replicant::new(InProcessMemory::new(build));
     let reads = read_play_reads(&game);
-    net.report_readiness(classify(reads.checks()), reads);
+    let readiness = classify(reads.checks());
+    let a_joiner_waits = net.view().partner_watch().is_waiting_for_safe_moment();
+    let safe_for_a_joiner = readiness.is_in_play() && host_is_between_things(build, a_joiner_waits);
+    net.report_readiness(readiness, reads, safe_for_a_joiner);
 }
 
 pub fn quit_when_asked() {

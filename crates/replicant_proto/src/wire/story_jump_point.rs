@@ -24,6 +24,10 @@ pub enum StoryJumpPoint {
     LibraryBoss10,
     LibraryBoss11,
     Part2Start,
+    Part2ManorCourtyard,
+    Part2Boss12,
+    Part2Boss13,
+    Part2OutsideHouse,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,7 +39,7 @@ pub struct StoryJumpRow {
     pub former_codes: &'static [&'static str],
 }
 
-pub const STORY_JUMP_ROWS: [StoryJumpRow; 24] = [
+pub const STORY_JUMP_ROWS: [StoryJumpRow; 28] = [
     StoryJumpRow {
         point: StoryJumpPoint::VillageAfterPrologue,
         id: 30,
@@ -202,6 +206,34 @@ pub const STORY_JUMP_ROWS: [StoryJumpRow; 24] = [
         id: 430,
         code: "Part2Start",
         name: "Part 2, start",
+        former_codes: &[],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::Part2ManorCourtyard,
+        id: 440,
+        code: "Part2ManorCourtyard",
+        name: "Part 2, manor courtyard",
+        former_codes: &[],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::Part2Boss12,
+        id: 450,
+        code: "Part2Boss12",
+        name: "Boss fight 12",
+        former_codes: &["Part2FacilitySublevel3"],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::Part2Boss13,
+        id: 460,
+        code: "Part2Boss13",
+        name: "Boss fight 13",
+        former_codes: &[],
+    },
+    StoryJumpRow {
+        point: StoryJumpPoint::Part2OutsideHouse,
+        id: 470,
+        code: "Part2OutsideHouse",
+        name: "Outside the house (part 2)",
         former_codes: &[],
     },
 ];

@@ -1,18 +1,18 @@
-use core::ffi::c_void;
+use core::ffi::{CStr, c_char, c_void};
 
 use replicant_game::GameMemory;
 use replicant_game::build::SUPPORTED_PE_IDENTITY;
 use replicant_game::enemies::spec_slot_address;
 use replicant_game::offsets::{
     ACTOR_DESTROY_FUNCTION_RVA, ACTOR_MANAGER_RVA, ACTOR_MESSAGE_VTABLE_OFFSET,
-    ACTOR_ON_RECEIVE_HIT_VTABLE_OFFSET, ACTOR_PARAMETER_OBJECT_OFFSET,
-    ACTOR_PLAY_MOTION_FUNCTION_RVA, ACTOR_SELF_HANDLE_OFFSET, ACTOR_SET_TRANSFORM_VTABLE_OFFSET,
-    ADD_AGGRO_BY_HANDLE_FUNCTION_RVA, ATTACK_QUERY_MANAGER_RVA, BODY_MOTION_LAYER,
-    CREATION_MATRIX_BYTES, DIRECT_HIT_FUNCTION_RVA, GET_ACTOR_IN_GROUP_FUNCTION_RVA,
-    HUMAN_ENEMY_ON_RECEIVE_HIT_FUNCTION_RVA, MAP_MANAGER_RVA, PARAMETER_DAMAGE_TAKEN_SCALE_OFFSET,
-    PARAMETER_FLAGS_OFFSET, PARAMETER_GET_HP_VTABLE_OFFSET, PARAMETER_GET_MAX_HP_VTABLE_OFFSET,
-    PARAMETER_SET_HP_VTABLE_OFFSET, PARAMETER_SURVIVE_AT_ONE_HP_FLAG, PUPPET_PLAY_MOTION_FLAG,
-    PUT_ENEMY_ACTOR_FUNCTION_RVA,
+    ACTOR_MOTION_INDEX_BY_NAME_FUNCTION_RVA, ACTOR_ON_RECEIVE_HIT_VTABLE_OFFSET,
+    ACTOR_PARAMETER_OBJECT_OFFSET, ACTOR_PLAY_MOTION_FUNCTION_RVA, ACTOR_SELF_HANDLE_OFFSET,
+    ACTOR_SET_TRANSFORM_VTABLE_OFFSET, ADD_AGGRO_BY_HANDLE_FUNCTION_RVA, ATTACK_QUERY_MANAGER_RVA,
+    BODY_MOTION_LAYER, CREATION_MATRIX_BYTES, DIRECT_HIT_FUNCTION_RVA,
+    GET_ACTOR_IN_GROUP_FUNCTION_RVA, HUMAN_ENEMY_ON_RECEIVE_HIT_FUNCTION_RVA, MAP_MANAGER_RVA,
+    PARAMETER_DAMAGE_TAKEN_SCALE_OFFSET, PARAMETER_FLAGS_OFFSET, PARAMETER_GET_HP_VTABLE_OFFSET,
+    PARAMETER_GET_MAX_HP_VTABLE_OFFSET, PARAMETER_SET_HP_VTABLE_OFFSET,
+    PARAMETER_SURVIVE_AT_ONE_HP_FLAG, PUPPET_PLAY_MOTION_FLAG, PUT_ENEMY_ACTOR_FUNCTION_RVA,
 };
 use replicant_proto::{ENEMY_SPEC_BYTES, EnemyCreation, MAX_ENEMY_ACTOR_NAME_BYTES};
 
@@ -51,6 +51,7 @@ type PutEnemyActor = unsafe extern "system" fn(
     u8,
 ) -> *mut c_void;
 type Destroy = unsafe extern "system" fn(*mut c_void, u8);
+type MotionIndexByName = unsafe extern "system" fn(*mut c_void, *const c_char) -> i32;
 type PlayMotion = unsafe extern "system" fn(*mut c_void, i32, i32, f32, u8, i32, f32, f32);
 
 #[repr(align(16))]
@@ -376,6 +377,23 @@ impl EnemyCalls {
         memory
             .write_f32(parameters + PARAMETER_DAMAGE_TAKEN_SCALE_OFFSET, scale)
             .is_ok()
+    }
+
+    pub(super) fn motion_index_by_name(&self, actor: u64, name: &CStr) -> i32 {
+        let function =
+            (self.module_base + u64::from(ACTOR_MOTION_INDEX_BY_NAME_FUNCTION_RVA)) as usize;
+        #[expect(
+            unsafe_code,
+            reason = "calls CActor::MotionIndexByName at its verified address"
+        )]
+        // SAFETY: the RVA starts the lookup (actor, name -> index or -1) in the verified build;
+        // the actor is live on the game thread and the name is NUL terminated.
+        unsafe {
+            core::mem::transmute::<usize, MotionIndexByName>(function)(
+                actor as usize as *mut c_void,
+                name.as_ptr(),
+            )
+        }
     }
 
     pub(super) fn play_body_motion(

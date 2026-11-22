@@ -2,6 +2,7 @@ mod actor_cues;
 mod calls;
 mod hooks;
 mod mirror;
+mod placed_cue_effects;
 mod report;
 mod sound_probe;
 mod voice;

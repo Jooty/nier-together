@@ -4,6 +4,7 @@ mod host_start_gate;
 mod newest_seat;
 mod refusal_words;
 mod session_file_name;
+mod stable_seat_read;
 
 pub const SEAT_DELIVERY_TIMEOUT_SECONDS: f64 = 60.0;
 pub const SESSION_FILE_PREFIX: &str = "GAMEDATA.seat-";
@@ -19,3 +20,6 @@ pub use newest_seat::{
 };
 pub use refusal_words::{seat_error_words, seat_refusal_words};
 pub use session_file_name::{campaign_file_stem, session_file_name};
+pub use stable_seat_read::{
+    STABLE_READ_GIVE_UP_SECONDS, StableSeatRead, StableSeatStep, UNUSABLE_SAVE_SETTLE_SECONDS,
+};

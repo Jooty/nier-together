@@ -216,3 +216,39 @@ fn the_weapon_rides_along_with_the_sample() {
     );
     assert_eq!(track.sample(50, 0).and_then(|s| s.weapon), Some(weapon));
 }
+
+#[test]
+fn an_extrapolated_sample_keeps_the_position_going_at_the_last_speed() {
+    let mut track = StateTrack::new();
+    track.push(0, state(1, 0.0, 0.0));
+    track.push(100, state(2, 10.0, 0.0));
+    let sample = track.sample_extrapolated(150, 0, 100).expect("sample");
+    assert!((sample.position[0] - 15.0).abs() < 1e-4);
+}
+
+#[test]
+fn an_extrapolated_sample_stops_after_the_limit() {
+    let mut track = StateTrack::new();
+    track.push(0, state(1, 0.0, 0.0));
+    track.push(100, state(2, 10.0, 0.0));
+    let sample = track.sample_extrapolated(900, 0, 100).expect("sample");
+    assert!((sample.position[0] - 20.0).abs() < 1e-4);
+}
+
+#[test]
+fn an_extrapolated_sample_between_two_states_is_the_plain_interpolation() {
+    let mut track = StateTrack::new();
+    track.push(0, state(1, 0.0, 0.0));
+    track.push(100, state(2, 10.0, 0.0));
+    let plain = track.sample(150, 100).expect("sample");
+    let extrapolated = track.sample_extrapolated(150, 100, 100).expect("sample");
+    assert_eq!(plain.position, extrapolated.position);
+}
+
+#[test]
+fn a_single_state_is_never_extrapolated() {
+    let mut track = StateTrack::new();
+    track.push(0, state(1, 3.0, 0.0));
+    let sample = track.sample_extrapolated(500, 0, 100).expect("sample");
+    assert!((sample.position[0] - 3.0).abs() < 1e-4);
+}

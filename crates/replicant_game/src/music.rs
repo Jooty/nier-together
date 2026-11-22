@@ -5,7 +5,10 @@ mod guest_sync;
 mod sender;
 
 pub use channel::{MusicChannel, read_music_channel};
-pub use drive::{drive_release_replays_dropped_calls, host_music_drives, host_reports_a_scene};
+pub use drive::{
+    drive_release_replays_dropped_calls, host_music_drives, host_music_stale_after_ms,
+    host_reports_a_scene,
+};
 pub use dropped_calls::{DroppedCall, DroppedCalls};
 pub use guest_sync::{GuestSync, LocalMusic, MusicStep};
 pub use sender::MusicSender;
@@ -13,6 +16,8 @@ pub use sender::MusicSender;
 pub const MUSIC_REFRESH_INTERVAL_MS: u64 = 1000;
 pub const MUSIC_MIN_CHANGE_INTERVAL_MS: u64 = 100;
 pub const MUSIC_TARGET_STALE_MS: u64 = 4000;
+pub const MUSIC_TARGET_STALE_IN_A_HELD_FIGHT_MS: u64 = 60_000;
+pub const FIGHTS_WHOSE_HOST_MUSIC_THE_GUEST_KEEPS_THROUGH_SILENCE: [&str; 1] = ["boss fight 6"];
 pub const MUSIC_DRIFT_RESEEK_MS: u32 = 750;
 pub const MUSIC_RESEEK_MIN_INTERVAL_MS: u64 = 5000;
 pub const MUSIC_PLAY_RETRY_INTERVAL_MS: u64 = 500;

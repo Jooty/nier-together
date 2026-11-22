@@ -4,6 +4,7 @@ use hudhook::imgui::Ui;
 use nt_hook::menu_view::parts::{note_line, switch_line};
 use nt_ui_style::INK_MUTED;
 
+use crate::game_hooks::{raw_mouse_camera_hooked, raw_mouse_on, set_raw_mouse_on};
 use crate::hud::game_log_hook::game_log_is_hooked;
 use crate::hud::minimap_dot::draw_minimap_tuning;
 
@@ -47,6 +48,7 @@ pub(crate) fn draw_hud_settings(ui: &Ui) {
             INK_MUTED,
         );
     }
+    draw_raw_mouse_setting(ui);
     draw_minimap_tuning(ui);
     note_line(ui, "These last until the game closes.", INK_MUTED);
 }
@@ -55,5 +57,20 @@ fn checkbox(ui: &Ui, label: &str, setting: &AtomicBool) {
     let mut value = setting.load(Ordering::Relaxed);
     if switch_line(ui, label, &mut value) {
         setting.store(value, Ordering::Relaxed);
+    }
+}
+
+fn draw_raw_mouse_setting(ui: &Ui) {
+    if !raw_mouse_camera_hooked() {
+        note_line(
+            ui,
+            "Raw mouse movement is unavailable: the camera hooks did not match this exe.",
+            INK_MUTED,
+        );
+        return;
+    }
+    let mut on = raw_mouse_on();
+    if switch_line(ui, "Raw mouse movement for the camera", &mut on) {
+        set_raw_mouse_on(on);
     }
 }

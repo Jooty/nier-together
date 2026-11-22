@@ -94,11 +94,19 @@ fn every_kind_round_trips_fits_a_message_and_is_relayed() {
         },
         ActorCue {
             id: 5001,
-            kind: ActorCueKind::PlaceEffect { transform },
+            kind: ActorCueKind::PlaceEffect {
+                transform,
+                handle: 0x1234,
+            },
             ..magic_array()
         },
         emil_loop_sound(),
         emil_loop_sound_stop(),
+        ActorCue {
+            id: 213,
+            kind: ActorCueKind::PlacedEffectEnded { handle: 0x1234 },
+            ..magic_array()
+        },
         ActorCue {
             kind: ActorCueKind::StoneBroken,
             ..stone

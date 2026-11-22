@@ -1,4 +1,6 @@
+mod area_scene_hold;
 mod boot_screen_keep;
+mod bullet_probe;
 mod camera_guard;
 mod enemy_ai_hold;
 mod enemy_hits;
@@ -18,6 +20,8 @@ mod pad_press;
 mod partner_harm_guard;
 mod partner_walk_guards;
 mod pod_aim;
+mod raw_mouse_camera;
+mod raw_mouse_counts;
 mod save_redirect;
 mod save_request_watch;
 mod second_copy;
@@ -25,10 +29,14 @@ mod start_recorder;
 mod story_gate;
 mod story_step_hooks;
 
+pub use area_scene_hold::{
+    area_scene_hold_is_hooked, install_area_scene_hold, set_area_starts_held,
+};
 pub use boot_screen_keep::{
     boot_load_passed_behind_its_screen, install_boot_screen_band_hold, install_boot_screen_keep,
     set_boot_screen_kept,
 };
+pub use bullet_probe::install_bullet_probe;
 pub use camera_guard::install_camera_guard;
 pub use enemy_ai_hold::{
     LedBody, hooked_starts_of, install_enemy_ai_hold, partner_body_handle, set_led_bodies,
@@ -73,6 +81,8 @@ pub use partner_harm_guard::{
 };
 pub use partner_walk_guards::{hold_body, install_partner_walk_guards, is_held_body, release_body};
 pub use pod_aim::{install_pod_aim, recorded_pod_aim, set_partner_pod_aim};
+pub use raw_mouse_camera::{install_raw_mouse_camera, raw_mouse_camera_hooked};
+pub use raw_mouse_counts::{raw_mouse_on, set_raw_mouse_on};
 pub use save_redirect::{
     coop_save_file_exists, coop_save_slot_times, install_save_redirect, save_redirect_status,
 };

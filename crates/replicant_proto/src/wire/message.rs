@@ -6,23 +6,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::wire::{
     ActorCue, AttackGaugeAsk, AttackGaugeHit, AttackGaugeState, BlockHeld, BlockMoved,
-    BodyPackName, BombBlast, BulletEffectPlay, BulletFlight, CallbackFired, CampaignCard, CartRide,
-    CartRun, ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk, DesyncDigest,
-    DialogueUpdate, DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords, EnemyBodyGone,
-    EnemyBulletFlight, EnemyCreation, EnemyDrop, EnemyGone, EnemyHit, EnemyIdList, EnemyKilled,
-    EnemySnapshot, EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim,
+    BodyPackName, BombBlast, BossHitOnNier, BulletEffectPlay, BulletFlight, CallbackFired,
+    CampaignCard, CartRide, CartRun, ChoiceHover, CombatEvent, ContainerOpened, CutsceneSkipAsk,
+    DesyncDigest, DialogueUpdate, DoorChange, DoorReport, EffectPlay, EffectStop, EndingRecords,
+    EnemyBodyGone, EnemyBulletFlight, EnemyCreation, EnemyDrop, EnemyGone, EnemyHit, EnemyIdList,
+    EnemyKilled, EnemySnapshot, EnemySpawned, EnemyWordDrop, FadeSync, FightCamera, FightCameraAim,
     FightPromptCount, FightRadioWaitEnded, FightRequest, FightRequestAnswer, FightStreamEntry,
     FightTape, FightWindowMark, FollowPhase, GameReadiness, GatherAnswer, GatherForScene,
     GuestWatches, HostDefeatScreen, ItemCounts, ItemPickup, ItemTake, LiftCall, LiftCallAnswer,
     LobbyBody, LobbyCharacter, LobbyReady, LobbyStart, MAX_DISPLAY_NAME_BYTES, MAX_PLAYERS,
     MessageHandlerRan, MusicState, NpcSnapshot, NpcTalk, PROTOCOL_VERSION, PartPickup,
     PartnerNotice, PausedHits, PlayerHit, PlayerSettings, PlayerState, PowerModelEnded,
-    PowerModelMotion, PowerModelState, PrologueLevel, RuleRoomBreak, SceneFollow, ScriptMessage,
-    ScriptRoll, SeatPart, SeatReceipt, SessionOptions, SharedFunctionRan, ShotCue, SideViewState,
-    SkipPromptAnswer, SkipPromptVerdict, SkyAssets, SkyRecordChunk, SkyState, SoundPlay,
-    StoryArrayPart, StoryCall, StoryChanges, StoryDigest, StoryJump, StoryRefused, StoryRequest,
-    StoryWrite, TalkChoice, TalkWindowSize, TeleportHere, TutorialPrompt, VoiceCharacter,
-    WallBroken, WireError, WorldEffectMove, WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
+    PowerModelMotion, PowerModelState, PrologueLevel, RuleRoomBreak, ScaleUpAnswer, ScaleUpAsk,
+    SceneFollow, ScriptMessage, ScriptRoll, SeatPart, SeatReceipt, SessionOptions,
+    SharedFunctionRan, ShotCue, SideViewState, SkipPromptAnswer, SkipPromptVerdict, SkyAssets,
+    SkyRecordChunk, SkyState, SoundPlay, StoryArrayPart, StoryCall, StoryChanges, StoryDigest,
+    StoryJump, StoryRefused, StoryRequest, StoryWrite, TalkChoice, TalkWindowSize, TeleportHere,
+    TutorialPrompt, VoiceCharacter, WallBroken, WatchedCameraCall, WireError, WorldEffectMove,
+    WorldEffectPlay, WorldObjectBroken, WorldObjectMoved,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -157,6 +158,10 @@ pub enum Message {
     ActorCue(ActorCue),
     HostDefeatScreen(HostDefeatScreen),
     SideViewState(SideViewState),
+    WatchedCameraCall(WatchedCameraCall),
+    BossHitOnNier(BossHitOnNier),
+    ScaleUpAsk(ScaleUpAsk),
+    ScaleUpAnswer(ScaleUpAnswer),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -298,6 +303,10 @@ impl Message {
             Message::ActorCue(_) => "ActorCue",
             Message::HostDefeatScreen(_) => "HostDefeatScreen",
             Message::SideViewState(_) => "SideViewState",
+            Message::WatchedCameraCall(_) => "WatchedCameraCall",
+            Message::BossHitOnNier(_) => "BossHitOnNier",
+            Message::ScaleUpAsk(_) => "ScaleUpAsk",
+            Message::ScaleUpAnswer(_) => "ScaleUpAnswer",
         }
     }
 
@@ -431,6 +440,9 @@ impl Message {
                 | Message::ActorCue(_)
                 | Message::HostDefeatScreen(_)
                 | Message::SideViewState(_)
+                | Message::WatchedCameraCall(_)
+                | Message::BossHitOnNier(_)
+                | Message::ScaleUpAsk(_)
         )
     }
 
@@ -549,6 +561,10 @@ impl Message {
             Message::FightCameraAim(aim) => aim.validate(),
             Message::ShotCue(cue) => cue.validate(),
             Message::ActorCue(cue) => cue.validate(),
+            Message::WatchedCameraCall(call) => call.validate(),
+            Message::BossHitOnNier(hit) => hit.validate(),
+            Message::ScaleUpAsk(ask) => ask.validate(),
+            Message::ScaleUpAnswer(answer) => answer.validate(),
             Message::AttackGaugeAsk(ask) => ask.validate(),
             Message::PartPickup(pickup) => pickup.validate(),
             Message::RuleRoomBreak(rule_break) => rule_break.validate(),

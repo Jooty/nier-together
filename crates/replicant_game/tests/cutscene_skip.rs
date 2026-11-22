@@ -1,7 +1,7 @@
 use replicant_game::cutscene_skip::{
-    ASK_RESEND_INTERVAL_MS, CutsceneSkipTracker, PARTNER_ASK_LIFETIME_MS,
-    SCENE_START_HOLD_RESTART_GAP_MS, SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate, SkipVerdict,
-    StartVerdict,
+    ASK_RESEND_INTERVAL_MS, CutsceneSkipTracker, GUEST_COMING_INTO_HOST_SCENE_FOR_MS,
+    GuestComingIntoScene, PARTNER_ASK_LIFETIME_MS, SCENE_START_HOLD_RESTART_GAP_MS,
+    SCENE_START_HOLD_TIMEOUT_MS, SceneStartGate, SkipVerdict, StartVerdict,
 };
 
 fn in_scene() -> CutsceneSkipTracker {
@@ -241,4 +241,45 @@ fn resetting_forgets_the_hosts_scenes() {
     gate.reset();
     gate.observe_host(false);
     assert_eq!(gate.ask(0), StartVerdict::Hold { first: true });
+}
+
+#[test]
+fn l51_host_skip_waits_for_a_guest_still_coming_into_the_scene() {
+    let mut coming = GuestComingIntoScene::new();
+    coming.follow_sent(15_582);
+    let mut tracker = in_scene();
+    let participates = coming.is_coming(16_369);
+    assert!(participates);
+    assert_eq!(
+        tracker.step(true, participates, 16_369).verdict,
+        SkipVerdict::Hold
+    );
+}
+
+#[test]
+fn the_guest_coming_window_ends_and_clears() {
+    let mut coming = GuestComingIntoScene::new();
+    assert!(!coming.is_coming(0));
+    coming.follow_sent(1_000);
+    assert!(coming.is_coming(1_000 + GUEST_COMING_INTO_HOST_SCENE_FOR_MS - 1));
+    assert!(!coming.is_coming(1_000 + GUEST_COMING_INTO_HOST_SCENE_FOR_MS));
+    coming.follow_sent(2_000);
+    coming.clear();
+    assert!(!coming.is_coming(2_001));
+}
+
+#[test]
+fn a_held_host_skips_once_the_guest_never_came_and_the_window_ended() {
+    let mut coming = GuestComingIntoScene::new();
+    coming.follow_sent(0);
+    let mut tracker = in_scene();
+    assert_eq!(
+        tracker.step(true, coming.is_coming(800), 800).verdict,
+        SkipVerdict::Hold
+    );
+    let later = GUEST_COMING_INTO_HOST_SCENE_FOR_MS + 100;
+    assert_eq!(
+        tracker.step(false, coming.is_coming(later), later).verdict,
+        SkipVerdict::SkipNow
+    );
 }

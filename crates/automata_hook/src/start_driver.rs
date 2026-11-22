@@ -2,6 +2,7 @@ mod campaign_load;
 mod chapter_table_read;
 mod driver;
 mod driver_state;
+mod late_join_driver;
 mod link_reading;
 mod session_jump_driver;
 

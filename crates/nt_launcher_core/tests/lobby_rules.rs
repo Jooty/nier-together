@@ -1,9 +1,9 @@
 use nt_launcher_core::{
-    AUTOMATA, CO_OP_CAMPAIGN, FREE_ROAM, FREE_ROAM_MODE, GameMode, LobbyOption, PlayerStatus,
-    REPLICANT, RosterSeat, ScaleUpInputs, SessionOptions, StartButton, StartInputs,
-    characters_shareable, current_mode, declined_scale_up_kept, lobby_permissions,
-    option_available, remove_offered, roster, rules_for_mode, scale_up_offered, start_allowed,
-    start_button,
+    ANY_LOOK_LABEL, ANY_LOOK_NOTE, AUTOMATA, CO_OP_CAMPAIGN, FREE_ROAM, FREE_ROAM_MODE, GameMode,
+    LobbyOption, PlayerStatus, REPLICANT, RosterSeat, ScaleUpInputs, SessionOptions, StartButton,
+    StartInputs, any_look_switch_offered, characters_shareable, current_mode,
+    declined_scale_up_kept, lobby_permissions, option_available, remove_offered, roster,
+    rules_for_mode, scale_up_offered, start_allowed, start_button,
 };
 
 const UNKNOWN_MODE: u8 = 200;
@@ -62,7 +62,18 @@ fn an_unknown_mode_cannot_be_picked() {
 fn the_campaign_starts_with_two_ready_players() {
     assert!(start_allowed(inputs(&[true], CO_OP_CAMPAIGN)));
     assert!(!start_allowed(inputs(&[false], CO_OP_CAMPAIGN)));
-    assert!(!start_allowed(inputs(&[], CO_OP_CAMPAIGN)));
+}
+
+#[test]
+fn the_host_can_start_with_nobody_else_in_the_lobby() {
+    assert!(start_allowed(inputs(&[], CO_OP_CAMPAIGN)));
+    assert!(start_allowed(inputs(&[], FREE_ROAM)));
+}
+
+#[test]
+fn a_joined_player_who_is_not_ready_still_blocks_the_start() {
+    assert!(!start_allowed(inputs(&[false], FREE_ROAM)));
+    assert!(!start_allowed(inputs(&[true, false], FREE_ROAM)));
 }
 
 #[test]
@@ -280,4 +291,30 @@ fn not_now_is_forgotten_when_the_guest_leaves_or_another_slot_is_picked() {
     assert_eq!(declined_scale_up_kept(Some(2), Some(3), true), None);
     assert_eq!(declined_scale_up_kept(Some(2), None, true), None);
     assert_eq!(declined_scale_up_kept(None, Some(2), true), None);
+}
+
+#[test]
+fn the_any_look_switch_is_offered_in_the_automata_campaign_only() {
+    assert!(any_look_switch_offered(&AUTOMATA, CO_OP_CAMPAIGN.rules()));
+    assert!(!any_look_switch_offered(&AUTOMATA, FREE_ROAM.rules()));
+    assert!(!any_look_switch_offered(&REPLICANT, CO_OP_CAMPAIGN.rules()));
+    assert!(!any_look_switch_offered(&REPLICANT, FREE_ROAM.rules()));
+}
+
+#[test]
+fn the_any_look_switch_is_always_available_to_flip() {
+    assert!(option_available(
+        &SessionOptions::default(),
+        LobbyOption::AnyLook
+    ));
+}
+
+#[test]
+fn the_any_look_switch_is_off_by_default_and_says_what_it_does() {
+    assert!(!SessionOptions::default().any_look_allowed);
+    assert_eq!(ANY_LOOK_LABEL, "Any outfit and accessory");
+    assert_eq!(
+        ANY_LOOK_NOTE,
+        "Outfits and accessories are meant to be unlocked by playing. Turn this on to let both players wear any of them in this co-op campaign."
+    );
 }

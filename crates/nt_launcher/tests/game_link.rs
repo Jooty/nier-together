@@ -1,6 +1,7 @@
 use nt_launcher::game_link::{
     StartChoice, StartSetting, clear_boot, clear_link, write_boot, write_character,
     write_coop_save_file, write_link, write_new_game, write_settings, write_start,
+    write_started_alone,
 };
 use nt_launcher_core::{AUTOMATA, PlayerSettings, REPLICANT, SessionOptions};
 
@@ -334,4 +335,24 @@ fn the_coop_save_file_is_written_only_when_named_and_cleared_with_the_boot() {
     let text = std::fs::read_to_string(dir.join(REPLICANT.link_file_name)).unwrap();
     assert!(text.contains("link = 5000"));
     assert!(!text.contains("coop_save_file"));
+}
+
+#[test]
+fn a_start_with_nobody_else_is_written_and_a_start_with_a_partner_removes_it() {
+    let dir = fresh_dir("started_alone");
+    write_link(&REPLICANT, &dir, 5000, "Ayla").unwrap();
+    write_started_alone(&REPLICANT, &dir, true).unwrap();
+    assert!(written_text(&dir).contains("started_alone = true"));
+    write_started_alone(&REPLICANT, &dir, false).unwrap();
+    let text = written_text(&dir);
+    assert!(!text.contains("started_alone"));
+    assert!(text.contains("link = 5000"));
+}
+
+#[test]
+fn clearing_boot_removes_the_start_with_nobody_else() {
+    let dir = fresh_dir("started_alone_clear");
+    write_started_alone(&AUTOMATA, &dir, true).unwrap();
+    clear_boot(&AUTOMATA, &dir).unwrap();
+    assert!(!dir.join(AUTOMATA.link_file_name).exists());
 }

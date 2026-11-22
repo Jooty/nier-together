@@ -1,5 +1,6 @@
-use windows_sys::Win32::Foundation::ERROR_DEVICE_NOT_CONNECTED;
+use windows_sys::Win32::Foundation::{ERROR_DEVICE_NOT_CONNECTED, ERROR_SUCCESS};
 
+use crate::proxy::pad_press;
 use crate::proxy::real_xinput::RealXInput;
 
 #[expect(
@@ -12,7 +13,11 @@ pub extern "system" fn XInputGetState(user_index: u32, state_address: usize) -> 
         return ERROR_DEVICE_NOT_CONNECTED;
     };
     // SAFETY: the caller's arguments are passed through unchanged to the function they were meant for.
-    unsafe { (real.get_state)(user_index, state_address) }
+    let result = unsafe { (real.get_state)(user_index, state_address) };
+    if result == ERROR_SUCCESS {
+        pad_press::observe_and_hide_answer_buttons(user_index, state_address);
+    }
+    result
 }
 
 #[expect(

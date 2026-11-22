@@ -4,15 +4,16 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use replicant_game::bullet_flights::{CueOnCopy, FlightSample, ShotCueBoard};
 use replicant_game::enemy_bullets::{
     CopyMotion, CopyMotionTally, EnemyBulletBoard, EnemyBulletKinds, EnemyBulletStep,
-    MAX_FOLLOWING_EFFECTS_PER_COPY, SHOT_CUE_SUMMARY_INTERVAL_MS, ShotCueTally, ShownEffectTally,
-    SpriteBulletKinds, first_sprite_frame, look_resized, look_scale, next_sprite_frame,
-    scaled_look,
+    GuestBulletTrace, MAX_FOLLOWING_EFFECTS_PER_COPY, SHOT_CUE_SUMMARY_INTERVAL_MS, ShotCueTally,
+    ShownEffectTally, SpriteBulletKinds, first_sprite_frame, look_resized, look_scale,
+    next_sprite_frame, scaled_look,
 };
 use replicant_proto::{
     BULLET_EFFECT_SLOTS, BULLET_TRANSFORM_FLOATS, BulletFlight, BulletLook, BulletSprite,
     EnemyBulletFlight, Message, ShotCue, ShotCueKind,
 };
 
+use crate::boss_messages::boss_fights_started;
 use crate::build_gate::VerifiedBuild;
 use crate::bullets::{create_effect, end_effect, place_effect, style_effect};
 use crate::diagnostics::log_line;
@@ -20,7 +21,8 @@ use crate::enemies::enemy_id_text;
 use crate::enemy_bullets::ENEMY_BULLET_SUMMARY_INTERVAL_MS;
 use crate::enemy_bullets::shot_sounds::{move_shot_sound, play_shot_sound, stop_shot_sound};
 use crate::enemy_bullets::sprite_draw::{
-    SpriteToDraw, set_sprites_to_draw, take_sprite_draw_counts,
+    SpriteToDraw, last_traced_draw, set_sprites_to_draw, take_off_screen_sample_line,
+    take_sprite_draw_counts, take_sprite_refusal_line,
 };
 use crate::net::{NetThread, net_clock_ms};
 
@@ -64,6 +66,8 @@ struct Shown {
     cue_tally: ShotCueTally,
     last_cue_summary_ms: u64,
     motion_tally: CopyMotionTally,
+    trace: GuestBulletTrace,
+    boss_fights_seen: u32,
 }
 
 impl Shown {
@@ -75,6 +79,9 @@ impl Shown {
                     self.start_sprite(arrived, sprite, now_ms);
                 } else if let Some(look) = flight.look {
                     self.start(build, arrived, look, now_ms);
+                }
+                if self.live.contains_key(&flight.instance) {
+                    self.trace.start(flight.instance, now_ms);
                 }
             }
             EnemyBulletStep::Move => {
@@ -90,12 +97,22 @@ impl Shown {
                         let before = look_scale(&shown);
                         (before > 0.0).then(|| look_scale(&now) / before)
                     });
+                    let drawn_position = translation_of(&live.motion.transform(now_ms));
                     let correction = live.motion.correct(
                         sample_of(&flight, now_ms),
                         arrived.scale_growth_per_second,
                         rescaled,
                     );
                     self.motion_tally.note_correction(correction);
+                    if let Some(line) = self.trace.message(
+                        flight.instance,
+                        now_ms,
+                        translation_of(&flight.transform),
+                        drawn_position,
+                        flight.velocity,
+                    ) {
+                        log_line(&line);
+                    }
                     if let (Some(shown), Some(sprite)) = (live.sprite.as_mut(), arrived.sprite) {
                         shown.sprite = sprite;
                     }
@@ -116,6 +133,7 @@ impl Shown {
                 if self.stop(build, flight.instance) {
                     self.ended += 1;
                 }
+                self.log_trace_end(flight.instance, now_ms, "ended by the host");
             }
             EnemyBulletStep::Full => self.refused += 1,
             EnemyBulletStep::Ignore => {}
@@ -229,6 +247,28 @@ impl Shown {
         true
     }
 
+    fn log_trace_end(&mut self, instance: u16, now_ms: u64, why: &str) {
+        if let Some(line) = self.trace.ended(instance, now_ms, why) {
+            log_line(&line);
+        }
+    }
+
+    fn log_traced_frames(&mut self, now_ms: u64) {
+        for slot in self.trace.slots() {
+            let Some(transform) = self.live_transform(slot, now_ms) else {
+                continue;
+            };
+            if let Some(line) = self.trace.frame(
+                slot,
+                now_ms,
+                translation_of(&transform),
+                last_traced_draw(slot),
+            ) {
+                log_line(&line);
+            }
+        }
+    }
+
     fn live_transform(&self, instance: u16, now_ms: u64) -> Option<[f32; BULLET_TRANSFORM_FLOATS]> {
         Some(self.live.get(&instance)?.motion.transform(now_ms))
     }
@@ -332,7 +372,7 @@ impl Shown {
     fn follow(&mut self, build: &VerifiedBuild, now_ms: u64) {
         let mut sprites = Vec::new();
         let mut resizing = 0;
-        for shown in self.live.values_mut() {
+        for (instance, shown) in &mut self.live {
             let transform = shown.motion.transform(now_ms);
             if let Some(look) = shown.look
                 && (shown.motion.resizing(now_ms) || shown.drawn_scale.is_nan())
@@ -367,6 +407,8 @@ impl Shown {
             if let Some(sprite) = shown.sprite.as_mut() {
                 sprite.frame = next_sprite_frame(sprite.frame);
                 sprites.push(SpriteToDraw {
+                    slot: *instance,
+                    traced: self.trace.is_traced(*instance),
                     position: [transform[3], transform[7], transform[11]],
                     sprite: sprite.sprite,
                     frame: sprite.frame,
@@ -419,6 +461,12 @@ impl Shown {
     }
 
     fn summarize_sprite_draws(&self) {
+        if let Some(line) = take_sprite_refusal_line() {
+            log_line(&line);
+        }
+        if let Some(line) = take_off_screen_sample_line() {
+            log_line(&line);
+        }
         let counts = take_sprite_draw_counts();
         let sprites_in_the_air = self
             .live
@@ -430,11 +478,13 @@ impl Shown {
         }
         // Handed but not taken: off screen, too near the camera, or the batch was full.
         log_line(&format!(
-            "enemy bullets: last 5 s the bullet draw ran {} times with host sprites ({} found no sprite batch), handed the batch {} sprites and it took {}, {} sprites in the air now",
+            "enemy bullets: last 5 s the bullet draw ran {} times in all, {} times with host sprites ({} found no sprite batch), handed the batch {} sprites and it took {} ({} of them off screen by the game's own view test), {} sprites in the air now",
+            counts.draws_of_any_kind,
             counts.draws,
             counts.draws_without_a_batch,
             counts.handed,
             counts.taken,
+            counts.off_screen_by_the_games_own_test,
             sprites_in_the_air
         ));
     }
@@ -448,12 +498,22 @@ pub(super) fn show_enemy_bullets(build: &VerifiedBuild, net: &NetThread, in_play
     if !in_play {
         for instance in shown.board.take_all() {
             shown.stop(build, instance);
+            shown.log_trace_end(
+                instance,
+                net_clock_ms(),
+                "dropped when the partner left play",
+            );
         }
         let _ = shown.cues.take_due(|_| None);
         set_sprites_to_draw(Vec::new());
         return;
     }
     let now_ms = net_clock_ms();
+    let boss_fights_started = boss_fights_started();
+    if shown.boss_fights_seen != boss_fights_started {
+        shown.boss_fights_seen = boss_fights_started;
+        shown.trace.restart_line_budget();
+    }
     for message in arrived {
         match message {
             Message::EnemyBulletFlight(flight) => shown.apply(build, flight, now_ms),
@@ -465,9 +525,11 @@ pub(super) fn show_enemy_bullets(build: &VerifiedBuild, net: &NetThread, in_play
         if shown.stop(build, instance) {
             shown.timed_out += 1;
         }
+        shown.log_trace_end(instance, now_ms, "timed out");
     }
     shown.make_due_one_shots(build, now_ms);
     shown.follow(build, now_ms);
+    shown.log_traced_frames(now_ms);
     shown.summarize(now_ms);
     shown.summarize_cues(now_ms);
 }

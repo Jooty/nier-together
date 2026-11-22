@@ -17,7 +17,8 @@ use replicant_game::cutscene_skip::{
 
 use crate::build_gate::VerifiedBuild;
 use crate::cutscene_skip::state::{
-    TRACKER, is_connected, now_ms, observe_scene, partner_in_cutscene, partner_name, send_ask,
+    TRACKER, guest_coming_into_scene, is_connected, now_ms, observe_scene, partner_in_cutscene,
+    partner_name, send_ask,
 };
 use crate::diagnostics::log_line;
 use crate::event_log::post_event;
@@ -97,7 +98,7 @@ fn decide(manager: *mut c_void, dt: f32) -> SkipVerdict {
         return SkipVerdict::PassThrough;
     }
     let pressed = confirm_pressed(build, manager, dt);
-    let participates = partner_in_cutscene(&view);
+    let participates = partner_in_cutscene(&view) || guest_coming_into_scene();
     let step = TRACKER.lock().unwrap_or_else(PoisonError::into_inner).step(
         pressed,
         participates,

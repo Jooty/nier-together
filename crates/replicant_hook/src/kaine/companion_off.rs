@@ -24,6 +24,7 @@ use replicant_proto::StoryArray;
 use crate::build_gate::VerifiedBuild;
 use crate::diagnostics::log_line;
 use crate::kaine::ai_hold::take_held_ticks;
+use crate::kaine::boss_drive::boss_fight_is_live;
 use crate::kaine::companion_rows_from_scripts;
 use crate::kaine::stand_in::session_side;
 use crate::memory::InProcessMemory;
@@ -78,7 +79,10 @@ pub(crate) fn companion_off_function_ran(build: &VerifiedBuild, name: &str) {
             .as_ref()
             .is_some_and(|arrays| arrays.flag(StoryArray::GameFlags, id))
     }));
-    KEEPS_HER_OFF.store(rule.keeps_her_off(), Ordering::Relaxed);
+    KEEPS_HER_OFF.store(
+        rule.keeps_her_off() && !boss_fight_is_live(),
+        Ordering::Relaxed,
+    );
     let actor = memory.module_base() + u64::from(PARTNER_KAINE_ACTOR_RVA);
     let Ok(found) = memory.read_u8(actor + PARTNER_ACTIVE_FLAG_OFFSET) else {
         return;
@@ -162,7 +166,8 @@ pub(crate) fn keep_companion_off(build: &VerifiedBuild, guest_in_session: bool) 
         her_script_mode: her_script_mode(&memory, actor),
         now_ms,
     });
-    KEEPS_HER_OFF.store(rule.keeps_her_off(), Ordering::Relaxed);
+    let she_is_the_boss = boss_fight_is_live();
+    KEEPS_HER_OFF.store(rule.keeps_her_off() && !she_is_the_boss, Ordering::Relaxed);
     if rule.keeps_her_off_everywhere() && rule.keeps_her_off() != kept_off_before {
         log_line(if rule.keeps_her_off() {
             "companion off (everywhere): a guest is in the session, she is kept inactive here"
@@ -172,6 +177,7 @@ pub(crate) fn keep_companion_off(build: &VerifiedBuild, guest_in_session: bool) 
     }
     let fight = rule.acting_row().unwrap_or("no fight");
     match step {
+        CompanionOffStep::Deactivate if she_is_the_boss => {}
         CompanionOffStep::Deactivate => {
             if memory
                 .write_u8(actor + PARTNER_ACTIVE_FLAG_OFFSET, 0)
@@ -205,6 +211,7 @@ pub(crate) fn keep_companion_off(build: &VerifiedBuild, guest_in_session: bool) 
             ));
         }
         CompanionOffStep::LendOver { deactivate, why } => {
+            let deactivate = deactivate && !she_is_the_boss;
             if deactivate {
                 let _ = memory.write_u8(actor + PARTNER_ACTIVE_FLAG_OFFSET, 0);
             }

@@ -22,6 +22,9 @@ pub fn ended_line(end: WatchEnd) -> String {
         WatchEnd::LeftTheSession => "the session is over",
         WatchEnd::SettingOff => "guest_watches_when_the_story_takes_her is off",
         WatchEnd::PackIsOneWhereTheGuestPlays => "this pack is one where the guest plays",
+        WatchEnd::LeftTheAerieAfterTheExitRemoval => {
+            "the story took the companion at the Aerie exit and the host is outside the Aerie"
+        }
         WatchEnd::HostLedStretchOver => "the host-led stretch is over",
     };
     format!("watching: ended, {why}; this game's body is shown and free again at the host's place")

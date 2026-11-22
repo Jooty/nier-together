@@ -6,6 +6,7 @@ use automata_game::load_gate::{
     LoadSignal, LocalLoadSignal, PARTNER_LOAD_SIGNAL_STALE_MS, PartnerLoad, StoryPlace,
 };
 use automata_game::partner::BodySnapshot;
+use automata_game::travel::JumpRole;
 
 use crate::net::link_state::NetShared;
 use crate::net::partner_watch::{NetSharedExt, PartnerWatch};
@@ -53,7 +54,7 @@ pub fn is_snapshot_without_body(snapshot: &BodySnapshot) -> bool {
 }
 
 pub fn partner_load_of(shared: &NetShared, now_ms: u64) -> PartnerLoad {
-    match shared.campaign_partner() {
+    match shared.companion_player() {
         Some(partner) => player_load_of(shared, partner.slot, now_ms),
         None => load_of_watch(shared, PartnerWatch::default(), now_ms),
     }
@@ -81,5 +82,14 @@ fn load_of_watch(shared: &NetShared, watch: PartnerWatch, now_ms: u64) -> Partne
 }
 
 pub fn partner_place_of(shared: &NetShared) -> StoryPlace {
-    shared.partner_watch().place
+    shared
+        .companion_player()
+        .map_or_else(StoryPlace::default, |player| player.watch.place)
+}
+
+pub fn load_role_of(shared: &NetShared) -> JumpRole {
+    if shared.companion_player().is_none() {
+        return JumpRole::Solo;
+    }
+    JumpRole::of_link(shared.counts_as_connected(), shared.local_slot)
 }

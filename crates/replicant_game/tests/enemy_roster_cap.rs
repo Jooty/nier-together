@@ -41,8 +41,8 @@ fn feed_ids(mirror: &mut EnemyMirror, at_ms: u64, tick: u32, ids: Vec<EnemyId>) 
 }
 
 #[test]
-fn a_round_of_eighty_holds_a_floor_of_fifty() {
-    assert_eq!(ENEMY_ROUND_CAPACITY, 80);
+fn a_round_of_160_holds_a_floor_of_fifty() {
+    assert_eq!(ENEMY_ROUND_CAPACITY, 160);
     let parts = split_snapshot(1, PHASE, floor_of(50), &[[0.0; 3]]);
     let sent: usize = parts.iter().map(|part| part.enemies.len()).sum();
     assert_eq!(sent, 50);
@@ -52,18 +52,18 @@ fn a_round_of_eighty_holds_a_floor_of_fifty() {
         assert_eq!(part.round, 50);
         assert!(encode(&Message::EnemySnapshot(part.clone())).is_ok());
     }
-    let full = split_snapshot(1, PHASE, floor_of(80), &[[0.0; 3]]);
-    assert_eq!(full.len(), 16);
-    assert!(full.iter().all(|part| part.round == 80));
+    let full = split_snapshot(1, PHASE, floor_of(160), &[[0.0; 3]]);
+    assert_eq!(full.len(), 32);
+    assert!(full.iter().all(|part| part.round == 160));
 }
 
 #[test]
 fn a_floor_over_the_round_announces_both_numbers() {
-    let parts = split_snapshot(1, PHASE, floor_of(90), &[[0.0; 3]]);
+    let parts = split_snapshot(1, PHASE, floor_of(170), &[[0.0; 3]]);
     assert!(
         parts
             .iter()
-            .all(|part| part.total == 90 && part.round == 80)
+            .all(|part| part.total == 170 && part.round == 160)
     );
 }
 
@@ -86,12 +86,12 @@ fn the_list_is_complete_when_every_part_arrived_and_the_counts_agree() {
 #[test]
 fn a_round_that_left_enemies_out_is_not_complete_even_with_every_part() {
     let mut mirror = EnemyMirror::new();
-    let parts = split_snapshot(1, PHASE, floor_of(90), &[[0.0; 3]]);
+    let parts = split_snapshot(1, PHASE, floor_of(170), &[[0.0; 3]]);
     feed(&mut mirror, 0, &parts);
     assert!(!mirror.host_view(0).round_covers_host);
     assert_eq!(
         mirror.latest_complete_round().map(|round| round.total),
-        Some(90)
+        Some(170)
     );
 }
 
@@ -102,7 +102,7 @@ fn an_enemy_outside_the_round_but_in_the_hosts_ids_is_kept() {
     feed(
         &mut mirror,
         0,
-        &split_snapshot(1, PHASE, floor_of(90), &[[0.0; 3]]),
+        &split_snapshot(1, PHASE, floor_of(170), &[[0.0; 3]]),
     );
     feed_ids(&mut mirror, 0, 1, all);
     let view = mirror.host_view(10);
@@ -116,7 +116,7 @@ fn an_enemy_the_host_does_not_have_is_held_after_the_grace() {
     feed(
         &mut mirror,
         0,
-        &split_snapshot(1, PHASE, floor_of(90), &[[0.0; 3]]),
+        &split_snapshot(1, PHASE, floor_of(170), &[[0.0; 3]]),
     );
     feed_ids(&mut mirror, 0, 1, (0..90).map(id).collect());
     let view = mirror.host_view(10);
@@ -137,7 +137,7 @@ fn before_the_first_id_list_nothing_is_removed() {
     feed(
         &mut mirror,
         0,
-        &split_snapshot(1, PHASE, floor_of(90), &[[0.0; 3]]),
+        &split_snapshot(1, PHASE, floor_of(170), &[[0.0; 3]]),
     );
     let view = mirror.host_view(10);
     assert!(!view.is_known());
@@ -228,8 +228,8 @@ fn the_count_line_comes_once_per_change_and_not_when_the_numbers_agree() {
 fn the_host_says_once_when_it_has_more_than_a_round_holds() {
     let mut log = CountLog::new();
     assert!(log.host_line(50, ENEMY_ROUND_CAPACITY).is_none());
-    assert!(log.host_line(90, ENEMY_ROUND_CAPACITY).is_some());
-    assert!(log.host_line(90, ENEMY_ROUND_CAPACITY).is_none());
-    assert!(log.host_line(91, ENEMY_ROUND_CAPACITY).is_some());
+    assert!(log.host_line(170, ENEMY_ROUND_CAPACITY).is_some());
+    assert!(log.host_line(170, ENEMY_ROUND_CAPACITY).is_none());
+    assert!(log.host_line(171, ENEMY_ROUND_CAPACITY).is_some());
     assert!(log.host_line(50, ENEMY_ROUND_CAPACITY).is_none());
 }

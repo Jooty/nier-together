@@ -1,4 +1,5 @@
 use replicant_game::readiness::PartnerWatch;
+use replicant_game::stay_together::FollowRole;
 use replicant_game::story_calls::{PartnerPlace, Whereabouts};
 use replicant_proto::PlayerState;
 
@@ -34,6 +35,8 @@ pub trait NetSharedExt {
     fn partner_place(&self) -> PartnerPlace;
 
     fn partner_counts_for_zone_rule(&self) -> bool;
+
+    fn partner_game_binds_the_rules(&self) -> bool;
 }
 
 impl NetSharedExt for NetShared {
@@ -70,5 +73,12 @@ impl NetSharedExt for NetShared {
     fn partner_counts_for_zone_rule(&self) -> bool {
         self.state == NetState::Connected
             && self.partner_watch().counts_for_zone_rule(net_clock_ms())
+    }
+
+    fn partner_game_binds_the_rules(&self) -> bool {
+        match FollowRole::from_slot(self.local_slot) {
+            FollowRole::Host => self.partner_watch().counts_for_the_host_rules(),
+            FollowRole::Guest | FollowRole::Unknown => !self.partner_watch().is_game_closed(),
+        }
     }
 }

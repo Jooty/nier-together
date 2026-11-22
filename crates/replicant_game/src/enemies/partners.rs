@@ -20,6 +20,17 @@ pub fn partner_actors<M: GameMemory>(memory: &M) -> Vec<u64> {
     .collect()
 }
 
+pub fn partner_actors_for_enemy_scan<M: GameMemory>(
+    memory: &M,
+    kaine_is_the_boss: bool,
+) -> Vec<u64> {
+    let kaine = memory.module_base() + u64::from(PARTNER_KAINE_ACTOR_RVA);
+    partner_actors(memory)
+        .into_iter()
+        .filter(|actor| !(kaine_is_the_boss && *actor == kaine))
+        .collect()
+}
+
 /// Unique actor -2's place and facing, when the game holds her live.
 pub fn unique_companion_pose<M: GameMemory>(memory: &M) -> Option<PuppetPose> {
     let actor = memory.module_base() + u64::from(PARTNER_KAINE_ACTOR_RVA);

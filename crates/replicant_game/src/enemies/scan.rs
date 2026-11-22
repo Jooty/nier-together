@@ -8,7 +8,7 @@ use crate::offsets::{
     ACTOR_CLASS_ID_OFFSET, ACTOR_KIND_MASK_OFFSET, ACTOR_MANAGER_GROUP_COUNT_OFFSET,
     ACTOR_MANAGER_GROUP_STRIDE, ACTOR_MANAGER_RVA, ACTOR_SPAWN_SERIAL_OFFSET,
     ACTOR_TRANSFORM_BLOCK_BYTES, ACTOR_TRANSFORM_BLOCK_OFFSET, ENEMY_KIND_MASK_BITS,
-    MAX_ACTORS_SCANNED_PER_GROUP, PUPPET_ACTOR_GROUP,
+    MAX_ENEMY_ACTORS_SCANNED_PER_GROUP, PUPPET_ACTOR_GROUP,
 };
 use crate::puppet::{PuppetPose, actor_is_live};
 
@@ -28,7 +28,7 @@ pub fn scan_enemies<M: GameMemory>(
         if i32::from(group) == PUPPET_ACTOR_GROUP {
             continue;
         }
-        for index in 0..count.clamp(0, MAX_ACTORS_SCANNED_PER_GROUP) {
+        for index in 0..count.clamp(0, MAX_ENEMY_ACTORS_SCANNED_PER_GROUP) {
             let actor = actor_in_group(group, index);
             if actor == 0 || Some(actor) == skipped_actor || partner_actors.contains(&actor) {
                 continue;
@@ -41,7 +41,7 @@ pub fn scan_enemies<M: GameMemory>(
     Ok(sightings)
 }
 
-pub(crate) fn read_group_counts<M: GameMemory>(memory: &M) -> Result<Vec<i32>, GameError> {
+pub fn read_group_counts<M: GameMemory>(memory: &M) -> Result<Vec<i32>, GameError> {
     let stride = ACTOR_MANAGER_GROUP_STRIDE as usize;
     let mut table = vec![0_u8; usize::from(ENEMY_GROUP_COUNT) * stride];
     let first =

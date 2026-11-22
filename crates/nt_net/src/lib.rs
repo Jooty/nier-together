@@ -8,7 +8,10 @@ mod session;
 mod transport;
 
 #[cfg(feature = "iroh")]
-pub use iroh_adapter::{IrohConfig, IrohTransport, LOCAL_LOOKUP_PORT, invite_reads};
+pub use iroh_adapter::{
+    IrohConfig, IrohTransport, LOCAL_LOOKUP_PORT, TYPHON_RELAY_URL, invite_reads, relay_label,
+    relay_map_with_typhon,
+};
 pub use local_link::{
     LINK_ADDRESS, LINK_GAME_PEER, LINK_INVITE_PREFIX, LINK_LAUNCHER_PEER, LINK_VERSION,
     LocalLinkTransport,

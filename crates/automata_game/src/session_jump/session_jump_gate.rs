@@ -7,6 +7,7 @@ use crate::travel::JumpRole;
 pub enum SessionJumpOrigin {
     ThisPlayer,
     TheHostsOrder,
+    LandingAtTheHost,
 }
 
 impl SessionJumpOrigin {
@@ -14,6 +15,7 @@ impl SessionJumpOrigin {
         match self {
             Self::ThisPlayer => "asked here",
             Self::TheHostsOrder => "the host's order",
+            Self::LandingAtTheHost => "landing at the host",
         }
     }
 }
@@ -66,6 +68,7 @@ pub fn decide_session_jump(
     readings: &SessionJumpReadings,
 ) -> Result<(), SessionJumpRefusal> {
     match (origin, readings.role) {
+        (SessionJumpOrigin::LandingAtTheHost, _) => {}
         (SessionJumpOrigin::ThisPlayer, JumpRole::Guest) => {
             return Err(SessionJumpRefusal::OnlyTheHostAsks);
         }

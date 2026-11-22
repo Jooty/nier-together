@@ -7,6 +7,4 @@ __pycache__/
 /tools/
 /.claude/
 /scripts/*
-!/scripts/check_style.py
-!/scripts/check_comments.py
 /crates/**/*.log

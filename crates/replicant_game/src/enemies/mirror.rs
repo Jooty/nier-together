@@ -5,9 +5,9 @@ use replicant_proto::{
     PartnerActivity, PlayerState, StateTrack,
 };
 
-use crate::enemies::CompleteRound;
 use crate::enemies::host_id_list::IdListTracker;
 use crate::enemies::host_rounds::RoundTracker;
+use crate::enemies::{CUBE_GROUP, CompleteRound};
 use crate::enemies::{ENEMY_MIRROR_STALE_MS, HostListView};
 
 /// The guest's picture of the host's enemies, built from snapshots and spawn and death events,
@@ -115,10 +115,26 @@ impl EnemyMirror {
     }
 
     pub fn sample(&self, now_ms: u64, delay_ms: u64) -> Vec<MirroredEnemy> {
+        self.sample_with_cubes(now_ms, delay_ms, delay_ms, 0)
+    }
+
+    pub fn sample_with_cubes(
+        &self,
+        now_ms: u64,
+        delay_ms: u64,
+        cube_delay_ms: u64,
+        cube_extrapolation_ms: u64,
+    ) -> Vec<MirroredEnemy> {
         self.enemies
             .iter()
             .filter_map(|(id, enemy)| {
-                let sample = enemy.track.sample(now_ms, delay_ms)?;
+                let sample = if id.group == CUBE_GROUP {
+                    enemy
+                        .track
+                        .sample_extrapolated(now_ms, cube_delay_ms, cube_extrapolation_ms)?
+                } else {
+                    enemy.track.sample(now_ms, delay_ms)?
+                };
                 Some(MirroredEnemy {
                     id: *id,
                     position: sample.position,

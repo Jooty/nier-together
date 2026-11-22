@@ -33,6 +33,11 @@ impl Drop for MenuFreeCall {
     }
 }
 
+pub(crate) fn while_menu_free<T>(call: impl FnOnce() -> T) -> T {
+    let _call = MenuFreeCall::begin();
+    call()
+}
+
 pub(super) fn menu_free_call_active() -> bool {
     MENU_FREE_CALLS_ACTIVE.load(Ordering::Relaxed) != 0
 }

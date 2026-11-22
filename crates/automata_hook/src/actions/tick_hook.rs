@@ -40,4 +40,5 @@ fn run_game_tick(_build: &VerifiedBuild) {
     crate::shared_defeat_driver::tick();
     crate::story_steps_driver::tick();
     crate::guest_watches_driver::tick();
+    crate::look_driver::tick();
 }

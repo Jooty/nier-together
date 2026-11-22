@@ -1,5 +1,7 @@
 use crate::rule_rooms::is_host_run_rule_room_call;
-use crate::story_calls::{STORY_CALL_TABLE, StoryCallKind, name_hash, story_call_kind};
+use crate::story_calls::{
+    STORY_CALL_TABLE, StoryCallKind, is_world_change_step, name_hash, story_call_kind,
+};
 
 pub fn pack_hash_of_phase(phase_name: &str) -> u64 {
     name_hash(phase_name)
@@ -7,6 +9,9 @@ pub fn pack_hash_of_phase(phase_name: &str) -> u64 {
 
 pub fn relay_kind(pack_hash: u64, function_hash: u64) -> Option<StoryCallKind> {
     if is_host_run_rule_room_call(pack_hash, function_hash) {
+        return Some(StoryCallKind::Story);
+    }
+    if is_world_change_step(pack_hash, function_hash) {
         return Some(StoryCallKind::Story);
     }
     let first_row = STORY_CALL_TABLE.partition_point(|&(pack, _, _)| pack < pack_hash);

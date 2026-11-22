@@ -1,4 +1,7 @@
 mod ai_hold;
+mod boss_drive;
+mod boss_own_life;
+mod boss_phase;
 mod companion_off;
 mod hit_power;
 mod partner_hide;
@@ -10,9 +13,13 @@ mod stand_in;
 mod stats;
 
 pub(crate) use ai_hold::install as install_ai_hold;
+pub(crate) use boss_drive::{
+    boss_drive_is_on, boss_fight_is_live, guest_in_boss_fight, tick_boss_drive,
+};
+pub(crate) use boss_own_life::note_boss_life_seen;
 pub(crate) use companion_off::{
-    companion_off_function_ran, keep_companion_off, note_hit_for_companion_off,
-    set_companion_off_everywhere,
+    companion_off_fight, companion_off_function_ran, keep_companion_off,
+    note_hit_for_companion_off, set_companion_off_everywhere,
 };
 pub(crate) use hit_power::{hit_at_first_body_power, host_weapon_reported};
 pub(crate) use partner_hide::hide_partner_kaine;

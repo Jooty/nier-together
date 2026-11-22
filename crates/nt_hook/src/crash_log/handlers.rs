@@ -8,8 +8,8 @@ use std::time::Duration;
 use crate::crash_report::{
     ACCESS_VIOLATION_CODE, CRASH_REPORT_LOG_LINES, CRASH_REPORT_MAX_VECTORED_REPORTS,
     CRASH_REPORT_MODULE_SPAN_BYTES, CRASH_REPORT_STACK_FRAMES, CRASH_REPORT_STACK_SCAN_WORDS,
-    CrashFacts, ModuleSpot, StackFrame, early_line, is_fatal_code, is_return_address_candidate,
-    last_lines, report_text,
+    CrashFacts, CrashRegisters, ModuleSpot, StackFrame, early_line, is_fatal_code,
+    is_return_address_candidate, last_lines, report_text_with,
 };
 use windows_sys::Win32::Foundation::{HMODULE, MAX_PATH};
 use windows_sys::Win32::System::Diagnostics::Debug::{
@@ -22,6 +22,7 @@ use windows_sys::Win32::System::LibraryLoader::{
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetCurrentThreadId};
 
 use crate::diagnostics::{log_line, log_path, stamp};
+use crate::stall_watch::game_thread_heartbeat;
 
 const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 const VECTORED_HANDLER_RUNS_FIRST: u32 = 1;
@@ -152,7 +153,8 @@ fn write_report(info: *const EXCEPTION_POINTERS, last_chance: bool) {
 fn write_facts(facts: &CrashFacts) {
     let log = std::fs::read_to_string(log_path()).unwrap_or_default();
     let tail = last_lines(&log, CRASH_REPORT_LOG_LINES);
-    for line in report_text(facts, &tail).lines() {
+    let probe_lines = super::probes::probe_lines(facts);
+    for line in report_text_with(facts, &probe_lines, &tail).lines() {
         write_durable_line(line);
     }
 }
@@ -201,11 +203,45 @@ fn read_facts(info: *const EXCEPTION_POINTERS, last_chance: bool) -> Option<Cras
         address,
         // SAFETY: GetCurrentThreadId takes no arguments and cannot fail.
         thread_id: unsafe { GetCurrentThreadId() },
+        game_thread_id: game_thread_heartbeat().map(|beat| beat.thread_id),
+        registers: registers_of(info),
         module,
         in_our_module,
         access,
         last_chance,
         stack: capture_stack(info),
+    })
+}
+
+#[expect(
+    unsafe_code,
+    reason = "reads the register snapshot the system passed to the handler"
+)]
+fn registers_of(info: *const EXCEPTION_POINTERS) -> Option<CrashRegisters> {
+    // SAFETY: the caller checked the pointer; a null context record is handled below.
+    let context = unsafe { (*info).ContextRecord };
+    if context.is_null() {
+        return None;
+    }
+    // SAFETY: the context record is valid for the duration of the handler.
+    let context = unsafe { &*context };
+    Some(CrashRegisters {
+        rax: context.Rax,
+        rbx: context.Rbx,
+        rcx: context.Rcx,
+        rdx: context.Rdx,
+        rsi: context.Rsi,
+        rdi: context.Rdi,
+        rbp: context.Rbp,
+        rsp: context.Rsp,
+        r8: context.R8,
+        r9: context.R9,
+        r10: context.R10,
+        r11: context.R11,
+        r12: context.R12,
+        r13: context.R13,
+        r14: context.R14,
+        r15: context.R15,
     })
 }
 
@@ -224,31 +260,35 @@ fn capture_stack(info: *const EXCEPTION_POINTERS) -> Vec<StackFrame> {
     scan_stack(stack_pointer)
 }
 
-#[expect(
-    unsafe_code,
-    reason = "reads a thread's stack through ReadProcessMemory, which fails instead of faulting"
-)]
 pub(super) fn scan_stack(stack_pointer: u64) -> Vec<StackFrame> {
     let mut words = Vec::with_capacity(CRASH_REPORT_STACK_SCAN_WORDS);
     for index in 0..CRASH_REPORT_STACK_SCAN_WORDS {
-        let mut word = 0_u64;
-        let mut read = 0_usize;
-        // SAFETY: the destination is an 8-byte local; a failed read leaves it zero and reports false.
-        let ok = unsafe {
-            ReadProcessMemory(
-                GetCurrentProcess(),
-                (stack_pointer + 8 * index as u64) as *const core::ffi::c_void,
-                (&mut word as *mut u64).cast(),
-                8,
-                &mut read,
-            )
-        };
-        if ok == 0 {
+        let Some(word) = read_word(stack_pointer + 8 * index as u64) else {
             break;
-        }
+        };
         words.push(word);
     }
     frames_in_stack_words(&words)
+}
+
+#[expect(
+    unsafe_code,
+    reason = "reads a word of the process through ReadProcessMemory, which fails instead of faulting"
+)]
+pub(super) fn read_word(address: u64) -> Option<u64> {
+    let mut word = 0_u64;
+    let mut read = 0_usize;
+    // SAFETY: the destination is an 8-byte local; a failed read leaves it zero and reports false.
+    let ok = unsafe {
+        ReadProcessMemory(
+            GetCurrentProcess(),
+            address as *const core::ffi::c_void,
+            (&mut word as *mut u64).cast(),
+            8,
+            &mut read,
+        )
+    };
+    (ok != 0 && read == 8).then_some(word)
 }
 
 #[expect(

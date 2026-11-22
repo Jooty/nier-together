@@ -1,3 +1,4 @@
+mod any_look_switch;
 mod campaign_roles;
 mod character_sharing;
 mod followed_kind;
@@ -16,6 +17,7 @@ mod start_button;
 mod start_rule;
 mod ticket_check;
 
+pub use any_look_switch::{ANY_LOOK_LABEL, ANY_LOOK_NOTE, any_look_switch_offered};
 pub use campaign_roles::campaign_character;
 pub use character_sharing::characters_shareable;
 pub use followed_kind::followed_lobby_kind;

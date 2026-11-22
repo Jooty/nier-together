@@ -1,6 +1,7 @@
 use nt_wire::LobbyMessage;
 use replicant_proto::{
-    CampaignCard, PartnerBody, PlayerSettings, SeatPart, SeatReceipt, SessionOptions,
+    CampaignCard, PartnerBody, PlayerSettings, ScaleUpAnswer, ScaleUpAsk, SeatPart, SeatReceipt,
+    SessionOptions,
 };
 
 /// What a launcher and a game say to each other beyond the lobby; a game's messages may carry none of it.
@@ -14,11 +15,14 @@ pub(crate) enum LauncherPayload {
     SeatPart(SeatPart),
     SeatReceipt(SeatReceipt),
     GameSaved { succeeded: bool },
+    ScaleUpAsk(ScaleUpAsk),
+    ScaleUpAnswer(ScaleUpAnswer),
 }
 
 pub(crate) trait BridgeMessage: LobbyMessage + Send + 'static {
     const LOBBY_PICKS_CHARACTERS: bool;
     const CARRIES_CAMPAIGN_SAVES: bool;
+    const HOST_ALONE_TAKES_SESSION_OPTIONS: bool;
 
     fn kind_name(&self) -> &'static str;
 

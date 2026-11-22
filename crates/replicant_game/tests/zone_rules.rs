@@ -1,10 +1,13 @@
 use replicant_game::PhaseEntry;
+use replicant_game::callback_gate::LastPauseOn;
 use replicant_game::stay_together::{FollowRole, PARTNER_TIMEOUT_MS};
 use replicant_game::zone_rules::{
     AttemptCooldown, Companion, DEFAULT_ZONE_RADIUS_UNITS, DoorKind, EXIT_DOORS, GUEST_VETO_TEXT,
     HOST_WANTS_TO_GO_COOLDOWN_MS, MAX_ZONE_RADIUS_UNITS, MIN_ZONE_RADIUS_UNITS, Placement,
-    VETO_LOG_INTERVAL_MS, VetoNotice, ZoneChangeAsk, ZoneChangeSource, ZoneRadius, ZoneVerdict,
-    is_zone_exit_callback, judge_zone_change,
+    VETO_LOG_INTERVAL_MS, VetoNotice, WARP_MENU_CANCEL_POINT, WARP_MENU_KEEP_ORIGIN_POINT,
+    WARP_MENU_PAUSE_RELEASE_AFTER_MS, WarpMenuPauseFacts, WarpMenuPauseVerdict, WarpMenuVeto,
+    ZoneChangeAsk, ZoneChangeSource, ZoneRadius, ZoneVerdict, is_zone_exit_callback,
+    judge_warp_menu_pause, judge_zone_change, warp_pick_is_a_cancel,
 };
 
 const HOME: Placement = Placement {
@@ -350,4 +353,124 @@ fn an_exit_door_opens_when_the_partner_game_is_closed() {
         radius: ZoneRadius::default(),
     });
     assert_eq!(verdict, ZoneVerdict::Allow);
+}
+
+#[test]
+fn a_watching_guest_vetoes_without_telling_anyone() {
+    assert!(!ZoneVerdict::OnlyHostMayChange.is_announced(true));
+}
+
+#[test]
+fn a_playing_guest_is_still_told_and_tells_the_host() {
+    assert!(ZoneVerdict::OnlyHostMayChange.is_announced(false));
+}
+
+#[test]
+fn the_host_waiting_for_a_partner_is_announced_either_way() {
+    assert!(ZoneVerdict::WaitingFor("Sam".to_owned()).is_announced(false));
+    assert!(ZoneVerdict::WaitingFor("Sam".to_owned()).is_announced(true));
+}
+
+#[test]
+fn the_game_own_cancel_pick_is_a_cancel_and_a_destination_is_not() {
+    assert!(warp_pick_is_a_cancel(WARP_MENU_CANCEL_POINT));
+    assert!(!warp_pick_is_a_cancel(0));
+    assert!(!warp_pick_is_a_cancel(101));
+}
+
+#[test]
+fn a_held_warp_pick_runs_the_cancel_without_replacing_the_menu_origin() {
+    assert_eq!(WARP_MENU_CANCEL_POINT, -1);
+    assert_eq!(WARP_MENU_KEEP_ORIGIN_POINT, -1);
+    assert!(warp_pick_is_a_cancel(WARP_MENU_CANCEL_POINT));
+}
+
+const FERRY_PAUSE: u32 = 0x480;
+const WAITED: u64 = WARP_MENU_PAUSE_RELEASE_AFTER_MS;
+
+fn ferry_veto() -> WarpMenuVeto {
+    WarpMenuVeto {
+        vetoed_at_ms: 10_000,
+        changes_let_through_then: 4,
+    }
+}
+
+fn ferry_pause_on() -> LastPauseOn {
+    LastPauseOn {
+        step: "B_CENTER_VILLAGE_01->Open_Port_Window".to_owned(),
+        mask_after: FERRY_PAUSE,
+    }
+}
+
+fn judged(
+    after_ms: u64,
+    changes: u32,
+    pause: Option<&LastPauseOn>,
+    mask: u32,
+) -> WarpMenuPauseVerdict {
+    judge_warp_menu_pause(
+        &ferry_veto(),
+        &WarpMenuPauseFacts {
+            now_ms: 10_000 + after_ms,
+            changes_let_through_now: changes,
+            last_pause_on: pause,
+            current_pause_mask: mask,
+        },
+    )
+}
+
+#[test]
+fn the_ferry_pause_is_left_alone_until_the_cancel_had_its_time() {
+    let pause = ferry_pause_on();
+    assert_eq!(
+        judged(WAITED - 1, 4, Some(&pause), FERRY_PAUSE),
+        WarpMenuPauseVerdict::Wait
+    );
+}
+
+#[test]
+fn a_ferry_pause_still_on_after_the_wait_is_released() {
+    let pause = ferry_pause_on();
+    assert_eq!(
+        judged(WAITED, 4, Some(&pause), FERRY_PAUSE),
+        WarpMenuPauseVerdict::ReleaseThePause
+    );
+}
+
+#[test]
+fn nothing_is_released_when_the_cancel_already_ran_pause_off() {
+    assert_eq!(
+        judged(WAITED, 4, None, 0),
+        WarpMenuPauseVerdict::NothingToRelease
+    );
+}
+
+#[test]
+fn nothing_is_released_when_the_mask_changed_since_the_menu_set_it() {
+    let pause = ferry_pause_on();
+    assert_eq!(
+        judged(WAITED, 4, Some(&pause), 0x7f),
+        WarpMenuPauseVerdict::NothingToRelease
+    );
+}
+
+#[test]
+fn nothing_is_released_when_a_warp_or_map_change_went_through_meanwhile() {
+    let pause = ferry_pause_on();
+    assert_eq!(
+        judged(WAITED, 5, Some(&pause), FERRY_PAUSE),
+        WarpMenuPauseVerdict::NothingToRelease
+    );
+}
+
+#[test]
+fn a_pause_some_other_step_set_is_never_released() {
+    let other = LastPauseOn {
+        step: "EID_0100_a0038g_Start".to_owned(),
+        mask_after: FERRY_PAUSE,
+    };
+    assert_eq!(
+        judged(WAITED, 4, Some(&other), FERRY_PAUSE),
+        WarpMenuPauseVerdict::NothingToRelease
+    );
 }

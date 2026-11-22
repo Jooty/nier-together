@@ -31,6 +31,7 @@ pub struct GameProfile {
     pub link_file_name: &'static str,
     pub characters: &'static [Character],
     pub characters_shareable: bool,
+    pub any_look_switch: bool,
     pub character_art: &'static [CharacterArt],
     pub modes: &'static [GameMode],
     pub free_roam_maps: &'static [FreeRoamMap],

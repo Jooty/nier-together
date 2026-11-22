@@ -30,10 +30,14 @@ mod bomb_tracking;
 mod bomb_walls;
 #[path = "boss_bar_probe.rs"]
 mod boss_bar_probe;
+#[path = "boss_gauge_watch.rs"]
+mod boss_gauge_watch;
 #[path = "boss_hit_log.rs"]
 mod boss_hit_log;
 #[path = "boss_messages.rs"]
 mod boss_messages;
+#[path = "boss_motion_log.rs"]
+mod boss_motion_log;
 #[path = "breaker_body_hold.rs"]
 mod breaker_body_hold;
 #[path = "bullet_flights.rs"]
@@ -42,6 +46,8 @@ mod bullet_flights;
 mod bullet_hits;
 #[path = "bullet_starts.rs"]
 mod bullet_starts;
+#[path = "bullet_trace.rs"]
+mod bullet_trace;
 #[path = "ca_gauge.rs"]
 mod ca_gauge;
 #[path = "callback_gate.rs"]
@@ -66,8 +72,16 @@ mod containers;
 mod copy_hold;
 #[path = "counted_talks.rs"]
 mod counted_talks;
+#[path = "crash_probe_mesh_update_list.rs"]
+mod crash_probe_mesh_update_list;
+#[path = "crash_probe_pppi_probe_set_update.rs"]
+mod crash_probe_pppi_probe_set_update;
+#[path = "cube_glows.rs"]
+mod cube_glows;
 #[path = "cube_log.rs"]
 mod cube_log;
+#[path = "cube_mirror_l44.rs"]
+mod cube_mirror_l44;
 #[cfg(feature = "probes")]
 #[path = "cube_probe.rs"]
 mod cube_probe;
@@ -125,6 +139,8 @@ mod event_log;
 mod eye_set_tally;
 #[path = "far_guest_follow.rs"]
 mod far_guest_follow;
+#[path = "fight_actor_probe.rs"]
+mod fight_actor_probe;
 #[path = "fight_doors.rs"]
 mod fight_doors;
 #[path = "fight_end_once.rs"]
@@ -161,6 +177,8 @@ mod fix_buttons;
 mod focus;
 #[path = "frame_ring.rs"]
 mod frame_ring;
+#[path = "frustum_open.rs"]
+mod frustum_open;
 #[path = "game_closing.rs"]
 mod game_closing;
 #[path = "guest_music_in_scenes.rs"]
@@ -193,6 +211,12 @@ mod inventory;
 mod invincibility;
 #[path = "kaine_ai_hold.rs"]
 mod kaine_ai_hold;
+#[path = "kaine_boss_drive.rs"]
+mod kaine_boss_drive;
+#[path = "kaine_boss_phases.rs"]
+mod kaine_boss_phases;
+#[path = "kaine_boss_pvp.rs"]
+mod kaine_boss_pvp;
 #[path = "kaine_box_moves.rs"]
 mod kaine_box_moves;
 #[path = "kaine_companion_off.rs"]
@@ -355,6 +379,8 @@ mod ride_boarding;
 mod rule_rooms;
 #[path = "save_files.rs"]
 mod save_files;
+#[path = "scale_up_prompt.rs"]
+mod scale_up_prompt;
 #[path = "scene_cover.rs"]
 mod scene_cover;
 #[path = "scene_follow.rs"]
@@ -383,6 +409,8 @@ mod scripted_camera;
 mod seat;
 #[path = "seat_name.rs"]
 mod seat_name;
+#[path = "sent_placed_cue_effects.rs"]
+mod sent_placed_cue_effects;
 #[path = "shared_events.rs"]
 mod shared_events;
 #[path = "shared_items.rs"]
@@ -445,6 +473,8 @@ mod ui_scenes;
 mod view_list;
 #[path = "voice_character.rs"]
 mod voice_character;
+#[path = "watch_room_camera.rs"]
+mod watch_room_camera;
 #[path = "watch_talks.rs"]
 mod watch_talks;
 #[path = "watching_guest_rules.rs"]

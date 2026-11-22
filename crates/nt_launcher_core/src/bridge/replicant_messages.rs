@@ -5,6 +5,7 @@ use crate::bridge::{BridgeMessage, LauncherPayload};
 impl BridgeMessage for Message {
     const LOBBY_PICKS_CHARACTERS: bool = false;
     const CARRIES_CAMPAIGN_SAVES: bool = true;
+    const HOST_ALONE_TAKES_SESSION_OPTIONS: bool = false;
 
     fn kind_name(&self) -> &'static str {
         Message::kind_name(self)
@@ -24,6 +25,8 @@ impl BridgeMessage for Message {
             LauncherPayload::SeatPart(part) => Message::SeatPart(part),
             LauncherPayload::SeatReceipt(receipt) => Message::SeatReceipt(receipt),
             LauncherPayload::GameSaved { succeeded } => Message::GameSaved { succeeded },
+            LauncherPayload::ScaleUpAsk(ask) => Message::ScaleUpAsk(ask),
+            LauncherPayload::ScaleUpAnswer(answer) => Message::ScaleUpAnswer(answer),
         })
     }
 
@@ -37,6 +40,8 @@ impl BridgeMessage for Message {
             Message::SeatPart(part) => Ok(LauncherPayload::SeatPart(part)),
             Message::SeatReceipt(receipt) => Ok(LauncherPayload::SeatReceipt(receipt)),
             Message::GameSaved { succeeded } => Ok(LauncherPayload::GameSaved { succeeded }),
+            Message::ScaleUpAsk(ask) => Ok(LauncherPayload::ScaleUpAsk(ask)),
+            Message::ScaleUpAnswer(answer) => Ok(LauncherPayload::ScaleUpAnswer(answer)),
             other => Err(other),
         }
     }

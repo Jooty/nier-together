@@ -10,6 +10,7 @@ pub mod carts;
 pub mod containers;
 pub mod coop_pause;
 pub mod counted_talks;
+pub mod crash_probe;
 #[cfg(feature = "probes")]
 pub mod cube_probe;
 pub mod cutscene_skip;
@@ -59,6 +60,7 @@ pub mod quiet_end;
 pub mod readiness;
 pub mod rule_rooms;
 pub mod save_files;
+pub mod scale_up_prompt;
 pub mod scene_follow;
 pub mod script_functions;
 pub mod script_rolls;

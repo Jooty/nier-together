@@ -122,7 +122,23 @@ extern "system" fn receive_attack_query_detour(
     if let Some(build) = HOOKED_BUILD.get() {
         let _ = panic::catch_unwind(|| {
             crate::kaine::note_hit_for_companion_off(build, victim as u64, record as u64);
+            crate::enemies::kaine_boss::note_native_boss_hit(build, victim as u64, record as u64);
+            crate::enemies::kaine_boss::scale_host_hit_on_driven_kaine(
+                build,
+                victim as u64,
+                record as u64,
+            );
         });
+    }
+    let guest_hit_sent = HOOKED_BUILD.get().is_some_and(|build| {
+        panic::catch_unwind(|| {
+            crate::enemies::kaine_boss::guest_hit_on_host_ghost(build, victim as u64, record as u64)
+        })
+        .unwrap_or(false)
+    });
+    if guest_hit_sent {
+        end_own_hit();
+        return 0;
     }
     let route = if applying_remote() {
         HitRoute::Run

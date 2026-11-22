@@ -45,7 +45,12 @@ impl PartnerKaineHide {
     }
 }
 
-/// Whether the AI partner Kaine should be hidden: someone on this link already is Kaine.
-pub fn partner_kaine_hidden_wanted(own: Option<PartnerBody>, remote: Option<PartnerBody>) -> bool {
-    [own, remote].contains(&Some(PartnerBody::SeedKaineE))
+/// Whether the AI partner Kaine should be hidden: someone on this link already is Kaine, unless
+/// she is the boss of a fight, where the AI actor is the one that is fought.
+pub fn partner_kaine_hidden_wanted(
+    own: Option<PartnerBody>,
+    remote: Option<PartnerBody>,
+    she_is_the_boss: bool,
+) -> bool {
+    !she_is_the_boss && [own, remote].contains(&Some(PartnerBody::SeedKaineE))
 }

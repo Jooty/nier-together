@@ -31,9 +31,9 @@ use crate::enemies_driver::{
 use crate::game_calls::{EnemyReading, GameCalls, PlacedEnemies, UnplacedEnemy};
 use crate::game_hooks::set_counts_follow_the_host;
 use crate::game_hooks::{
-    SharedEnemy, install_enemy_ai_hold, install_enemy_hits, install_generator_leave_test,
-    install_generator_spawns, set_shared_enemies, take_reported_enemy_hits,
-    while_a_heard_hit_is_applied,
+    SharedEnemy, install_bullet_probe, install_enemy_ai_hold, install_enemy_hits,
+    install_generator_leave_test, install_generator_spawns, set_shared_enemies,
+    take_reported_enemy_hits, while_a_heard_hit_is_applied,
 };
 use crate::net::{
     AutomataNet, SessionModeExt, handle, local_in_play, local_story_place, partner_place_of,
@@ -535,11 +535,12 @@ pub fn install(build: VerifiedBuild, settings: &GameSettings) {
     let Some(variant) = variant_of_image_size(build.size_of_image()) else {
         return;
     };
+    let calls = GameCalls::new(build, variant);
+    install_bullet_probe(calls);
     if settings.link_port.is_none() || !settings.enemy_share.lists_enemies() {
         log_line("enemies: off (no link port, or the setting shared_enemies is off)");
         return;
     }
-    let calls = GameCalls::new(build, variant);
     let health_is_shared =
         settings.enemy_share.shares_health() && install_enemy_hits(calls, settings.role);
     let generators_are_hooked = install_generator_spawns(calls);

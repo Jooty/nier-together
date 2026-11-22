@@ -17,7 +17,7 @@ use crate::net::{self, GhostWish, RemotePlayer, decide_ghost};
 use crate::puppet::body_pack::{BodyPackReady, advance, release_if_ours};
 use crate::puppet::despawn;
 use crate::puppet::partner_body::{exchange_bodies, exchange_book_presence, forget_remote_body};
-use crate::puppet::registry::{drive_ghost, ghost_exists, spawn_ghost};
+use crate::puppet::registry::{drive_ghost, ghost_exists, set_first_puppet_hidden, spawn_ghost};
 use crate::puppet::{GHOST_DELAY_MS, GHOST_PEER_TIMEOUT, GHOST_RESPAWN_COOLDOWN};
 
 static RESPAWN_REQUESTED: TakeOnce = TakeOnce::new();
@@ -96,6 +96,9 @@ pub fn tick_ghost(build: &VerifiedBuild) {
     }
     let remote_body = exchange_bodies();
     let partner_has_book = exchange_book_presence(build);
+    in_game_thread_step("ghost tick: boss drive", || {
+        crate::kaine::tick_boss_drive(build, wish, crate::story_watch::guest_is_watched());
+    });
     in_game_thread_step("ghost tick: companion hide", || {
         crate::kaine::hide_partner_kaine(build, remote_body);
     });
@@ -151,19 +154,20 @@ pub fn tick_ghost(build: &VerifiedBuild) {
     if ghost.book.puppet_id.is_none() {
         try_spawn(build, &mut ghost, &sample, wanted_body);
     }
+    let hidden_for_the_boss_fight = crate::kaine::boss_fight_is_live();
     if let Some(id) = ghost.book.puppet_id
         && let Err(error) = drive_ghost(
             build,
             id,
             pose_of(&sample),
             sample.motion.map(layer_motion),
-            sample.weapon,
+            sample.weapon.filter(|_| !hidden_for_the_boss_fight),
             sample.activity,
             sample
                 .motion
                 .map_or(NO_MOTION_NAME_HASH, |motion| motion.name_hash),
-            partner_has_book,
-            sample.ridden_boar,
+            partner_has_book && !hidden_for_the_boss_fight,
+            sample.ridden_boar.filter(|_| !hidden_for_the_boss_fight),
         )
     {
         let message = error.to_string();
@@ -171,6 +175,10 @@ pub fn tick_ghost(build: &VerifiedBuild) {
             log_line(&format!("ghost: {message}"));
         }
         ghost.spawn_error = Some(message);
+    }
+    set_first_puppet_hidden(build, hidden_for_the_boss_fight);
+    if crate::kaine::boss_drive_is_on() {
+        crate::enemies::drive_kaine_boss(build, &sample);
     }
     publish_status(wish, &ghost);
 }

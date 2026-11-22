@@ -10,10 +10,14 @@ use crate::net::partner_watch::PartnerWatch;
 pub struct AutomataLinkState {
     pub remote_inputs: InputsBySlot,
     pub enemy_leads: VecDeque<(u8, EnemyLead)>,
+    pub any_look_allowed: bool,
+    pub session_open: bool,
+    pub boss_wait_line_queued: bool,
 }
 
 impl AutomataLinkState {
     pub fn player_joined(&mut self, slot: u8) {
+        self.session_open = true;
         self.forget_player(slot);
     }
 

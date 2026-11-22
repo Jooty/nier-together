@@ -991,3 +991,14 @@ fn event_pause_together_is_on_unless_the_environment_or_the_file_turns_it_off() 
     };
     assert!(!choose_game_settings(env_off, None).event_pause_together);
 }
+
+#[test]
+fn a_start_with_nobody_else_is_read_from_the_link_file_and_defaults_to_off() {
+    let default = choose_game_settings(SettingsEnv::default(), None);
+    assert!(!default.started_alone);
+    assert!(!default.log_line.contains("started_alone"));
+    let alone = choose_game_settings(SettingsEnv::default(), Some("started_alone = true\n"));
+    assert!(alone.started_alone);
+    assert!(alone.log_line.contains(", started_alone"));
+    assert!(alone.start_together);
+}

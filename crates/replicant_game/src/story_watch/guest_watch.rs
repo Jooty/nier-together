@@ -1,10 +1,13 @@
-use crate::story_watch::PACKS_WHERE_THE_GUEST_PLAYS_THOUGH_THE_STORY_TAKES_HER;
+use crate::story_watch::{
+    AERIE_PACK_PREFIX, PACKS_WHERE_THE_GUEST_PLAYS_THOUGH_THE_STORY_TAKES_HER,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WatchFacts<'a> {
     pub setting_on: bool,
     pub guest_in_session: bool,
     pub story_has_taken_her: bool,
+    pub taken_at_the_aerie_exit: bool,
     pub host_leads_a_stretch: bool,
     pub pack: &'a str,
 }
@@ -15,6 +18,7 @@ pub enum WatchEnd {
     LeftTheSession,
     SettingOff,
     PackIsOneWhereTheGuestPlays,
+    LeftTheAerieAfterTheExitRemoval,
     HostLedStretchOver,
 }
 
@@ -83,6 +87,12 @@ fn end_reason(facts: &WatchFacts<'_>) -> Option<WatchEnd> {
     }
     if PACKS_WHERE_THE_GUEST_PLAYS_THOUGH_THE_STORY_TAKES_HER.contains(&facts.pack) {
         return Some(WatchEnd::PackIsOneWhereTheGuestPlays);
+    }
+    if facts.story_has_taken_her
+        && facts.taken_at_the_aerie_exit
+        && !facts.pack.starts_with(AERIE_PACK_PREFIX)
+    {
+        return Some(WatchEnd::LeftTheAerieAfterTheExitRemoval);
     }
     if !facts.story_has_taken_her {
         return Some(WatchEnd::StoryBroughtHerBack);

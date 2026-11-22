@@ -2,10 +2,18 @@
 mod auto_config;
 #[path = "ghost_wish.rs"]
 mod ghost_wish;
+#[path = "join_line.rs"]
+mod join_line;
+#[path = "late_join.rs"]
+mod late_join;
 #[path = "local_snapshot.rs"]
 mod local_snapshot;
 #[path = "net_thread.rs"]
 mod net_thread;
+#[path = "scale_up_prompt.rs"]
+mod scale_up_prompt;
+#[path = "solo_session_rules.rs"]
+mod solo_session_rules;
 
 use std::collections::BTreeSet;
 use std::path::Path;

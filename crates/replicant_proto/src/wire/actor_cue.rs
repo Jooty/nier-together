@@ -30,6 +30,7 @@ pub enum ActorCueKind {
     /// An effect made by id at a world transform (3x4 rows, translation in the last column).
     PlaceEffect {
         transform: [f32; BULLET_TRANSFORM_FLOATS],
+        handle: u32,
     },
     Sound {
         position: [f32; 3],
@@ -51,6 +52,10 @@ pub enum ActorCueKind {
     /// The host's statue broke: the damage dummy its stone state spawned is gone. `id` is
     /// unused (0).
     StoneBroken,
+    /// The host's placed effect known by `handle` ended; `id` is the effect's id.
+    PlacedEffectEnded {
+        handle: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,8 +99,9 @@ impl ActorCue {
             ActorCueKind::RemoveEffect { .. }
             | ActorCueKind::TurnedToStone(_)
             | ActorCueKind::StopSound { .. }
+            | ActorCueKind::PlacedEffectEnded { .. }
             | ActorCueKind::StoneBroken => true,
-            ActorCueKind::PlaceEffect { transform } => {
+            ActorCueKind::PlaceEffect { transform, .. } => {
                 transform.iter().enumerate().all(|(index, value)| {
                     let limit = if index % 4 == 3 {
                         MAX_POSITION_ABS

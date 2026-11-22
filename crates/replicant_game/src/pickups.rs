@@ -2,6 +2,7 @@ mod announce;
 mod catalog;
 mod shared_items;
 mod source;
+mod watch_rule;
 
 pub use announce::{PartnerPickupPlan, local_key_item_notice, plan_partner_pickup};
 pub use catalog::{is_key_item, is_story_item, item_name, story_item_raise_amount};
@@ -12,3 +13,4 @@ pub use shared_items::{
     is_shared_item, item_poll_runs_here, partner_take_amount, quest_check_count, split_turn_in,
 };
 pub use source::classify_add_caller;
+pub use watch_rule::world_pickup_refused_while_watching;

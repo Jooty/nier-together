@@ -2,6 +2,7 @@ pub mod character_setting;
 pub mod log_settings;
 pub mod menu;
 pub mod net;
+pub mod raw_mouse_setting;
 pub mod start_setting;
 
 #[cfg(windows)]
@@ -26,6 +27,8 @@ mod game_hooks;
 mod guest_watches_driver;
 #[cfg(windows)]
 mod hud;
+#[cfg(windows)]
+mod look_driver;
 #[cfg(windows)]
 mod overlay;
 #[cfg(windows)]

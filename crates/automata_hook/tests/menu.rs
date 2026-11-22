@@ -6,7 +6,8 @@ use automata_game::travel::{
     FAST_TRAVEL_IDLE_STATE, JumpRole, LoadedPoints, TravelPoint, TravelView, WorldReadings,
 };
 use automata_hook::menu::{
-    AutomataMenu, DownedHooks, GIVE_UP_FIX_ID, GO_TO_PLAYER_FIX_ID_BASE, TeleportHooks,
+    AutomataMenu, DownedHooks, GIVE_UP_FIX_ID, GO_TO_PLAYER_FIX_ID_BASE, LOOK_PANEL_ID,
+    LOOK_PANEL_LABEL, TeleportHooks,
 };
 use nt_hook::menu::{
     AreaChangeRefusal, AreaEntry, CoOpStatus, FixOutcome, GameMenu, MenuNote, PlayerLine,
@@ -133,7 +134,7 @@ fn the_empty_sections_are_the_bodies_of_the_model() {
             SectionBody::StoryJump(jumps) => assert_eq!(jumps.len(), 14),
             SectionBody::Fixes(fixes) => assert!(fixes.is_empty()),
             SectionBody::CoOp(status) => assert!(status.players.is_empty()),
-            SectionBody::SettingsAndLogs { panels, .. } => assert!(panels.is_empty()),
+            SectionBody::SettingsAndLogs { panels, .. } => assert_eq!(panels.len(), 1),
         }
     }
 }
@@ -393,4 +394,13 @@ fn a_not_ready_story_jump_is_refused_and_a_chapter_row_asks_the_session_jump_wit
 #[test]
 fn a_chapter_row_without_a_read_table_is_refused() {
     assert!(menu().run_story_jump(120).is_err());
+}
+
+#[test]
+fn the_menu_offers_the_outfit_and_accessory_panel() {
+    let panels = menu().extra_panels();
+    assert_eq!(panels.len(), 1);
+    assert_eq!(panels[0].id, LOOK_PANEL_ID);
+    assert_eq!(panels[0].label, LOOK_PANEL_LABEL);
+    assert_eq!(LOOK_PANEL_LABEL, "outfit and accessories");
 }

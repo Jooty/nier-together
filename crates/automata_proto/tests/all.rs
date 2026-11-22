@@ -6,6 +6,8 @@ mod event_wire;
 mod generator_counts_wire;
 #[path = "golden_wire.rs"]
 mod golden_wire;
+#[path = "look_wire.rs"]
+mod look_wire;
 #[path = "member_wire.rs"]
 mod member_wire;
 #[path = "pickup_wire.rs"]

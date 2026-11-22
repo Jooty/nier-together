@@ -6,6 +6,7 @@ use replicant_game::Replicant;
 use replicant_game::downed::{
     DownedRules, DownedState, KillGuardInputs, PlayerLock, StepInput, WatchSide, kill_is_blocked,
 };
+use replicant_game::kaine::boss_fight_watch_side;
 use replicant_game::stay_together::FollowRole;
 use replicant_proto::Message;
 
@@ -232,7 +233,12 @@ fn maintain_endure(
 }
 
 fn watch_side() -> WatchSide {
-    if crate::story_watch::this_game_is_watching() {
+    if let Some(side) = boss_fight_watch_side(
+        crate::kaine::boss_drive_is_on(),
+        crate::kaine::guest_in_boss_fight(),
+    ) {
+        side
+    } else if crate::story_watch::this_game_is_watching() {
         WatchSide::ThisGame
     } else if crate::story_watch::guest_is_watched() {
         WatchSide::Partner

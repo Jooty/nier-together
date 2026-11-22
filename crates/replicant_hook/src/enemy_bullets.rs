@@ -2,6 +2,7 @@
 //! sprite batch (visual only).
 
 mod bullet_start;
+mod host_trace;
 mod script_commands;
 mod send;
 mod shot_cues;

@@ -1,6 +1,8 @@
 use nt_net::ProgressEntry;
 use nt_wire::SessionRules;
-use replicant_proto::{CampaignCard, LobbyReady, PartnerBody, PlayerSettings, SessionOptions};
+use replicant_proto::{
+    CampaignCard, LobbyReady, PartnerBody, PlayerSettings, ScaleUpAsk, SessionOptions,
+};
 
 use crate::{ConnectionReport, NetError, NetStatus};
 
@@ -20,6 +22,12 @@ pub trait LauncherNet: Send + Sync {
     fn send_lobby_body(&self, _body: PartnerBody) {}
     fn send_lobby_character(&self, _index: u8) {}
     fn start_lobby(&self, _mode: u8) {}
+    /// While held, a member who joins after the start gets no start until `release_start`.
+    fn hold_late_starts(&self, _hold: bool) {}
+    /// Sends the start to one member, in the remembered mode unless `mode` says another.
+    fn release_start(&self, _slot: u8, _mode: Option<u8>) {}
+    /// Asks or tells the host's own game, and the guest it is about, over the local link.
+    fn send_scale_up_ask(&self, _ask: ScaleUpAsk) {}
     fn set_rules(&self, _rules: SessionRules) {}
     fn remove_member(&self, _slot: u8) {}
     fn send_campaign_card(&self, _card: CampaignCard) {}

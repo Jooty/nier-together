@@ -15,6 +15,7 @@ mod free_roam_board;
 mod game_row;
 mod game_title;
 mod home;
+mod keyboard_mouse_dialog;
 mod lobby;
 mod lobby_bar;
 mod lobby_layout;

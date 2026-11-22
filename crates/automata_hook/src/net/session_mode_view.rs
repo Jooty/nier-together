@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use automata_game::mode::SessionMode;
+use automata_game::outfit_look::looks_allowed;
 use automata_proto::PlayerState;
 use nt_hook::diagnostics::log_line;
 use nt_hook::net::{NetState, Player};
@@ -22,6 +23,17 @@ pub trait SessionModeExt {
     /// The player whose body the companion slot carries: the partner in the campaign, the
     /// lowest other slot in free roam.
     fn companion_player(&self) -> Option<&Player<PlayerState, PartnerWatch>>;
+
+    /// Free roam always, the campaign only while the host's switch for any outfit and accessory is on.
+    fn looks_allowed(&self) -> bool;
+
+    fn rules_taken_line(&self) -> String;
+
+    /// Every other player but a late joiner still waiting to be taken in.
+    fn counted_others(&self) -> impl Iterator<Item = &Player<PlayerState, PartnerWatch>>;
+
+    /// Connected to somebody who is counted.
+    fn counts_as_connected(&self) -> bool;
 }
 
 impl SessionModeExt for NetShared {
@@ -42,17 +54,38 @@ impl SessionModeExt for NetShared {
             .story_rules_apply()
             .then(|| self.partner())
             .flatten()
+            .filter(|partner| !partner.watch.held_back)
     }
 
     fn campaign_link_is_up(&self) -> bool {
-        self.state == NetState::Connected && self.session_mode().story_rules_apply()
+        self.counts_as_connected() && self.session_mode().story_rules_apply()
     }
 
     fn companion_player(&self) -> Option<&Player<PlayerState, PartnerWatch>> {
         if self.session_mode().story_rules_apply() {
-            self.partner()
+            self.campaign_partner()
         } else {
-            self.others().next()
+            self.counted_others().next()
         }
+    }
+
+    fn counted_others(&self) -> impl Iterator<Item = &Player<PlayerState, PartnerWatch>> {
+        self.others().filter(|player| !player.watch.held_back)
+    }
+
+    fn counts_as_connected(&self) -> bool {
+        self.state == NetState::Connected && self.counted_others().next().is_some()
+    }
+
+    fn looks_allowed(&self) -> bool {
+        looks_allowed(self.session_mode(), self.extras.any_look_allowed)
+    }
+
+    fn rules_taken_line(&self) -> String {
+        format!(
+            "session: rules taken, mode {}, any outfit and accessory allowed: {}",
+            self.session_mode().label(),
+            if self.looks_allowed() { "yes" } else { "no" }
+        )
     }
 }

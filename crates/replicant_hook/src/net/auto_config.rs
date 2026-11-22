@@ -36,6 +36,8 @@ pub struct AutoConfig {
     #[serde(default)]
     pub block_saves: bool,
     #[serde(default)]
+    pub started_alone: bool,
+    #[serde(default)]
     pub keep_running: bool,
     #[serde(default)]
     pub dev_no_focus_menu: bool,

@@ -20,7 +20,7 @@ pub use double_rule::{double_rule, paint_double_rule};
 pub use fact_line::fact_line;
 pub use field_line::field_line;
 pub use hatching::paint_hatching;
-pub use line_button::{line_button, line_buttons};
+pub use line_button::{line_button, line_buttons, line_buttons_when};
 pub use menu_row::menu_row;
 pub use meter_line::{MeterStep, meter_line};
 pub use note_line::note_line;

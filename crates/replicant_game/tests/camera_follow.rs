@@ -2,8 +2,9 @@ use replicant_game::fight_sync::{
     CameraSwitch, CameraSwitchAsker, FIXED_CAMERA_EYE_LERP_END_OFFSET, FIXED_CAMERA_INDEX,
     FIXED_CAMERA_LOOK_ACTOR_GENERATION_OFFSET, FIXED_CAMERA_LOOK_LERP_END_OFFSET,
     FIXED_CAMERA_LOOK_POINT_OFFSET, FIXED_CAMERA_RVA, FixedCameraPose, GuestCameraFollow,
-    HostCamera, HostCameraFollow, HostCameraReceipt, HostCameraSkip, SNOW_CAMERA_INDEX,
-    camera_switch_line, fixed_camera_text, read_fixed_camera_pose, read_fixed_camera_reading,
+    HostCamera, HostCameraFollow, HostCameraReceipt, HostCameraSkip, PATH_CAMERA_INDEX,
+    SCRIPT_CAMERA_INDEX, SNOW_CAMERA_INDEX, camera_switch_line, change_kind_of_camera,
+    fixed_camera_text, read_fixed_camera_pose, read_fixed_camera_reading,
 };
 
 use crate::fake_memory::FakeMemory;
@@ -150,7 +151,7 @@ fn the_host_numbers_its_switches_and_counts_natives_before_them() {
 fn a_camera_without_a_change_kind_is_not_taken() {
     let mut follow = GuestCameraFollow::default();
     let other = HostCamera {
-        camera: 3,
+        camera: 9,
         pose: None,
         ..host_camera(0, 0)
     };
@@ -208,4 +209,48 @@ fn the_switch_line_names_both_cameras_and_who_asked() {
         camera_switch_line(switch_to_fixed(), CameraSwitchAsker::HostsMessage),
         "camera switch: camera 0 to camera 8 (blend 3.00 s, kind 1), asked by the host's message"
     );
+}
+
+#[test]
+fn the_path_and_script_cameras_have_change_kinds_and_the_rail_cameras_do_not() {
+    assert_eq!(change_kind_of_camera(PATH_CAMERA_INDEX), Some(3));
+    assert_eq!(change_kind_of_camera(SCRIPT_CAMERA_INDEX), Some(2));
+    for rail_or_actor_camera in [3, 4, 9] {
+        assert_eq!(change_kind_of_camera(rail_or_actor_camera), None);
+    }
+}
+
+#[test]
+fn a_rail_camera_and_camera_9_are_skipped_on_the_guest() {
+    let mut follow = GuestCameraFollow::default();
+    let mut skip_of = |camera: i32| {
+        let host = HostCamera {
+            camera,
+            pose: None,
+            ..host_camera(u32::try_from(camera).expect("small"), 0)
+        };
+        follow.receive(host, true);
+        follow.tick(true, Some(SNOW_CAMERA_INDEX));
+        follow
+            .tick(true, Some(SNOW_CAMERA_INDEX))
+            .and_then(|step| step.err())
+            .map(|(_, skip)| skip)
+    };
+    assert_eq!(skip_of(3), Some(HostCameraSkip::RailCameraIsTheGuestsOwn));
+    assert_eq!(skip_of(4), Some(HostCameraSkip::RailCameraIsTheGuestsOwn));
+    assert_eq!(skip_of(9), Some(HostCameraSkip::NoChangeKind));
+}
+
+#[test]
+fn the_host_sends_no_message_for_its_rail_cameras() {
+    let mut host = HostCameraFollow::default();
+    let to = |to| CameraSwitch {
+        from: SNOW_CAMERA_INDEX,
+        to,
+        ..switch_to_fixed()
+    };
+    assert!(host.message_for(to(3), None, true).is_none());
+    assert!(host.message_for(to(4), None, true).is_none());
+    let off_rail = host.message_for(to(2), None, true).expect("window");
+    assert_eq!(off_rail.seq, 0);
 }

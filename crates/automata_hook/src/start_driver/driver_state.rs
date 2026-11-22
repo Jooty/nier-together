@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 use std::time::Instant;
 
+use automata_game::late_join::{BossWait, JoinerTakeIn, LateLanding};
 use automata_game::load_gate::{BootScreenKeep, LoadGate, LoadWatch, LoadingScreenReading};
 use automata_game::partner::{PartnerDataWait, ReadyLatch};
 use automata_game::session_jump::{SessionJumpCharacters, SessionJumpMachine, SessionJumpOrder};
@@ -35,4 +36,8 @@ pub(super) struct Driver {
     pub session_jump: SessionJumpMachine,
     pub session_jump_characters: SessionJumpCharacters,
     pub session_jump_to_tell: Option<SessionJumpOrder>,
+    pub joiner: JoinerTakeIn,
+    pub boss_wait: BossWait,
+    pub landing: LateLanding,
+    pub late_arming_checked: bool,
 }

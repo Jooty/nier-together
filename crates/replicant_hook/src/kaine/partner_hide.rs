@@ -25,7 +25,11 @@ pub(crate) fn hide_partner_kaine(build: &VerifiedBuild, remote_body: Option<Part
     ) else {
         return;
     };
-    let wanted = partner_kaine_hidden_wanted(real_body().map(|real| real.body), remote_body);
+    let wanted = partner_kaine_hidden_wanted(
+        real_body().map(|real| real.body),
+        remote_body,
+        crate::kaine::boss_fight_is_live(),
+    );
     let mut hide = HIDE.lock().unwrap_or_else(PoisonError::into_inner);
     let was_hidden = hide.hidden_by_us();
     match hide.step(wanted, executes != 0, drawn != 0) {

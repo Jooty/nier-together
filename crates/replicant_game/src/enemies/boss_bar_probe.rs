@@ -5,7 +5,7 @@ pub const BOSS_BAR_INIT_FUNCTION_RVA: u32 = 0xC_CE70;
 pub const BOSS_BAR_SCRIPT_COMMAND_RVA: u32 = 0x6E_E340;
 pub const BOSS_BAR_DUMP_INTERVAL_MS: u64 = 5000;
 pub const BOSS_BAR_DUMP_BYTES: usize = 64;
-const BOSS_BAR_OBJECT_RVA: u32 = 0x277_E230;
+pub const BOSS_BAR_HUD_OBJECT_RVA: u32 = 0x277_E230;
 const BOSS_BAR_SUB_OBJECT_OFFSET: u64 = 0x288;
 const BOSS_BAR_HANDLE_OFFSET: u64 = 0x70;
 const BOSS_BAR_STATE_OFFSET: u64 = 0x8;
@@ -54,6 +54,12 @@ pub fn read_boss_bar_handle<M: GameMemory>(memory: &M) -> Option<ActorHandle> {
 /// opened) nor 3 (closed by `_CloseBossLifeGauge`), as the gauge's own vslot `0x70` reads it.
 pub fn boss_bar_state_is_open(state: i32) -> bool {
     state != BOSS_BAR_STATE_NEVER_OPENED && state != BOSS_BAR_STATE_CLOSED
+}
+
+pub fn read_boss_bar_state<M: GameMemory>(memory: &M) -> Option<i32> {
+    memory
+        .read_i32(boss_bar_sub_object(memory) + BOSS_BAR_STATE_OFFSET)
+        .ok()
 }
 
 pub fn read_boss_bar_open<M: GameMemory>(memory: &M) -> Option<bool> {
@@ -115,7 +121,7 @@ pub fn read_boss_bar_dump_text<M: GameMemory>(memory: &M) -> String {
 }
 
 fn boss_bar_sub_object<M: GameMemory>(memory: &M) -> u64 {
-    memory.module_base() + u64::from(BOSS_BAR_OBJECT_RVA) + BOSS_BAR_SUB_OBJECT_OFFSET
+    memory.module_base() + u64::from(BOSS_BAR_HUD_OBJECT_RVA) + BOSS_BAR_SUB_OBJECT_OFFSET
 }
 
 fn dump_hex(dump: Option<&BossBarDump>) -> String {

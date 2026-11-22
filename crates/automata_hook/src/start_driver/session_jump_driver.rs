@@ -112,7 +112,7 @@ impl Driver {
         Ok(())
     }
 
-    fn read_session_jump_readings(&self) -> SessionJumpReadings {
+    pub(super) fn read_session_jump_readings(&self) -> SessionJumpReadings {
         let calls = &self.calls;
         SessionJumpReadings {
             play: calls.read_play(calls.current_hero_present()),

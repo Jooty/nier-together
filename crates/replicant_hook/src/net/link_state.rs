@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use replicant_game::readiness::{PlayReads, REPORT_STALE_MS, waiting_on};
+use replicant_game::scale_up_prompt::ScaleUpPrompt;
 use replicant_proto::{GameReadiness, PlayerSettings, SessionOptions};
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -10,6 +11,8 @@ pub struct ReplicantLinkState {
     pub local_readiness: GameReadiness,
     pub local_readiness_at: Option<Instant>,
     pub local_reads: PlayReads,
+    pub local_safe_for_a_joiner: bool,
+    pub scale_up: ScaleUpPrompt,
 }
 
 impl ReplicantLinkState {
@@ -22,6 +25,10 @@ impl ReplicantLinkState {
         } else {
             GameReadiness::Loading
         }
+    }
+
+    pub fn safe_to_take_a_joiner(&self) -> bool {
+        self.local_safe_for_a_joiner && self.effective_local_readiness().is_in_play()
     }
 
     pub fn local_readiness_wait(&self) -> String {

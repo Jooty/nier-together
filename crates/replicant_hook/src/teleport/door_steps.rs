@@ -6,9 +6,10 @@ use replicant_game::side_view::{
     ArrivalViewFix, DoorMoveAction, DoorMoveFacts, IndoorArrivalReading, IndoorArrivalWatch,
     OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION, SCENE_ARRIVALS, SCENE_VIEW_ONS, SceneArrivalReading,
     SceneArrivalWatch, SideViewDoor, ViewArg, ViewCall, door_action_for_a_move, scene_view_on,
-    view_off_calls, view_on_calls,
+    side_view_on_calls, view_off_calls, view_on_calls,
 };
 use replicant_game::stay_together::{FollowRole, local_phase_index};
+use replicant_game::story_watch::{RoomViewReading, RoomViewStep, WatchedRoomView};
 use replicant_proto::StoryCall;
 
 use crate::build_gate::VerifiedBuild;
@@ -24,6 +25,7 @@ use crate::story_relay::{
 
 static INDOOR_ARRIVAL: Mutex<IndoorArrivalWatch> = Mutex::new(IndoorArrivalWatch::new());
 static SCENE_ARRIVAL: Mutex<SceneArrivalWatch> = Mutex::new(SceneArrivalWatch::new());
+static WATCHED_ROOM: Mutex<WatchedRoomView> = Mutex::new(WatchedRoomView::new());
 
 pub(crate) fn door_action_for_a_move_here(
     build: &VerifiedBuild,
@@ -63,7 +65,7 @@ fn run_view_off_routine(build: &VerifiedBuild, left_door: Option<&SideViewDoor>,
         "side view: {why}, turning the view off with the game's own calls"
     ));
     for call in view_off_calls(left_door) {
-        call_view_native(build, &call);
+        run_view_call(build, &call);
     }
     run_door_steps(build, &[OPEN_PLAYER_GAUGES_SCRIPT_FUNCTION], why);
 }
@@ -167,7 +169,7 @@ fn take_the_hosts_view_at_a_scene_step(build: &VerifiedBuild, name: &str) {
         return;
     };
     for call in view_on_calls(scene, door) {
-        call_view_native(build, &call);
+        run_view_call(build, &call);
     }
     log_line(&format!(
         "side view: {name} put you in door {}'s place behind the black screen and the host has that door's view: taken here now with the game's own calls (side view mode on, shell parts hidden, camera status {}), before the fade in",
@@ -175,7 +177,7 @@ fn take_the_hosts_view_at_a_scene_step(build: &VerifiedBuild, name: &str) {
     ));
 }
 
-fn call_view_native(build: &VerifiedBuild, call: &ViewCall) {
+pub(crate) fn run_view_call(build: &VerifiedBuild, call: &ViewCall) {
     let arguments: Vec<NativeArg> = call
         .args
         .iter()
@@ -215,5 +217,40 @@ pub(super) fn tick_scene_arrival(build: &VerifiedBuild) {
         log_line(
             "side view: a scene left you inside a door's place without its view, and the call queue is full",
         );
+    }
+}
+
+pub(super) fn tick_watched_room(build: &VerifiedBuild) {
+    let game = Replicant::new(InProcessMemory::new(build));
+    let Ok(area) = game.current_phase() else {
+        return;
+    };
+    let step = WATCHED_ROOM
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .observe(&RoomViewReading {
+            area: &area,
+            watching: crate::story_watch::this_game_is_watching(),
+            in_play_and_free: classify(read_play_checks(&game)).is_in_play()
+                && game_says_free_to_act(build).unwrap_or(false),
+            in_side_view: side_view_now(build),
+            host_side_view_door: local_phase_index(&game).map_or(0, announced_host_side_view_door),
+        });
+    match step {
+        RoomViewStep::Nothing => {}
+        RoomViewStep::Take(door) => {
+            for call in side_view_on_calls(door, crate::story_watch::fresh_host_room_status()) {
+                run_view_call(build, &call);
+            }
+            log_line(&format!(
+                "watching: the host is inside door {}'s room, its view is taken here with the game's own calls",
+                door.id
+            ));
+        }
+        RoomViewStep::Leave(door) => run_view_off_routine(
+            build,
+            Some(door),
+            &format!("the host left door {}'s room while you watched", door.id),
+        ),
     }
 }

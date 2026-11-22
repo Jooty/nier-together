@@ -1,7 +1,9 @@
+mod announced_lines;
 mod attendance;
 mod automata_net;
 mod co_op_view;
 mod flight_report;
+mod held_players;
 mod link_state;
 mod load_signal;
 mod local_play;
@@ -15,16 +17,24 @@ mod watching;
 #[cfg(windows)]
 mod global;
 
+pub use announced_lines::{
+    push_announced_line, take_announced_lines_where, take_postable_announced_lines,
+    take_postable_announced_lines_where,
+};
 pub use attendance::{local_unattended, set_local_unattended};
 pub use automata_net::AutomataNet;
 pub use co_op_view::{co_op_status_of, link_not_started_status};
 pub use flight_report::{local_flight_report, set_local_flight_report};
+pub use held_players::{held_arrival_joiners, held_arrivals_of, take_in_held_players};
 pub use link_state::{AutomataLinkState, NetShared};
 pub use load_signal::{
-    HeardLoadSignal, is_snapshot_without_body, local_load_signal, partner_load_of,
+    HeardLoadSignal, is_snapshot_without_body, load_role_of, local_load_signal, partner_load_of,
     partner_place_of, player_load_of, set_local_load_signal, snapshot_without_body,
 };
-pub use local_play::{ReadinessPacer, local_in_play, readiness_of, set_local_in_play};
+pub use local_play::{
+    ReadinessPacer, game_has_played, local_free, local_in_play, note_the_game_has_played,
+    readiness_of, set_local_free, set_local_in_play,
+};
 pub use partner_watch::{NetSharedExt, PartnerWatch};
 pub use playing_event::{
     local_playing_event, partner_playing_event_of, partner_report_of, set_local_playing_event,

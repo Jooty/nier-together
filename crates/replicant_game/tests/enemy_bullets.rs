@@ -7,9 +7,10 @@ use replicant_game::enemy_bullets::{
     LaserBeam, LaserBeamTally, MAX_ENEMY_BULLET_MOVES_SENT_PER_SCAN,
     MAX_SHOWN_BULLET_EFFECTS_LOGGED, MAX_SHOWN_ENEMY_BULLETS, MAX_SIGHTED_ENEMY_BULLETS,
     MAX_SIGHTED_ENEMY_SPRITE_BULLETS, MAX_SPRITE_BULLET_KINDS_LOGGED,
-    SCRIPT_BULLET_LASER_FLAG_OFFSET, ShownEffectTally, SpriteBulletKinds, UncopiedScriptBullet,
-    UncopiedTally, UncopiedWhy, bullets_of_enemies, first_sprite_frame, longest_axis, look_resized,
-    look_scale, next_sprite_frame, scan_enemy_bullets,
+    SCRIPT_BULLET_LASER_FLAG_OFFSET, ShooterGoneTally, ShownEffectTally, SpriteBulletKinds,
+    UncopiedScriptBullet, UncopiedTally, UncopiedWhy, bullets_of_enemies, first_sprite_frame,
+    longest_axis, look_resized, look_scale, next_sprite_frame, scan_enemy_bullets,
+    scan_enemy_bullets_remembering,
 };
 use replicant_game::offsets::{
     ACTOR_ANCHOR_OFFSET_OFFSET, ACTOR_SELF_HANDLE_OFFSET, ACTOR_TRANSFORM_BLOCK_BYTES,
@@ -1229,4 +1230,89 @@ fn the_guest_counts_shown_bullets_by_effect_with_their_longest_axis() {
     }
     let line = tally.take_summary().unwrap();
     assert!(line.ends_with(" and 1 more"), "{line}");
+}
+
+#[test]
+fn a_bullet_keeps_being_sighted_after_its_shooter_dies_until_the_game_ends_it() {
+    let mut memory = world();
+    let shot = bullet(&mut memory, 0, SHADE_SLOT);
+    let first = scan_enemy_bullets_remembering(&memory, &shared_shades(), &HashMap::new()).unwrap();
+    assert_eq!(first.bullets.len(), 1);
+    assert!(first.kept_after_shooter.is_empty());
+    memory.put(
+        shot + NORMAL_BULLET_OWNER_HANDLE_OFFSET + 4,
+        &0_u32.to_le_bytes(),
+    );
+    let plain = scan_enemy_bullets(&memory, &shared_shades()).unwrap();
+    assert!(plain.bullets.is_empty());
+    let kept = scan_enemy_bullets_remembering(&memory, &shared_shades(), &first.shooters).unwrap();
+    assert_eq!(kept.bullets.len(), 1);
+    assert_eq!(kept.bullets[0].enemy, SHADE_ID);
+    assert_eq!(
+        kept.kept_after_shooter,
+        vec![(FIRST_BULLET_SLOT as u16, SHADE_ID)]
+    );
+    let still = scan_enemy_bullets_remembering(&memory, &shared_shades(), &kept.shooters).unwrap();
+    assert_eq!(still.bullets.len(), 1);
+    memory.put(shot + NORMAL_BULLET_STATE_OFFSET, &1_i32.to_le_bytes());
+    let ended = scan_enemy_bullets_remembering(&memory, &shared_shades(), &still.shooters).unwrap();
+    assert!(ended.bullets.is_empty());
+}
+
+#[test]
+fn a_bullet_whose_shooter_left_the_shared_enemies_is_followed_while_the_shooter_is_the_same() {
+    let mut memory = world();
+    bullet(&mut memory, 0, SHADE_SLOT);
+    bullet(&mut memory, 1, OTHER_SHADE_SLOT);
+    let first = scan_enemy_bullets_remembering(&memory, &shared_shades(), &HashMap::new()).unwrap();
+    let only_one_left = HashMap::from([(OTHER_SHADE, OTHER_SHADE_ID)]);
+    let kept = scan_enemy_bullets_remembering(&memory, &only_one_left, &first.shooters).unwrap();
+    assert_eq!(kept.bullets.len(), 2);
+    assert_eq!(
+        kept.kept_after_shooter,
+        vec![(FIRST_BULLET_SLOT as u16, SHADE_ID)]
+    );
+}
+
+#[test]
+fn a_slot_taken_by_another_living_owner_is_not_followed_as_the_old_bullet() {
+    let mut memory = world();
+    let slot_bullet = bullet(&mut memory, 0, SHADE_SLOT);
+    let first = scan_enemy_bullets_remembering(&memory, &shared_shades(), &HashMap::new()).unwrap();
+    memory.put(
+        slot_bullet + NORMAL_BULLET_OWNER_HANDLE_OFFSET,
+        &handle_bytes(PLAYER_SLOT),
+    );
+    let next = scan_enemy_bullets_remembering(&memory, &shared_shades(), &first.shooters).unwrap();
+    assert!(next.bullets.is_empty());
+}
+
+#[test]
+fn a_bullet_never_sighted_with_a_shooter_is_not_followed_without_one() {
+    let mut memory = world();
+    let orphan = bullet(&mut memory, 0, SHADE_SLOT);
+    memory.put(
+        orphan + NORMAL_BULLET_OWNER_HANDLE_OFFSET + 4,
+        &0_u32.to_le_bytes(),
+    );
+    let scan = scan_enemy_bullets_remembering(&memory, &shared_shades(), &HashMap::new()).unwrap();
+    assert!(scan.bullets.is_empty());
+}
+
+#[test]
+fn the_shooter_gone_log_names_each_bullet_once_when_it_loses_its_shooter_and_once_when_it_ends() {
+    let mut tally = ShooterGoneTally::default();
+    assert!(tally.note_scan(&[], 100).is_empty());
+    let lost = tally.note_scan(&[(7, SHADE_ID)], 150);
+    assert_eq!(lost.len(), 1);
+    assert!(lost[0].contains("bullet 7") && lost[0].contains("lost its shooter"));
+    assert!(tally.note_scan(&[(7, SHADE_ID)], 200).is_empty());
+    let ended = tally.note_scan(&[], 1350);
+    assert_eq!(ended.len(), 1);
+    assert!(ended[0].contains("ended by the game 1200 ms after"));
+    let summary = tally.take_summary().unwrap();
+    assert!(
+        summary.contains("1 bullets lost their shooter") && summary.contains("1 of those ended")
+    );
+    assert!(tally.take_summary().is_none());
 }

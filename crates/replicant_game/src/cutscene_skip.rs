@@ -1,8 +1,10 @@
+mod guest_coming;
 mod prompt_vote;
 mod skip_prompts;
 mod start_gate;
 mod tracker;
 
+pub use guest_coming::GuestComingIntoScene;
 pub use prompt_vote::{PopVerdict, SentAnswer, SkipPromptVote, VoteEvent, VoteStep, VoteView};
 pub use skip_prompts::{
     PROMPTS_WHOSE_ANSWER_SKIPS_A_SHARED_SEQUENCE, PromptAnswer, SkipPrompt, skip_prompt,
@@ -35,6 +37,7 @@ pub const TRIGGER_MANAGER_RVA: u32 = 0x122_D440;
 pub const TRIGGER_FIND_NAMED_EVENT_RVA: u32 = 0x41_1C20;
 pub const TRIGGER_MARK_READY_RVA: u32 = 0x41_3A70;
 pub const EVENT_SKIP_TAKEN_BYTE_RVA: u32 = 0x38E_2E04;
+pub const GUEST_COMING_INTO_HOST_SCENE_FOR_MS: u64 = 5_000;
 pub const PARTNER_ASK_LIFETIME_MS: u64 = 2_000;
 pub const ASK_RESEND_INTERVAL_MS: u64 = 500;
 pub const PARTNER_SNAPSHOT_STALE_MS: u64 = 3_000;

@@ -38,7 +38,11 @@ pub(super) fn host_companions(
     scene_settling: bool,
 ) -> Vec<CompanionReading> {
     let companions = if host_sends_companion(in_event_scene, scene_settling) {
-        read(local)
+        let mut companions = read(local);
+        if crate::kaine::boss_fight_is_live() {
+            companions.retain(|companion| companion.id != EnemyId::companion(0));
+        }
+        companions
     } else {
         Vec::new()
     };

@@ -10,10 +10,13 @@ mod local_lookup;
 mod local_lookup_packet;
 mod own_address;
 mod path_report;
+mod relay_map;
 mod transport;
 
 pub use config::IrohConfig;
 pub use invite_codec::invite_reads;
+pub use own_address::relay_label;
+pub use relay_map::{TYPHON_RELAY_URL, relay_map_with_typhon};
 pub use transport::IrohTransport;
 
 const ALPN: &[u8] = b"rc-net/1";

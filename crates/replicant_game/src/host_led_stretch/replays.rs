@@ -1,8 +1,7 @@
-use crate::story_calls::is_event_id_name;
+use crate::story_calls::{is_event_id_name, is_world_change_step_name};
 
-/// While the guest is not taken along, which of the host's story runs still run on the guest's
-/// game: a story event's own steps do (they put the scene's actors and talks in this game's
-/// world), the doors and checkpoint flags do not (they would move the watching guest's body).
+/// While the guest is not taken along, the host's story event steps and its world-changing steps
+/// still run on the guest's game; doors and checkpoint flags do not (they would move its body).
 pub fn host_run_replays_on_the_watching_guest(function: &str) -> bool {
-    is_event_id_name(function)
+    is_event_id_name(function) || is_world_change_step_name(function)
 }

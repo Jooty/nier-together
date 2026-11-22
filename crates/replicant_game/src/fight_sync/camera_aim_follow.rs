@@ -1,5 +1,7 @@
 use crate::fight_sync::FIXED_CAMERA_INDEX;
-use crate::fight_sync::body_following_camera::{CameraBodyOffset, camera_follows_body};
+use crate::fight_sync::body_following_camera::{
+    CameraBodyOffset, camera_follows_body, look_follows_body_under_a_still_eye,
+};
 use crate::fight_sync::camera_follow::{FixedCameraPose, HOST_CAMERA_APPLIED_AFTER_TICKS};
 
 pub const CAMERA_AIM_MOVE_SENT_AGAIN_WORLD_UNITS: f32 = 0.05;
@@ -43,6 +45,7 @@ pub struct HostCameraAimResend {
     last_sent: Option<(FixedCameraPose, u64)>,
     last_body: Option<[f32; 3]>,
     following: bool,
+    look_following: bool,
 }
 
 /// The guest's side: keeps the newest pose update and applies it one tick later, only while
@@ -63,6 +66,7 @@ impl HostCameraAimResend {
             last_sent: None,
             last_body: None,
             following: false,
+            look_following: false,
         }
     }
 
@@ -77,6 +81,7 @@ impl HostCameraAimResend {
         self.last_sent = Some((pose, now_ms));
         self.last_body = body;
         self.following = false;
+        self.look_following = false;
     }
 
     /// The pose update to send this tick, if the fixed camera is active and its pose moved;
@@ -105,19 +110,35 @@ impl HostCameraAimResend {
                 return None;
             }
         }
-        self.following = match (self.last_sent, self.last_body, body) {
+        let (eye_and_look, look_only) = match (self.last_sent, self.last_body, body) {
             (Some((last, _)), Some(last_body), Some(body)) => {
-                camera_follows_body((last, last_body), (pose, body), self.following)
+                let eye_and_look =
+                    camera_follows_body((last, last_body), (pose, body), self.following);
+                let look_only = !eye_and_look
+                    && look_follows_body_under_a_still_eye(
+                        (last, last_body),
+                        (pose, body),
+                        self.look_following,
+                    );
+                (eye_and_look, look_only)
             }
-            _ => false,
+            _ => (false, false),
         };
+        self.following = eye_and_look;
+        self.look_following = look_only;
         self.last_sent = Some((pose, now_ms));
         self.last_body = body;
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
-        let follows_body = body
-            .filter(|_| self.following)
-            .map(|body| CameraBodyOffset::from_pose_and_body(pose, body));
+        let follows_body = body.and_then(|body| {
+            if eye_and_look {
+                Some(CameraBodyOffset::from_pose_and_body(pose, body))
+            } else if look_only {
+                Some(CameraBodyOffset::from_still_eye_and_body(pose, body))
+            } else {
+                None
+            }
+        });
         Some(HostCameraAim {
             seq,
             pose,
@@ -126,13 +147,14 @@ impl HostCameraAimResend {
     }
 
     pub fn follows_the_body(&self) -> bool {
-        self.following
+        self.following || self.look_following
     }
 
     pub fn window_closed(&mut self) {
         self.last_sent = None;
         self.last_body = None;
         self.following = false;
+        self.look_following = false;
     }
 }
 

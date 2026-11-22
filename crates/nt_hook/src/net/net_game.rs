@@ -47,6 +47,8 @@ pub trait NetGame: Send + Sized + 'static {
 
     fn on_launcher_linked(&mut self);
 
+    fn on_rules_taken(&mut self, _shared: &mut NetSharedOf<Self>) {}
+
     fn on_idle(
         &mut self,
         link: &LinkAccess<'_, Self>,

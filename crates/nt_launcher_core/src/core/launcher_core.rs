@@ -6,7 +6,9 @@ use std::time::Instant;
 
 use nt_net::{LocalLinkTransport, ProgressBoard, ProgressEntry, Transport};
 use nt_wire::{BuildGate, SessionRules};
-use replicant_proto::{CampaignCard, LobbyReady, PartnerBody, PlayerSettings, SessionOptions};
+use replicant_proto::{
+    CampaignCard, LobbyReady, PartnerBody, PlayerSettings, ScaleUpAsk, SessionOptions,
+};
 
 use crate::bridge::{BridgeParts, GameBridge, GameWire};
 use crate::profile::GameProfile;
@@ -35,6 +37,12 @@ enum Command {
     LobbyBody(PartnerBody),
     LobbyCharacter(u8),
     StartLobby(u8),
+    HoldLateStarts(bool),
+    ReleaseStart {
+        slot: u8,
+        mode: Option<u8>,
+    },
+    ScaleUpAsk(ScaleUpAsk),
     CampaignCard(CampaignCard),
     SendSeat {
         slot: u8,
@@ -246,6 +254,18 @@ impl LauncherNet for LauncherCore {
         let _ = self.send(Command::StartLobby(mode));
     }
 
+    fn hold_late_starts(&self, hold: bool) {
+        let _ = self.send(Command::HoldLateStarts(hold));
+    }
+
+    fn release_start(&self, slot: u8, mode: Option<u8>) {
+        let _ = self.send(Command::ReleaseStart { slot, mode });
+    }
+
+    fn send_scale_up_ask(&self, ask: ScaleUpAsk) {
+        let _ = self.send(Command::ScaleUpAsk(ask));
+    }
+
     fn send_campaign_card(&self, card: CampaignCard) {
         let _ = self.send(Command::CampaignCard(card));
     }
@@ -331,6 +351,9 @@ fn run_worker(mut bridge: Box<dyn GameBridge>, mut wire: GameWire, inbox: &Recei
             Ok(Command::LobbyBody(body)) => bridge.set_lobby_body(body),
             Ok(Command::LobbyCharacter(index)) => bridge.set_lobby_character(index),
             Ok(Command::StartLobby(mode)) => bridge.start_lobby(mode),
+            Ok(Command::HoldLateStarts(hold)) => bridge.hold_late_starts(hold),
+            Ok(Command::ReleaseStart { slot, mode }) => bridge.release_start(slot, mode),
+            Ok(Command::ScaleUpAsk(ask)) => bridge.send_scale_up_ask(ask),
             Ok(Command::CampaignCard(card)) => bridge.set_campaign_card(card),
             Ok(Command::SendSeat {
                 slot,

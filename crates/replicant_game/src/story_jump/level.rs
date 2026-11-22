@@ -34,8 +34,10 @@ pub fn check_level(expected: i32, actual: Option<i32>) -> LevelCheck {
 pub fn level_check_is_due(
     phase_at_apply: &str,
     phase_now: &str,
+    field_was_left: bool,
     field_ready: bool,
     ms_since_phase_change: u64,
 ) -> bool {
-    phase_at_apply != phase_now && field_ready && ms_since_phase_change >= LEVEL_CHECK_SETTLE_MS
+    let phase_changed = phase_at_apply != phase_now || field_was_left;
+    phase_changed && field_ready && ms_since_phase_change >= LEVEL_CHECK_SETTLE_MS
 }

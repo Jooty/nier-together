@@ -235,7 +235,10 @@ fn apply_event(build: &VerifiedBuild, side: StandInSide, event: StandInEvent) {
             beat,
             spot,
             yaw_degrees,
-        } => move_guest(build, beat, spot, yaw_degrees),
+        } => {
+            move_guest(build, beat, spot, yaw_degrees);
+            run_own_functions_after_the_move(build, beat);
+        }
         StandInEvent::Release(trap) => release(build, trap),
         StandInEvent::Dropped { trap, why } => log_line(&format!(
             "stand-in: your held {} (beat {}, held {} ms) is dropped: {why}",
@@ -301,6 +304,32 @@ fn release(build: &VerifiedBuild, trap: HeldTrap) {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(call);
+    }
+}
+
+fn run_own_functions_after_the_move(build: &VerifiedBuild, beat: u8) {
+    let Some(row) = STAND_IN_BEATS.iter().find(|row| row.beat == beat) else {
+        return;
+    };
+    let Some(phase) = local_phase_index(&Replicant::new(InProcessMemory::new(build))) else {
+        return;
+    };
+    for function in row.guest_runs_after_the_move {
+        log_line(&format!(
+            "stand-in: your game runs {function} itself after the move to beat {beat}'s spot, so its own side-view traps watch your own body"
+        ));
+        let call = StoryCall {
+            phase,
+            pack: 0,
+            function: (*function).to_owned(),
+            args: Vec::new(),
+        };
+        if !submit_relay_call(&call, RelayPath::HeldOwnCall) {
+            RELEASES_WAITING_FOR_THE_QUEUE
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(call);
+        }
     }
 }
 

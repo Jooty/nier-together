@@ -22,7 +22,7 @@ use nt_hook::diagnostics::log_line;
 
 use crate::game_calls::GameCalls;
 use crate::hud::post_line;
-use crate::net::handle;
+use crate::net::{SessionModeExt, handle};
 use crate::pickups_driver::give_item_hook::{install_give_item_hook, take_given_item_ids};
 
 static CONTEXT: OnceLock<PickupsContext> = OnceLock::new();
@@ -112,7 +112,7 @@ impl PickupsContext {
                     .is_some_and(is_key_item_kind),
             })
             .collect();
-        let anyone_else = net.view().others().next().is_some();
+        let anyone_else = net.view().counted_others().next().is_some();
         for pickup in merge_given_items(&given) {
             if !anyone_else {
                 log_line(&format!(

@@ -4,14 +4,20 @@ mod addresses;
 mod autopilot;
 #[path = "boot_screen.rs"]
 mod boot_screen;
+#[path = "boss_wait.rs"]
+mod boss_wait;
 #[path = "build_gate.rs"]
 mod build_gate;
+#[path = "bullet_probe.rs"]
+mod bullet_probe;
 #[path = "characters.rs"]
 mod characters;
 #[path = "co_op_log.rs"]
 mod co_op_log;
 #[path = "defeat.rs"]
 mod defeat;
+#[path = "denied_scenes.rs"]
+mod denied_scenes;
 #[path = "downed.rs"]
 mod downed;
 #[path = "downed_item_hold.rs"]
@@ -36,6 +42,8 @@ mod exe_identity;
 mod extra_body_roster;
 #[path = "focus.rs"]
 mod focus;
+#[path = "free_roam_scenes.rs"]
+mod free_roam_scenes;
 #[path = "free_rule.rs"]
 mod free_rule;
 #[path = "generator_counts.rs"]
@@ -44,12 +52,16 @@ mod generator_counts;
 mod generator_sets;
 #[path = "guest_watches.rs"]
 mod guest_watches;
+#[path = "hap_walk_caps.rs"]
+mod hap_walk_caps;
 #[path = "held_bodies.rs"]
 mod held_bodies;
 #[path = "hud_look.rs"]
 mod hud_look;
 #[path = "input_block.rs"]
 mod input_block;
+#[path = "late_join.rs"]
+mod late_join;
 #[path = "leave_test.rs"]
 mod leave_test;
 #[path = "load_gate.rs"]
@@ -60,12 +72,22 @@ mod load_gate_places;
 mod load_gate_silent_partner;
 #[path = "load_watch.rs"]
 mod load_watch;
+#[path = "look_catalog.rs"]
+mod look_catalog;
+#[path = "look_picker.rs"]
+mod look_picker;
+#[path = "look_picks.rs"]
+mod look_picks;
+#[path = "look_steps.rs"]
+mod look_steps;
 #[path = "minimap_dot.rs"]
 mod minimap_dot;
 #[path = "minute_line_budget.rs"]
 mod minute_line_budget;
 #[path = "new_game_start.rs"]
 mod new_game_start;
+#[path = "outfit_look.rs"]
+mod outfit_look;
 #[path = "own_dash_cut.rs"]
 mod own_dash_cut;
 #[path = "own_input.rs"]
@@ -80,10 +102,14 @@ mod partner_flight_take_over;
 mod partner_hud;
 #[path = "partner_keeps_its_slot.rs"]
 mod partner_keeps_its_slot;
+#[path = "partner_look.rs"]
+mod partner_look;
 #[path = "partner_machine.rs"]
 mod partner_machine;
 #[path = "partner_rules.rs"]
 mod partner_rules;
+#[path = "partner_smoothing.rs"]
+mod partner_smoothing;
 #[path = "pickups.rs"]
 mod pickups;
 #[path = "player_entries.rs"]
@@ -92,6 +118,10 @@ mod player_entries;
 mod player_inputs;
 #[path = "pod_aim.rs"]
 mod pod_aim;
+#[path = "raw_mouse.rs"]
+mod raw_mouse;
+#[path = "raw_mouse_follow.rs"]
+mod raw_mouse_follow;
 #[path = "route_lead.rs"]
 mod route_lead;
 #[path = "save_redirect.rs"]

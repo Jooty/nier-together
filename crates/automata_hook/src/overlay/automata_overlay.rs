@@ -4,7 +4,8 @@ use nt_hook::overlay::OverlayGame;
 
 use crate::game_hooks::set_menu_open;
 use crate::hud;
-use crate::menu::AutomataMenu;
+use crate::look_driver::draw_look_panel;
+use crate::menu::{AutomataMenu, LOOK_PANEL_ID};
 use crate::overlay::downed_prompt::draw_downed_prompt;
 use crate::overlay::skip_vote_prompt::draw_skip_vote_prompt;
 
@@ -38,5 +39,9 @@ impl OverlayGame for AutomataMenu {
         hud::draw_hud_settings(ui);
     }
 
-    fn draw_extra_panel(&mut self, _ui: &Ui, _panel_id: u32, _open: &mut bool) {}
+    fn draw_extra_panel(&mut self, ui: &Ui, panel_id: u32, open: &mut bool) {
+        if panel_id == LOOK_PANEL_ID {
+            draw_look_panel(ui, open);
+        }
+    }
 }

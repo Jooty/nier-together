@@ -14,6 +14,7 @@ pub struct StandInBeat {
     pub yaw_degrees: f32,
     /// The guest is moved to the spot once one of these has run on its own game.
     pub move_after: &'static [&'static str],
+    pub guest_runs_after_the_move: &'static [&'static str],
     /// Trap callbacks the guest's own game must not run before the host's game has.
     pub held_traps: &'static [&'static str],
     /// Held traps whose host copy the story relay runs on the guest's game: the guest's own copy
@@ -37,6 +38,7 @@ pub const STAND_IN_BEATS: [StandInBeat; 2] = [
             "EID_1050_a0035g_01_Continue",
             "EID_1050_a0035g_02_Continue",
         ],
+        guest_runs_after_the_move: &[],
         held_traps: &["EID_1050_a0035_a0040"],
         held_traps_the_host_runs_here: &["EID_1050_a0035_a0040"],
         on_the_way_game_flags: &[1307],
@@ -59,6 +61,7 @@ pub const STAND_IN_BEATS: [StandInBeat; 2] = [
             "EID_1050_a0050_Continue",
             "EID_1050_a0050_01_End",
         ],
+        guest_runs_after_the_move: &["SET_SIDEVIEW_TRAP3"],
         held_traps: &[
             "Put_Enemy_AL3_090",
             "FLAG_DELETE_TABLE03",
